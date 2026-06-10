@@ -5,6 +5,15 @@ import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { RegisterClinicInput } from './clinic.schemas.js';
 
+export const getMyClinic = async (clinicId: string) => {
+  const clinic = await prisma.clinic.findUnique({
+    where: { id: clinicId },
+    select: { id: true, name: true, email: true, phone: true, plan: true },
+  });
+  if (!clinic) throw new AppError('Clinic not found', 404);
+  return clinic;
+};
+
 export const registerClinic = async (input: RegisterClinicInput) => {
   const email = input.email.trim().toLowerCase();
 

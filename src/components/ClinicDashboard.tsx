@@ -13,6 +13,8 @@ import {
 } from '../api/appointments';
 import { getPatients as getPatientsApi, createPatient as createPatientApi, ApiPatient } from '../api/patients';
 import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
+import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, ApiWaitlistEntry } from '../api/waitlist';
+import { getMyClinic as getMyClinicApi } from '../api/clinic';
 
 const mapStatus = (status: string): Appointment['status'] => {
   const map: Record<string, Appointment['status']> = {
@@ -48,6 +50,30 @@ const mapApiDoctor = (d: ApiDoctor): Doctor => ({
   id: d.id,
   name: d.name,
   specialty: d.speciality,
+});
+
+const TODAY = new Date().toISOString().split('T')[0];
+const TOMORROW = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+const mapWaitlistStatus = (status: string): WaitlistPatient['status'] => {
+  const map: Record<string, WaitlistPatient['status']> = {
+    WAITING: 'Waiting',
+    OFFERED: 'Offered',
+    RESPONDED: 'Responded',
+  };
+  return map[status] ?? 'Waiting';
+};
+
+const mapApiWaitlist = (w: ApiWaitlistEntry): WaitlistPatient => ({
+  id: w.id,
+  patientName: w.patient?.name ?? 'Unknown',
+  patientPhone: w.patient?.phone ?? '',
+  doctorName: '—',
+  preferredTimeSlot: '—',
+  preferredDoctor: '—',
+  language: w.patient?.language ?? 'English',
+  dateAdded: '—',
+  status: mapWaitlistStatus(w.status),
 });
 
 interface ClinicDashboardProps {
@@ -109,10 +135,12 @@ export default function ClinicDashboard({
     const loadData = async () => {
       setDataLoading(true);
       try {
-        const [aptsData, patientsData, doctorsData] = await Promise.all([
+        const [aptsData, patientsData, doctorsData, waitlistData, clinicData] = await Promise.all([
           getAppointmentsApi(),
           getPatientsApi(),
           getDoctorsApi(),
+          getWaitlistApi(),
+          getMyClinicApi(),
         ]);
 
         setAppointments(aptsData.map(mapApiAppointment));
@@ -124,6 +152,9 @@ export default function ClinicDashboard({
         if (mappedDoctors.length > 0) {
           setWalkInDoctor(mappedDoctors[0].name);
         }
+        const activeWaitlist = waitlistData.filter(w => w.status !== 'CANCELLED' && w.status !== 'CONVERTED');
+        setWaitlist(activeWaitlist.map(mapApiWaitlist));
+        setClinicConfig(prev => ({ ...prev, name: clinicData.name, email: clinicData.email, phone: clinicData.phone }));
       } catch {
         triggerToast('Could not load data from server. Showing cached data.');
       } finally {
@@ -137,9 +168,12 @@ export default function ClinicDashboard({
   // 1. Interactive Waitlist Recovery Engine Simulation
   const handleOfferSlot = (wlItem: WaitlistPatient) => {
     if (recoveringId) return; // Prevent multiple clicks
-    
+
     setRecoveringId(wlItem.id);
     triggerToast(`🔗 Dispatching WhatsApp Slot Offer invitation to ${wlItem.patientName}...`);
+
+    // Persist the OFFERED status to the backend (fire and forget — demo simulation continues regardless)
+    offerWaitlistSlotApi(wlItem.id).catch(() => {});
 
     // Step 1: Update status to 'Offered' immediately
     setWaitlist(prev => prev.map(item => 
@@ -176,7 +210,7 @@ export default function ClinicDashboard({
         patientName: wlItem.patientName,
         patientPhone: wlItem.patientPhone,
         doctorName: wlItem.doctorName,
-        date: '2026-06-11', // Sync for tomorrow's roster
+        date: TOMORROW,
         time: '11:30 AM',
         status: 'Confirmed',
         language: wlItem.language
@@ -254,7 +288,7 @@ export default function ClinicDashboard({
   };
 
   // Math Calculations for Dashboard metrics
-  const activeToday = appointments.filter(a => a.date === '2026-06-10');
+  const activeToday = appointments.filter(a => a.date === TODAY);
   const confirmedTodayCount = activeToday.filter(a => a.status === 'Confirmed').length;
   const cancelledTodayCount = activeToday.filter(a => a.status === 'Cancelled').length;
   const pendingTodayCount = activeToday.filter(a => a.status === 'Pending').length;
@@ -825,7 +859,7 @@ export default function ClinicDashboard({
             <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 animate-fadeIn" id="calendar-tab-view">
               <div className="border-b border-slate-150 pb-4 text-left">
                 <h2 className="font-display font-extrabold text-lg text-slate-950">Active Doctor Timelines</h2>
-                <p className="text-slate-400 text-xs">Chronological timeline schedules for today ({'2026-06-10'}). Direct two-way sync with Google Calendar API.</p>
+                <p className="text-slate-400 text-xs">Chronological timeline schedules for today ({TODAY}). Direct two-way sync with Google Calendar API.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="doctor-timelines-grid">
