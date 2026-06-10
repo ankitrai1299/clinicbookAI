@@ -1,7 +1,11 @@
+import { fileURLToPath } from 'url';
+import path from 'path';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-dotenv.config();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Resolves to backend/.env regardless of where the process is started from
+dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: false });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
