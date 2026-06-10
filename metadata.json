@@ -1,0 +1,6 @@
+{
+  "name": "ClinicBook AI",
+  "description": "WhatsApp-first AI appointment booking and waitlist recovery system for clinics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

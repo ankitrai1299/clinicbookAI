@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ClinicPlan {
+  STARTER
+  GROWTH
+  SCALE
+  ENTERPRISE
+}
+
+enum UserRole {
+  ADMIN
+  CLINIC_ADMIN
+  STAFF
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum WaitlistStatus {
+  WAITING
+  OFFERED
+  RESPONDED
+  CONVERTED
+  CANCELLED
+}
+
+enum ReminderType {
+  BOOKING_CONFIRMATION
+  REMINDER_24H
+  REMINDER_2H
+  WAITLIST_OFFER
+}
+
+model Clinic {
+  id        String        @id @default(cuid())
+  name      String
+  email     String        @unique
+  phone     String        @unique
+  plan      ClinicPlan    @default(STARTER)
+  createdAt DateTime      @default(now())
+
+  users        User[]
+  patients     Patient[]
+  doctors      Doctor[]
+  appointments Appointment[]
+  waitlists    Waitlist[]
+
+  @@index([plan])
+}
+
+model User {
+  id           String    @id @default(cuid())
+  clinicId     String
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         UserRole  @default(CLINIC_ADMIN)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([role])
+}
+
+model Patient {
+  id        String   @id @default(cuid())
+  clinicId  String
+  name      String
+  phone     String
+  language  String
+
+  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments  Appointment[]
+  waitlistEntry Waitlist?
+
+  @@index([clinicId])
+  @@unique([clinicId, phone])
+}
+
+model Doctor {
+  id         String   @id @default(cuid())
+  clinicId   String
+  name       String
+  speciality String
+
+  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments  Appointment[]
+
+  @@index([clinicId])
+  @@unique([clinicId, name])
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  clinicId        String
+  doctorId        String
+  patientId       String
+  appointmentDate DateTime          @db.Date
+  appointmentTime String
+  status          AppointmentStatus @default(PENDING)
+
+  clinic   Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor   Doctor   @relation(fields: [doctorId], references: [id])
+  patient  Patient  @relation(fields: [patientId], references: [id])
+  reminders Reminder[]
+
+  @@index([clinicId])
+  @@index([doctorId])
+  @@index([patientId])
+  @@index([appointmentDate])
+  @@index([status])
+  @@index([clinicId, appointmentDate, appointmentTime])
+}
+
+model Waitlist {
+  id       String         @id @default(cuid())
+  clinicId String
+  patientId String        @unique
+  priority Int            @default(0)
+  status   WaitlistStatus @default(WAITING)
+
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([priority])
+  @@index([status])
+  @@index([clinicId, status, priority])
+}
+
+model Reminder {
+  id           String       @id @default(cuid())
+  appointmentId String
+  type         ReminderType
+  sent         Boolean      @default(false)
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([type, sent])
+}
