@@ -18,5 +18,14 @@ export const addToWaitlist = (body: { patientId: string; priority?: number }) =>
 export const offerWaitlistSlot = (id: string) =>
   apiFetch<ApiWaitlistEntry>(`/api/waitlist/${id}/offer`, { method: 'PATCH' });
 
+export const convertWaitlistEntry = (
+  id: string,
+  body: { doctorId: string; appointmentDate: string; appointmentTime: string }
+) =>
+  apiFetch<{ waitlistEntry: ApiWaitlistEntry; appointment: { id: string } }>(
+    `/api/waitlist/${id}/convert`,
+    { method: 'PATCH', body: JSON.stringify(body) }
+  );
+
 export const cancelWaitlistEntry = (id: string) =>
   apiFetch<ApiWaitlistEntry>(`/api/waitlist/${id}/cancel`, { method: 'PATCH' });

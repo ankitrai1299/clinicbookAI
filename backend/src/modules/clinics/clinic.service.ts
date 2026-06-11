@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { signAccessToken } from '../../config/jwt.js';
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
-import { RegisterClinicInput } from './clinic.schemas.js';
+import { RegisterClinicInput, UpdateClinicInput } from './clinic.schemas.js';
 
 export const getMyClinic = async (clinicId: string) => {
   const clinic = await prisma.clinic.findUnique({
@@ -12,6 +12,20 @@ export const getMyClinic = async (clinicId: string) => {
   });
   if (!clinic) throw new AppError('Clinic not found', 404);
   return clinic;
+};
+
+export const updateMyClinic = async (clinicId: string, input: UpdateClinicInput) => {
+  const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true } });
+  if (!clinic) throw new AppError('Clinic not found', 404);
+
+  return prisma.clinic.update({
+    where: { id: clinicId },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    },
+    select: { id: true, name: true, email: true, phone: true, plan: true },
+  });
 };
 
 export const registerClinic = async (input: RegisterClinicInput) => {

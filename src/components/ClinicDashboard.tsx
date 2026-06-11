@@ -13,8 +13,8 @@ import {
 } from '../api/appointments';
 import { getPatients as getPatientsApi, createPatient as createPatientApi, ApiPatient } from '../api/patients';
 import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
-import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, ApiWaitlistEntry } from '../api/waitlist';
-import { getMyClinic as getMyClinicApi } from '../api/clinic';
+import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, convertWaitlistEntry as convertWaitlistEntryApi, ApiWaitlistEntry } from '../api/waitlist';
+import { getMyClinic as getMyClinicApi, updateMyClinic as updateMyClinicApi } from '../api/clinic';
 
 const mapStatus = (status: string): Appointment['status'] => {
   const map: Record<string, Appointment['status']> = {
@@ -124,6 +124,10 @@ export default function ClinicDashboard({
   // Waitlist recovery animation/loading tracker
   const [recoveringId, setRecoveringId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [convertingWlId, setConvertingWlId] = useState<string | null>(null);
+  const [convertForm, setConvertForm] = useState({ doctorId: '', date: '', time: '10:00' });
+  const [convertLoading, setConvertLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -165,62 +169,63 @@ export default function ClinicDashboard({
     loadData();
   }, []);
 
-  // 1. Interactive Waitlist Recovery Engine Simulation
-  const handleOfferSlot = (wlItem: WaitlistPatient) => {
-    if (recoveringId) return; // Prevent multiple clicks
-
+  // 1. Offer a cancelled slot to a waitlist patient
+  const handleOfferSlot = async (wlItem: WaitlistPatient) => {
+    if (recoveringId) return;
     setRecoveringId(wlItem.id);
-    triggerToast(`🔗 Dispatching WhatsApp Slot Offer invitation to ${wlItem.patientName}...`);
-
-    // Persist the OFFERED status to the backend (fire and forget — demo simulation continues regardless)
-    offerWaitlistSlotApi(wlItem.id).catch(() => {});
-
-    // Step 1: Update status to 'Offered' immediately
-    setWaitlist(prev => prev.map(item => 
-      item.id === wlItem.id ? { ...item, status: 'Offered' } : item
-    ));
-
-    // Append immediate reminder activity log
-    const initialLogId = 'log-sim-' + Date.now();
-    setReminderLogs(prev => [
-      {
-        id: initialLogId,
-        patientName: wlItem.patientName,
-        type: 'slot_recovered',
-        timestamp: 'Just now',
-        status: 'sent'
-      },
-      ...prev
-    ]);
-
-    // Step 2: Simulate patient replying "YES" via WhatsApp after 3 seconds
-    setTimeout(() => {
-      setWaitlist(prev => prev.map(item => 
-        item.id === wlItem.id ? { ...item, status: 'Responded' } : item
+    try {
+      await offerWaitlistSlotApi(wlItem.id);
+      setWaitlist(prev => prev.map(item =>
+        item.id === wlItem.id ? { ...item, status: 'Offered' } : item
       ));
-      
-      // Update the dispatched log status to 'read' / confirmed
-      setReminderLogs(prev => prev.map(log => 
-        log.id === initialLogId ? { ...log, status: 'read' } : log
-      ));
-
-      // Append new Confirmed appointment in our roster!
-      const recoveredAppointment: Appointment = {
-        id: 'apt-recovered-' + Date.now(),
-        patientName: wlItem.patientName,
-        patientPhone: wlItem.patientPhone,
-        doctorName: wlItem.doctorName,
-        date: TOMORROW,
-        time: '11:30 AM',
-        status: 'Confirmed',
-        language: wlItem.language
-      };
-
-      setAppointments(prev => [recoveredAppointment, ...prev]);
-      
+      setReminderLogs(prev => [
+        { id: 'log-' + Date.now(), patientName: wlItem.patientName, type: 'slot_recovered', timestamp: 'Just now', status: 'sent' },
+        ...prev
+      ]);
+      triggerToast(`Slot offer sent to ${wlItem.patientName}. Use "Book Appointment" once confirmed.`);
+    } catch {
+      triggerToast('Failed to send slot offer.');
+    } finally {
       setRecoveringId(null);
-      triggerToast(`🎉 RSVP received! ${wlItem.patientName} accepted. New appointment is confirmed details synced.`);
-    }, 3200);
+    }
+  };
+
+  const openConvertForm = (wlId: string) => {
+    setConvertingWlId(wlId);
+    setConvertForm({ doctorId: apiDoctors[0]?.id ?? '', date: TOMORROW, time: '10:00' });
+  };
+
+  const handleConvertWaitlist = async (wlId: string, patientName: string) => {
+    if (!convertForm.doctorId || !convertForm.date) return;
+    setConvertLoading(true);
+    try {
+      await convertWaitlistEntryApi(wlId, {
+        doctorId: convertForm.doctorId,
+        appointmentDate: convertForm.date,
+        appointmentTime: convertForm.time,
+      });
+      const freshApts = await getAppointmentsApi();
+      setAppointments(freshApts.map(mapApiAppointment));
+      setWaitlist(prev => prev.filter(w => w.id !== wlId));
+      setConvertingWlId(null);
+      triggerToast(`Appointment booked for ${patientName}.`);
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Failed to book appointment.');
+    } finally {
+      setConvertLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSettingsSaving(true);
+    try {
+      await updateMyClinicApi({ name: clinicConfig.name, phone: clinicConfig.whatsappNumber || clinicConfig.phone });
+      triggerToast('Clinic settings saved.');
+    } catch {
+      triggerToast('Failed to save settings.');
+    } finally {
+      setSettingsSaving(false);
+    }
   };
 
   // 2. Action Trigger: Cancel Appointment & Suggest Waitlist
@@ -705,7 +710,7 @@ export default function ClinicDashboard({
                               {recoveringId === wl.id ? (
                                 <>
                                   <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                  <span>Pushed to WhatsApp...</span>
+                                  <span>Sending...</span>
                                 </>
                               ) : (
                                 <>
@@ -714,6 +719,54 @@ export default function ClinicDashboard({
                                 </>
                               )}
                             </button>
+                          )}
+                          {(wl.status === 'Offered' || wl.status === 'Responded') && convertingWlId !== wl.id && (
+                            <button
+                              onClick={() => openConvertForm(wl.id)}
+                              className="w-full mt-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] tracking-wide transition-all uppercase flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                              <span>Book Appointment</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {convertingWlId === wl.id && (
+                            <div className="space-y-2 mt-2">
+                              <select
+                                value={convertForm.doctorId}
+                                onChange={e => setConvertForm(f => ({ ...f, doctorId: e.target.value }))}
+                                className="w-full text-[10px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-sky-500"
+                              >
+                                {apiDoctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                              </select>
+                              <input
+                                type="date"
+                                value={convertForm.date}
+                                min={new Date().toISOString().split('T')[0]}
+                                onChange={e => setConvertForm(f => ({ ...f, date: e.target.value }))}
+                                className="w-full text-[10px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-sky-500"
+                              />
+                              <input
+                                type="time"
+                                value={convertForm.time}
+                                onChange={e => setConvertForm(f => ({ ...f, time: e.target.value }))}
+                                className="w-full text-[10px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-sky-500"
+                              />
+                              <div className="flex gap-1.5">
+                                <button
+                                  disabled={convertLoading || !convertForm.doctorId || !convertForm.date}
+                                  onClick={() => handleConvertWaitlist(wl.id, wl.patientName)}
+                                  className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white disabled:text-slate-400 font-bold rounded-lg text-[10px] cursor-pointer transition-all"
+                                >
+                                  {convertLoading ? '...' : 'Confirm'}
+                                </button>
+                                <button
+                                  onClick={() => setConvertingWlId(null)}
+                                  className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-[10px] cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       ))}
@@ -926,38 +979,98 @@ export default function ClinicDashboard({
                   </thead>
                   <tbody>
                     {waitlist.map((wl) => (
-                      <tr key={wl.id} className="border-b border-slate-50 hover:bg-slate-50/50" id={`waitlist-full-row-${wl.id}`}>
-                        <td className="py-4 px-2">
-                          <span className="block font-bold text-slate-900">{wl.patientName}</span>
-                          <span className="text-[9px] text-slate-400 font-mono">{wl.patientPhone}</span>
-                        </td>
-                        <td className="py-4 px-2 font-medium text-slate-600">{wl.preferredDoctor}</td>
-                        <td className="py-4 px-2 text-slate-500">{wl.preferredTimeSlot}</td>
-                        <td className="py-4 px-2 font-mono text-slate-400">{wl.dateAdded}</td>
-                        <td className="py-4 px-2">
-                          <span className="px-2 py-0.5 bg-slate-100 rounded text-[9px] font-bold font-mono text-slate-600">🗣 {wl.language}</span>
-                        </td>
-                        <td className="py-4 px-2">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold font-mono ${
-                            wl.status === 'Waiting' ? 'bg-purple-50 text-purple-700' :
-                            wl.status === 'Offered' ? 'bg-amber-50 text-amber-700' :
-                            'bg-emerald-50 text-emerald-700'
-                          }`}>
-                            {wl.status}
-                          </span>
-                        </td>
-                        <td className="py-4 px-2 text-right">
-                          {wl.status === 'Waiting' && (
-                            <button
-                              onClick={() => handleOfferSlot(wl)}
-                              disabled={recoveringId !== null}
-                              className="px-3 py-1 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 text-white disabled:text-slate-400 rounded-lg font-bold text-[9px] uppercase cursor-pointer"
-                            >
-                              Dispatch Offer
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                      <React.Fragment key={wl.id}>
+                        <tr className="border-b border-slate-50 hover:bg-slate-50/50" id={`waitlist-full-row-${wl.id}`}>
+                          <td className="py-4 px-2">
+                            <span className="block font-bold text-slate-900">{wl.patientName}</span>
+                            <span className="text-[9px] text-slate-400 font-mono">{wl.patientPhone}</span>
+                          </td>
+                          <td className="py-4 px-2 font-medium text-slate-600">{wl.preferredDoctor}</td>
+                          <td className="py-4 px-2 text-slate-500">{wl.preferredTimeSlot}</td>
+                          <td className="py-4 px-2 font-mono text-slate-400">{wl.dateAdded}</td>
+                          <td className="py-4 px-2">
+                            <span className="px-2 py-0.5 bg-slate-100 rounded text-[9px] font-bold font-mono text-slate-600">🗣 {wl.language}</span>
+                          </td>
+                          <td className="py-4 px-2">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold font-mono ${
+                              wl.status === 'Waiting' ? 'bg-purple-50 text-purple-700' :
+                              wl.status === 'Offered' ? 'bg-amber-50 text-amber-700' :
+                              'bg-emerald-50 text-emerald-700'
+                            }`}>
+                              {wl.status}
+                            </span>
+                          </td>
+                          <td className="py-4 px-2 text-right">
+                            {wl.status === 'Waiting' && (
+                              <button
+                                onClick={() => handleOfferSlot(wl)}
+                                disabled={recoveringId !== null}
+                                className="px-3 py-1 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 text-white disabled:text-slate-400 rounded-lg font-bold text-[9px] uppercase cursor-pointer"
+                              >
+                                {recoveringId === wl.id ? '...' : 'Dispatch Offer'}
+                              </button>
+                            )}
+                            {(wl.status === 'Offered' || wl.status === 'Responded') && (
+                              <button
+                                onClick={() => openConvertForm(wl.id)}
+                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[9px] uppercase cursor-pointer"
+                              >
+                                Book Appointment
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                        {convertingWlId === wl.id && (
+                          <tr className="bg-emerald-50/60 border-b border-emerald-100">
+                            <td colSpan={7} className="px-4 py-3">
+                              <div className="flex gap-3 items-end flex-wrap">
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Doctor</label>
+                                  <select
+                                    value={convertForm.doctorId}
+                                    onChange={e => setConvertForm(f => ({ ...f, doctorId: e.target.value }))}
+                                    className="text-xs px-2 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-sky-500"
+                                  >
+                                    {apiDoctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Date</label>
+                                  <input
+                                    type="date"
+                                    value={convertForm.date}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    onChange={e => setConvertForm(f => ({ ...f, date: e.target.value }))}
+                                    className="text-xs px-2 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-sky-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-500 mb-1">Time</label>
+                                  <input
+                                    type="time"
+                                    value={convertForm.time}
+                                    onChange={e => setConvertForm(f => ({ ...f, time: e.target.value }))}
+                                    className="text-xs px-2 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-sky-500"
+                                  />
+                                </div>
+                                <button
+                                  disabled={convertLoading || !convertForm.doctorId || !convertForm.date}
+                                  onClick={() => handleConvertWaitlist(wl.id, wl.patientName)}
+                                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white disabled:text-slate-400 rounded-lg font-bold text-xs cursor-pointer transition-all"
+                                >
+                                  {convertLoading ? 'Booking...' : 'Confirm Booking'}
+                                </button>
+                                <button
+                                  onClick={() => setConvertingWlId(null)}
+                                  className="px-4 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-bold text-xs cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -1111,11 +1224,12 @@ export default function ClinicDashboard({
               </div>
 
               <div className="pt-4 border-t border-slate-150 flex justify-end">
-                <button 
-                  onClick={() => triggerToast('✔ Clinic settings changes saved to local database successfully.')}
-                  className="px-6 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={settingsSaving}
+                  className="px-6 py-2 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white rounded-lg text-xs font-bold cursor-pointer"
                 >
-                  Save Settings Configuration
+                  {settingsSaving ? 'Saving...' : 'Save Settings Configuration'}
                 </button>
               </div>
             </div>
