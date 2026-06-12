@@ -206,8 +206,8 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                 benefit: 'Fully hands-free bookings'
               },
               {
-                title: 'Real-time Calendar Sync',
-                desc: 'Integrates with Google Calendar or clinic software in real-time to prevent accidental double-bookings.',
+                title: 'Real-time Slot Database',
+                desc: 'Bookings live in a real-time PostgreSQL database, with optional Google Calendar sync, to prevent accidental double-bookings.',
                 icon: Calendar,
                 benefit: '0 overlap scheduling'
               },
@@ -267,7 +267,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
             {[
               { step: '1', title: 'Tap WhatsApp Link', desc: 'Patients click a website button, scan clinic QR, or tap a chat link on social profiles.' },
               { step: '2', title: 'Collect Patient Choice', desc: 'Bot asks them what date, language preference, appointment category and doctor name.' },
-              { step: '3', title: 'Verify Doctor Slots', desc: 'The AI checks the clinic GCal or medical dashboard instantly for vacancy.' },
+              { step: '3', title: 'Verify Doctor Slots', desc: 'The AI checks the clinic booking database instantly for vacancy.' },
               { step: '4', title: 'Lock Slot Booking', desc: 'The booking locks, patient confirms details on chat, and receives a WhatsApp card.' },
               { step: '5', title: 'Send Automated Reminders', desc: 'Alerts are dispatched 24 hours and 2 hours before the appointment with easy RSVP options.' },
               { step: '6', title: 'Recover Empty Slots', desc: 'Immediate automated waitlist notification loops out if an active patient cancels.' }
@@ -302,7 +302,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
             {[
               { title: 'WhatsApp Booking', desc: 'Dedicated digital WhatsApp profile dedicated exclusively for conversational scheduling.' },
               { title: 'Multilingual dialogue', desc: 'Autodetect and speak fluently in Hindi, English, Spanish or regional dialects.' },
-              { title: 'Google Calendar Integration', desc: 'Two-way synchronization that acts as single source of truth.' },
+              { title: 'Optional Google Calendar Integration', desc: 'Optional two-way sync layered on top of the PostgreSQL booking database, the single source of truth.' },
               { title: 'Automated Reminders', desc: '24h and 2h texts keeping patient attrition rates under 5%.' },
               { title: 'Waitlist Recovery', desc: 'Instantly notify fallback patients during short notice cancellations.' },
               { title: 'Clinic Dashboard', desc: 'Beautiful desktop control room for doctors, clinic staff and receptionists.' },
@@ -360,7 +360,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                     'Autonomous Waitlist Recovery',
                     'Central desktop clinic dashboard',
                     'Multilingual vernacular support',
-                    '100% Google Calendar syncing'
+                    'Optional Google Calendar integration'
                   ].map((feat, idx) => (
                     <li key={idx} className="flex items-center gap-2.5 text-xs text-slate-600">
                       <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
@@ -402,7 +402,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                     'Autonomous Waitlist Recovery',
                     'Central desktop clinic dashboard',
                     'Multilingual support (Spanish, Hindi, etc.)',
-                    'Google Calendar & webhook API',
+                    'Optional Google Calendar & webhook API',
                     'Custom bot tone matching'
                   ].map((feat, idx) => (
                     <li key={idx} className="flex items-center gap-2.5 text-xs text-slate-600">

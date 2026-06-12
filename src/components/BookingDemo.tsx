@@ -270,7 +270,7 @@ export default function BookingDemo({ onNewAppointmentBooked, whatsappNumber }: 
                 <p className="text-slate-400">⚡ Webhook initialized: whatsapp-inbound</p>
                 {language && <p className="text-emerald-400">✔ Language preference set: <span className="text-white underline">{language}</span></p>}
                 {specialty && <p className="text-emerald-400">✔ Category filtered: <span className="text-white font-bold">{specialty}</span></p>}
-                {selectedDate && <p className="text-emerald-400">✔ Google Calendar scan query: <span className="text-white">{selectedDate}</span></p>}
+                {selectedDate && <p className="text-emerald-400">✔ Slot availability query (PostgreSQL): <span className="text-white">{selectedDate}</span></p>}
                 {selectedSlot && <p className="text-emerald-400">✔ Reserved slot in calendar state: <span className="text-white">{selectedSlot}</span></p>}
                 {step === 'confirmed' && (
                   <>

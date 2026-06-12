@@ -912,7 +912,7 @@ export default function ClinicDashboard({
             <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 animate-fadeIn" id="calendar-tab-view">
               <div className="border-b border-slate-150 pb-4 text-left">
                 <h2 className="font-display font-extrabold text-lg text-slate-950">Active Doctor Timelines</h2>
-                <p className="text-slate-400 text-xs">Chronological timeline schedules for today ({TODAY}). Direct two-way sync with Google Calendar API.</p>
+                <p className="text-slate-400 text-xs">Chronological timeline schedules for today ({TODAY}), built from appointments stored in PostgreSQL (Supabase) via the Express + Prisma backend. Optional Google Calendar Integration available.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="doctor-timelines-grid">
@@ -947,7 +947,7 @@ export default function ClinicDashboard({
 
                       <div className="pt-4 border-t border-slate-200 mt-6 flex justify-between items-center text-[10px] text-slate-400 font-mono">
                         <span>Total Roster: {docAppointments.length} slots</span>
-                        <span className="text-emerald-600 font-bold">● Sync GCal</span>
+                        <span className="text-emerald-600 font-bold">● Synced</span>
                       </div>
                     </div>
                   );
@@ -1172,7 +1172,7 @@ export default function ClinicDashboard({
                         className="rounded text-sky-600 bg-white"
                       />
                       <span className="text-xs text-slate-700 leading-normal">
-                        Enable automated **24-hour** ahead WhatsApp RSVP confirm cards
+                        Enable automated <strong className="font-bold">24-hour</strong> ahead WhatsApp RSVP confirm cards
                       </span>
                     </label>
 
@@ -1187,7 +1187,7 @@ export default function ClinicDashboard({
                         className="rounded text-sky-600 bg-white"
                       />
                       <span className="text-xs text-slate-700 leading-normal">
-                        Enable automated **2-hour** urgent consult coordinate text dispatches
+                        Enable automated <strong className="font-bold">2-hour</strong> urgent consult coordinate text dispatches
                       </span>
                     </label>
 
