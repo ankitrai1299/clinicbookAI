@@ -3,7 +3,12 @@ import { Request, Response } from 'express';
 import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getWhatsAppWebhookVerifyToken, isWhatsAppConfigured } from '../../config/whatsapp.js';
-import { exampleSendMessageFunction, sendWhatsAppTextMessage } from './whatsapp.service.js';
+import {
+  exampleSendMessageFunction,
+  recordInboundMessage,
+  recordStatusUpdate,
+  sendWhatsAppTextMessage
+} from './whatsapp.service.js';
 import { IncomingWhatsAppWebhook, WhatsAppTextMessageInput } from './whatsapp.types.js';
 
 export const verifyWebhook = (req: Request, res: Response) => {
@@ -46,10 +51,33 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
       ) ?? []
     ) ?? [];
 
+  // Persist webhook side-effects. Wrapped so a DB hiccup never makes us return
+  // non-200 — Meta retries on any non-200 and would replay the whole batch.
+  let statusesPersisted = 0;
+  try {
+    // Inbound messages (re)open the 24h session window for that number.
+    await Promise.all(
+      incomingMessages
+        .filter((m) => m.from)
+        .map((m) => recordInboundMessage(m.from as string, m.timestamp))
+    );
+
+    // Delivery receipts advance the matching outbound log's status.
+    const counts = await Promise.all(
+      incomingStatuses
+        .filter((s) => s.id && s.status)
+        .map((s) => recordStatusUpdate(s.id as string, s.status as string))
+    );
+    statusesPersisted = counts.reduce((sum, c) => sum + c, 0);
+  } catch (err) {
+    console.error('[WhatsApp] Failed to persist webhook payload:', err);
+  }
+
   console.info('WhatsApp webhook received', {
     configured: isWhatsAppConfigured(),
     incomingMessages,
-    incomingStatuses
+    incomingStatuses,
+    statusesPersisted
   });
 
   res.status(200).json({
@@ -57,7 +85,8 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
     message: 'Webhook received',
     data: {
       messages: incomingMessages.length,
-      statuses: incomingStatuses.length
+      statuses: incomingStatuses.length,
+      statusesPersisted
     }
   });
 });

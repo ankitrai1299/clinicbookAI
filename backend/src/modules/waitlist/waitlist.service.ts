@@ -2,6 +2,7 @@ import { WaitlistStatus } from '@prisma/client';
 
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
+import { notifyWaitlistOffer } from '../whatsapp/whatsapp.notifications.js';
 import { AddToWaitlistInput, ConvertWaitlistInput, UpdateWaitlistPriorityInput } from './waitlist.schemas.js';
 
 const waitlistInclude = {
@@ -86,11 +87,27 @@ export const updateWaitlistPriority = async (
 export const offerWaitlistSlot = async (clinicId: string, id: string) => {
   const entry = await ensureEntry(clinicId, id);
   requireStatus(entry.status, [WaitlistStatus.WAITING, WaitlistStatus.RESPONDED], 'offer');
-  return prisma.waitlist.update({
+  const updated = await prisma.waitlist.update({
     where: { id },
     data: { status: WaitlistStatus.OFFERED },
     include: waitlistInclude
   });
+
+  // Fire-and-forget WhatsApp waitlist offer (no-op if WhatsApp unconfigured).
+  if (updated.patient?.phone) {
+    const clinic = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { name: true }
+    });
+    notifyWaitlistOffer({
+      to: updated.patient.phone,
+      clinicId,
+      patientName: updated.patient.name,
+      clinicName: clinic?.name ?? 'our clinic'
+    });
+  }
+
+  return updated;
 };
 
 export const respondWaitlistEntry = async (clinicId: string, id: string) => {

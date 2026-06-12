@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum ClinicPlan {
@@ -44,18 +45,21 @@ enum ReminderType {
 }
 
 model Clinic {
-  id        String        @id @default(cuid())
-  name      String
-  email     String        @unique
-  phone     String        @unique
-  plan      ClinicPlan    @default(STARTER)
-  createdAt DateTime      @default(now())
+  id               String        @id @default(cuid())
+  name             String
+  email            String        @unique
+  phone            String        @unique
+  plan             ClinicPlan    @default(STARTER)
+  stripeCustomerId String?       @unique
+  createdAt        DateTime      @default(now())
 
-  users        User[]
-  patients     Patient[]
-  doctors      Doctor[]
-  appointments Appointment[]
-  waitlists    Waitlist[]
+  users           User[]
+  patients        Patient[]
+  doctors         Doctor[]
+  appointments    Appointment[]
+  waitlists       Waitlist[]
+  aiConversations AiConversation[]
+  whatsAppLogs    WhatsAppLog[]
 
   @@index([plan])
 }
@@ -70,7 +74,8 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  aiConversations AiConversation[]
 
   @@index([clinicId])
   @@index([role])
@@ -152,4 +157,66 @@ model Reminder {
 
   @@index([appointmentId])
   @@index([type, sent])
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+}
+
+model AiConversation {
+  id        String      @id @default(cuid())
+  clinicId  String
+  userId    String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  clinic   Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+
+  @@index([clinicId])
+  @@index([userId])
+}
+
+model AiMessage {
+  id             String        @id @default(cuid())
+  conversationId String
+  role           AiMessageRole
+  content        String        @db.Text
+  createdAt      DateTime      @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+model WhatsAppLog {
+  id          String   @id @default(cuid())
+  clinicId    String?
+  to          String
+  messageType String
+  body        String   @db.Text
+  waMessageId String?
+  status      String   @default("sent")
+  error       String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  clinic Clinic? @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId])
+  @@index([to])
+  @@index([createdAt])
+  @@index([waMessageId])
+}
+
+// Tracks the recipient's last inbound message so we know whether the 24h
+// WhatsApp customer-service (session) window is open for free-form replies.
+model WhatsAppConversation {
+  id            String   @id @default(cuid())
+  phone         String   @unique
+  lastInboundAt DateTime
+  updatedAt     DateTime @updatedAt
+
+  @@index([phone])
 }

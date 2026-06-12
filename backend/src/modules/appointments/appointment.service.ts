@@ -2,6 +2,7 @@ import { Appointment, AppointmentStatus } from '@prisma/client';
 
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
+import { notifyBookingConfirmation } from '../whatsapp/whatsapp.notifications.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
 
 const appointmentInclude = {
@@ -110,6 +111,19 @@ export const createAppointment = async (clinicId: string, input: CreateAppointme
     },
     include: appointmentInclude
   });
+
+  // Fire-and-forget WhatsApp booking confirmation (no-op if WhatsApp unconfigured).
+  if (appointment.patient?.phone && appointment.doctor && appointment.clinic) {
+    notifyBookingConfirmation({
+      to: appointment.patient.phone,
+      clinicId: appointment.clinicId,
+      patientName: appointment.patient.name,
+      doctorName: appointment.doctor.name,
+      clinicName: appointment.clinic.name,
+      appointmentDate: appointment.appointmentDate,
+      appointmentTime: appointment.appointmentTime
+    });
+  }
 
   return appointment;
 };

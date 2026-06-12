@@ -1,7 +1,12 @@
 import { AppointmentStatus, ReminderType } from '@prisma/client';
 
 import { prisma } from '../config/prisma.js';
-import { sendWhatsAppTextMessage } from '../modules/whatsapp/whatsapp.service.js';
+import { sendTemplatedOrSession } from '../modules/whatsapp/whatsapp.service.js';
+import {
+  AppointmentTemplateData,
+  WhatsAppTemplate,
+  appointmentReminderComponents
+} from '../modules/whatsapp/whatsapp.templates.js';
 
 // Appointment datetime is constructed from appointmentDate (UTC midnight) + appointmentTime string ("HH:MM")
 const getAppointmentDateTime = (date: Date, timeStr: string): Date => {
@@ -36,25 +41,37 @@ const build2hMessage = (
 ): string =>
   `Hello ${patientName}!\n\nYour appointment is in 2 hours.\n\nDate: ${dateLabel}\nTime: ${time}\nDoctor: Dr. ${doctorName}\nClinic: ${clinicName}\n\nSee you soon!`;
 
-const dispatchReminder = async (
-  appointmentId: string,
-  type: ReminderType,
-  phone: string,
-  message: string,
-  existingReminderId: string | undefined
-): Promise<void> => {
-  await sendWhatsAppTextMessage({ to: phone, body: message });
+const dispatchReminder = async (params: {
+  appointmentId: string;
+  type: ReminderType;
+  phone: string;
+  clinicId: string;
+  sessionBody: string;
+  templateData: AppointmentTemplateData;
+  existingReminderId: string | undefined;
+}): Promise<'session' | 'template'> => {
+  // Inside the 24h window the patient gets the richer free-form message;
+  // outside it, the approved appointment_reminder template is used instead.
+  const { channel } = await sendTemplatedOrSession({
+    to: params.phone,
+    templateName: WhatsAppTemplate.APPOINTMENT_REMINDER,
+    components: appointmentReminderComponents(params.templateData),
+    sessionBody: params.sessionBody,
+    clinicId: params.clinicId
+  });
 
-  if (existingReminderId) {
+  if (params.existingReminderId) {
     await prisma.reminder.update({
-      where: { id: existingReminderId },
+      where: { id: params.existingReminderId },
       data: { sent: true }
     });
   } else {
     await prisma.reminder.create({
-      data: { appointmentId, type, sent: true }
+      data: { appointmentId: params.appointmentId, type: params.type, sent: true }
     });
   }
+
+  return channel;
 };
 
 export const processReminders = async (): Promise<void> => {
@@ -98,13 +115,29 @@ export const processReminders = async (): Promise<void> => {
       const { name: doctorName } = appt.doctor;
       const { name: clinicName } = appt.clinic;
 
+      const templateData: AppointmentTemplateData = {
+        patientName,
+        dateLabel,
+        time: appt.appointmentTime,
+        doctorName,
+        clinicName
+      };
+
       // 24-hour reminder
       if (isInReminderWindow(apptDateTime, 24 * 60 * 60 * 1000)) {
         const existing = appt.reminders.find(r => r.type === ReminderType.REMINDER_24H);
         if (!existing?.sent) {
           const message = build24hMessage(patientName, doctorName, clinicName, dateLabel, appt.appointmentTime);
-          await dispatchReminder(appt.id, ReminderType.REMINDER_24H, phone, message, existing?.id);
-          console.info(`[ReminderService] Sent 24h reminder → appointment ${appt.id} (${patientName})`);
+          const channel = await dispatchReminder({
+            appointmentId: appt.id,
+            type: ReminderType.REMINDER_24H,
+            phone,
+            clinicId: appt.clinicId,
+            sessionBody: message,
+            templateData,
+            existingReminderId: existing?.id
+          });
+          console.info(`[ReminderService] Sent 24h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
         }
       }
 
@@ -113,8 +146,16 @@ export const processReminders = async (): Promise<void> => {
         const existing = appt.reminders.find(r => r.type === ReminderType.REMINDER_2H);
         if (!existing?.sent) {
           const message = build2hMessage(patientName, doctorName, clinicName, dateLabel, appt.appointmentTime);
-          await dispatchReminder(appt.id, ReminderType.REMINDER_2H, phone, message, existing?.id);
-          console.info(`[ReminderService] Sent 2h reminder → appointment ${appt.id} (${patientName})`);
+          const channel = await dispatchReminder({
+            appointmentId: appt.id,
+            type: ReminderType.REMINDER_2H,
+            phone,
+            clinicId: appt.clinicId,
+            sessionBody: message,
+            templateData,
+            existingReminderId: existing?.id
+          });
+          console.info(`[ReminderService] Sent 2h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
         }
       }
     } catch (error) {
