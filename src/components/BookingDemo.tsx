@@ -274,7 +274,7 @@ export default function BookingDemo({ onNewAppointmentBooked, whatsappNumber }: 
                 {selectedSlot && <p className="text-emerald-400">✔ Reserved slot in calendar state: <span className="text-white">{selectedSlot}</span></p>}
                 {step === 'confirmed' && (
                   <>
-                    <p className="text-yellow-400">⏳ SMS Scheduler: Enqueued 24h reminders for {patientName}</p>
+                    <p className="text-yellow-400">⏳ WhatsApp Cloud API: Enqueued 24h reminders for {patientName}</p>
                     <p className="text-purple-400">ℹ Synced to Clinic Dashboard table successfully!</p>
                   </>
                 )}
@@ -289,7 +289,7 @@ export default function BookingDemo({ onNewAppointmentBooked, whatsappNumber }: 
                 Production Deployment Architecture
               </h4>
               <p className="text-emerald-800 text-[11px] leading-relaxed">
-                In production, <code>Twilio WhatsApp Business API</code> sends and receives webhook messages. A server (Node/Express) parses incoming strings and runs <code>Google Gemini model-2.5-flash</code> to extract intent, updating your CRM and calendar instantly.
+                In production, the <code>Meta WhatsApp Cloud API</code> sends and receives webhook messages. An <code>Express + Prisma</code> backend parses incoming messages and runs <code>OpenAI GPT-4.1-mini</code> to extract intent, persisting bookings to <code>PostgreSQL (Supabase)</code> and updating your calendar instantly.
               </p>
             </div>
           </div>
