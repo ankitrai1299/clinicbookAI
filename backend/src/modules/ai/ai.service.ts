@@ -3,10 +3,16 @@ import OpenAI from 'openai';
 import { env } from '../../config/env.js';
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
+import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { cancelAppointment, createAppointment, getAppointments } from '../appointments/appointment.service.js';
 import { createDoctor, getDoctors, updateDoctor } from '../doctors/doctor.service.js';
 import { createPatient, getPatients, updatePatient } from '../patients/patient.service.js';
 import { addToWaitlist } from '../waitlist/waitlist.service.js';
+import { sendWhatsAppTextMessage } from '../whatsapp/whatsapp.service.js';
+
+// Meta expects digits-only E.164 (no '+', spaces or dashes). Numbers must be
+// stored in full international format (e.g. "919876543210") to be deliverable.
+const toWhatsAppNumber = (phone: string): string => phone.replace(/\D/g, '');
 
 const getClient = () => {
   if (!env.OPENAI_API_KEY) {
@@ -183,6 +189,27 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         required: ['patientId']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_whatsapp_message',
+      description:
+        "Send a WhatsApp message to a patient. Resolves the patient's phone number from the database " +
+        'and sends it through the real WhatsApp Cloud API; every send is recorded in WhatsAppLog. ' +
+        'Use search_patients (and search_appointments for appointment details) first to get the patientId ' +
+        'and the real facts. Compose the full, personalised message text yourself based on the staff ' +
+        "member's intent (confirmation, reminder, cancellation notice, etc.). To message several patients, " +
+        'call this tool once per patient.',
+      parameters: {
+        type: 'object',
+        properties: {
+          patientId: { type: 'string', description: 'ID of the patient to message (from search_patients)' },
+          message: { type: 'string', description: 'The full, ready-to-send message text' }
+        },
+        required: ['patientId', 'message']
+      }
+    }
   }
 ];
 
@@ -291,6 +318,51 @@ const executeTool = async (
         priority: (args.priority as number) ?? 0
       });
 
+    case 'send_whatsapp_message': {
+      if (!isWhatsAppConfigured()) {
+        return { success: false, error: 'WhatsApp is not configured on this server (WHATSAPP_TOKEN / PHONE_NUMBER_ID / VERIFY_TOKEN).' };
+      }
+
+      const patient = await prisma.patient.findFirst({
+        where: { id: args.patientId as string, clinicId },
+        select: { id: true, name: true, phone: true }
+      });
+      if (!patient) {
+        return { success: false, error: 'Patient not found in this clinic. Search for the patient first.' };
+      }
+
+      const body = String(args.message ?? '').trim();
+      if (!body) {
+        return { success: false, error: 'Message text is empty.' };
+      }
+
+      // sendWhatsAppTextMessage writes to WhatsAppLog on BOTH success and failure,
+      // then throws on failure — so we report the real outcome to the model rather
+      // than letting it assume the message was delivered.
+      try {
+        const response = await sendWhatsAppTextMessage({
+          to: toWhatsAppNumber(patient.phone),
+          body,
+          clinicId
+        });
+        return {
+          success: true,
+          patient: patient.name,
+          to: patient.phone,
+          waMessageId: response.data.messages?.[0]?.id ?? null,
+          note: 'Accepted by WhatsApp and recorded in WhatsAppLog as "sent". Delivery is confirmed separately via the status webhook.'
+        };
+      } catch (err) {
+        return {
+          success: false,
+          patient: patient.name,
+          to: patient.phone,
+          error: err instanceof Error ? err.message : String(err),
+          note: 'Send failed and was recorded in WhatsAppLog as "failed". Tell the user it did not send and relay the EXACT reason from the error field — e.g. "Authentication Error" / code 190 means the WhatsApp access token is expired or invalid; a 24h customer-service window error means free-form text is blocked until the patient messages first. Do not guess the cause.'
+        };
+      }
+    }
+
     default:
       throw new AppError(`Unknown tool: ${name}`, 400);
   }
@@ -316,6 +388,11 @@ Rules:
 - After each action, briefly confirm what was done with key details.
 - Keep responses concise and professional.
 - If required info is missing, search existing records first before asking the user.
+- To send a WhatsApp message, first look up the real facts (patient via search_patients, and the
+  appointment via search_appointments when the message is about a booking) so the message is accurate —
+  never invent dates, times, or doctor names. Then call send_whatsapp_message with the patientId and the
+  full composed text. Report the ACTUAL result the tool returns: if success is false, tell the user it
+  failed and why — do not claim a message was sent when it was not.
 
 Today's date: {TODAY}`;
 
