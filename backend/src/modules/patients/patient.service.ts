@@ -2,6 +2,7 @@ import { Patient } from '@prisma/client';
 
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
+import { notifyPatientWelcome } from '../whatsapp/whatsapp.notifications.js';
 import { CreatePatientInput, UpdatePatientInput } from './patient.schemas.js';
 
 export interface AuthenticatedClinicContext {
@@ -38,6 +39,17 @@ export const createPatient = async (clinicId: string, input: CreatePatientInput)
     },
     include: patientInclude
   });
+
+  // Fire-and-forget WhatsApp welcome message (no-op if WhatsApp unconfigured).
+  // Recorded in WhatsAppLog as messageType 'welcome' regardless of delivery.
+  if (patient.phone && patient.clinic) {
+    notifyPatientWelcome({
+      to: patient.phone,
+      clinicId: patient.clinicId,
+      patientName: patient.name,
+      clinicName: patient.clinic.name
+    });
+  }
 
   return patient;
 };

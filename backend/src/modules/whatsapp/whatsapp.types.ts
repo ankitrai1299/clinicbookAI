@@ -2,6 +2,8 @@ export interface WhatsAppTextMessageInput {
   to: string;
   body: string;
   previewUrl?: boolean;
+  // Optional label stored in WhatsAppLog.messageType (defaults to 'session_text').
+  messageType?: string;
 }
 
 export interface IncomingWhatsAppWebhook {

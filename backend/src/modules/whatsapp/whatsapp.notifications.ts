@@ -3,7 +3,7 @@
 // short-circuit when WhatsApp isn't configured and swallow/log any send error.
 
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
-import { sendTemplatedOrSession } from './whatsapp.service.js';
+import { sendTemplatedOrSession, sendWhatsAppTextMessage } from './whatsapp.service.js';
 import {
   AppointmentTemplateData,
   WaitlistTemplateData,
@@ -55,6 +55,37 @@ export const notifyBookingConfirmation = (p: BookingConfirmationParams): void =>
     sessionBody,
     clinicId: p.clinicId
   }).catch((err) => console.error('[WhatsApp] Booking confirmation send failed:', err));
+};
+
+export interface PatientWelcomeParams {
+  to: string;
+  clinicId: string;
+  patientName: string;
+  clinicName: string;
+}
+
+// Sent automatically when a new patient record is created. There is no approved
+// "welcome" template, so this goes out as a free-form session message — it will
+// only deliver inside the 24h window, but is always recorded in WhatsAppLog.
+export const notifyPatientWelcome = (p: PatientWelcomeParams): void => {
+  if (!isWhatsAppConfigured()) {
+    return;
+  }
+
+  // Meta expects digits-only E.164 (no '+', spaces or dashes).
+  const to = p.to.replace(/\D/g, '');
+  const body =
+    `Hello ${p.patientName},\n\n` +
+    `Welcome to ${p.clinicName}.\n\n` +
+    `Your patient profile has been created successfully.\n\n` +
+    `You can now book appointments, receive reminders and communicate with our AI assistant through WhatsApp.`;
+
+  void sendWhatsAppTextMessage({
+    to,
+    body,
+    messageType: 'welcome',
+    clinicId: p.clinicId
+  }).catch((err) => console.error('[WhatsApp] Patient welcome send failed:', err));
 };
 
 export interface WaitlistOfferParams {

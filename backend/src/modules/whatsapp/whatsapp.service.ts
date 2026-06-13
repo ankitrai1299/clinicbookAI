@@ -78,7 +78,7 @@ export const sendWhatsAppTextMessage = async (
 
     await logOutbound({
       to: input.to,
-      messageType: 'session_text',
+      messageType: input.messageType ?? 'session_text',
       body: input.body,
       clinicId: input.clinicId,
       waMessageId: extractWaMessageId(response.data),
@@ -89,7 +89,7 @@ export const sendWhatsAppTextMessage = async (
   } catch (error) {
     await logOutbound({
       to: input.to,
-      messageType: 'session_text',
+      messageType: input.messageType ?? 'session_text',
       body: input.body,
       clinicId: input.clinicId,
       status: 'failed',
