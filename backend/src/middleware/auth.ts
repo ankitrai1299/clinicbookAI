@@ -13,7 +13,13 @@ export const requireAuth = (req: Request, _res: Response, next: NextFunction) =>
   const token = header.slice(7).trim();
 
   try {
-    req.user = verifyAccessToken(token);
+    const payload = verifyAccessToken(token);
+    // Doctor-portal tokens must never unlock the admin/clinic API. They carry a
+    // doctorId in `userId` (not a real User) and are confined to /api/doctor-portal.
+    if (payload.role === 'DOCTOR') {
+      return next(new AppError('Invalid token for this resource', 403));
+    }
+    req.user = payload;
     return next();
   } catch {
     return next(new AppError('Invalid or expired token', 401));

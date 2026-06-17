@@ -147,6 +147,31 @@ export const sendWhatsAppTemplateMessage = async (params: {
   }
 };
 
+// Persist an inbound (patient → clinic) message for auditing. Stored with the
+// patient's number in `to` and direction marked via messageType 'inbound_text';
+// status 'received' (inbound has no delivery lifecycle).
+export const logInboundMessage = async (params: {
+  from: string;
+  body: string;
+  waMessageId?: string;
+  clinicId?: string | null;
+}): Promise<void> => {
+  try {
+    await prisma.whatsAppLog.create({
+      data: {
+        to: params.from,
+        messageType: 'inbound_text',
+        body: params.body,
+        clinicId: params.clinicId ?? null,
+        waMessageId: params.waMessageId ?? null,
+        status: 'received'
+      }
+    });
+  } catch (err) {
+    console.error('[WhatsApp] Failed to log inbound message:', err);
+  }
+};
+
 // True when the recipient messaged us within the last 24h (session window open).
 export const isConversationWindowOpen = async (phone: string): Promise<boolean> => {
   const convo = await prisma.whatsAppConversation.findUnique({
@@ -196,24 +221,24 @@ export const sendTemplatedOrSession = async (params: {
   components?: TemplateComponent[];
   sessionBody: string;
   clinicId?: string | null;
-}): Promise<{ channel: 'session' | 'template' }> => {
+}): Promise<{ channel: 'session' | 'template'; waMessageId?: string }> => {
   if (await isConversationWindowOpen(params.to)) {
-    await sendWhatsAppTextMessage({
+    const res = await sendWhatsAppTextMessage({
       to: params.to,
       body: params.sessionBody,
       clinicId: params.clinicId
     });
-    return { channel: 'session' };
+    return { channel: 'session', waMessageId: extractWaMessageId(res.data) };
   }
 
-  await sendWhatsAppTemplateMessage({
+  const res = await sendWhatsAppTemplateMessage({
     to: params.to,
     templateName: params.templateName,
     components: params.components,
     bodyForLog: params.sessionBody,
     clinicId: params.clinicId
   });
-  return { channel: 'template' };
+  return { channel: 'template', waMessageId: extractWaMessageId(res.data) };
 };
 
 export const exampleSendMessageFunction = async () => {

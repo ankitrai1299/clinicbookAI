@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 
 import { env } from './config/env.js';
 import apiRouter from './routes/index.js';
+import { stripeWebhookHandler } from './modules/billing/billing.controller.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
@@ -28,7 +29,18 @@ export const createApp = () => {
       credentials: true
     })
   );
-  app.use(express.json({ limit: '1mb' }));
+  // Stripe webhook needs raw body — must be mounted before express.json()
+  app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+  // Stash the raw request bytes so the WhatsApp webhook can verify Meta's
+  // X-Hub-Signature-256 HMAC against the exact payload.
+  app.use(
+    express.json({
+      limit: '1mb',
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+      }
+    })
+  );
   app.use(express.urlencoded({ extended: true }));
   app.use(logger);
   app.use(

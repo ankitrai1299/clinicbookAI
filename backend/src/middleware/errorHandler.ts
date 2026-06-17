@@ -1,7 +1,5 @@
 import { ErrorRequestHandler } from 'express';
 
-import { env } from '../config/env.js';
-
 export const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
   if (res.headersSent) {
     return next(error);
@@ -39,9 +37,12 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
     message = 'Invalid JSON payload';
   }
 
-  res.status(statusCode).json({
-    success: false,
-    message,
-    ...(env.NODE_ENV === 'production' ? {} : { stack: error instanceof Error ? error.stack : undefined })
-  });
+  // Never leak internals to the client. Full detail (incl. stack) is logged
+  // server-side; 5xx responses return a generic message regardless of env.
+  if (statusCode >= 500) {
+    console.error('[error]', error);
+    message = 'Internal server error';
+  }
+
+  res.status(statusCode).json({ success: false, message });
 };

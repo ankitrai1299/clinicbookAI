@@ -3,12 +3,14 @@
 // short-circuit when WhatsApp isn't configured and swallow/log any send error.
 
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
+import { getAvailableSlots } from '../../services/scheduling.service.js';
 import { sendTemplatedOrSession, sendWhatsAppTextMessage } from './whatsapp.service.js';
 import {
   AppointmentTemplateData,
   WaitlistTemplateData,
   WhatsAppTemplate,
   bookingConfirmationComponents,
+  registrationWelcomeComponents,
   waitlistOfferComponents
 } from './whatsapp.templates.js';
 
@@ -57,35 +59,114 @@ export const notifyBookingConfirmation = (p: BookingConfirmationParams): void =>
   }).catch((err) => console.error('[WhatsApp] Booking confirmation send failed:', err));
 };
 
-export interface PatientWelcomeParams {
+export interface AppointmentRejectedParams {
+  to: string;
+  clinicId: string;
+  doctorId: string;
+  patientName: string;
+  doctorName: string;
+  clinicName: string;
+  appointmentDate: Date;
+  appointmentTime: string;
+}
+
+// Sent when staff REJECT/CANCEL a pending appointment. Per requirement 7, the
+// patient is offered alternate slots so they can rebook in one step. Free-form
+// session message (no approved template for this), so it delivers while the
+// patient's 24h WhatsApp window is open — which it is right after they booked.
+export const notifyAppointmentRejectedWithAlternatives = (p: AppointmentRejectedParams): void => {
+  if (!isWhatsAppConfigured()) {
+    return;
+  }
+
+  const dateStr = p.appointmentDate.toISOString().slice(0, 10);
+  const dateLabel = formatDateLabel(p.appointmentDate);
+
+  void (async () => {
+    const slots = await getAvailableSlots(p.clinicId, p.doctorId, dateStr);
+    const alternatives = slots.filter((s) => s !== p.appointmentTime).slice(0, 6);
+
+    const body =
+      `Hello ${p.patientName}, unfortunately your requested appointment with Dr. ${p.doctorName} ` +
+      `at ${p.clinicName} on ${dateLabel} at ${p.appointmentTime} could not be confirmed.\n\n` +
+      (alternatives.length
+        ? `Here are other available times that day:\n${alternatives.map((s) => `• ${s}`).join('\n')}\n\n` +
+          `Reply with a time to rebook, or let me know another day that suits you.`
+        : `There are no other openings that day. Reply with another date and I'll find you a slot.`);
+
+    await sendWhatsAppTextMessage({
+      to: p.to.replace(/\D/g, ''),
+      body,
+      messageType: 'appointment_rejected',
+      clinicId: p.clinicId
+    });
+  })().catch((err) => console.error('[WhatsApp] Rejection/alternatives send failed:', err));
+};
+
+export interface PatientRegisteredParams {
   to: string;
   clinicId: string;
   patientName: string;
   clinicName: string;
+  patientCode: string;
 }
 
-// Sent automatically when a new patient record is created. There is no approved
-// "welcome" template, so this goes out as a free-form session message — it will
-// only deliver inside the 24h window, but is always recorded in WhatsAppLog.
-export const notifyPatientWelcome = (p: PatientWelcomeParams): void => {
+// Builds the exact registration confirmation body from the freshly-created
+// patient record. Every value (name, clinic, ID) is dynamic — nothing is
+// hardcoded. Kept in one place so the session text and the approved
+// `registration_welcome` template render identically.
+const buildRegistrationBody = (p: PatientRegisteredParams): string =>
+  `Hi ${p.patientName},\n\n` +
+  `Welcome to ${p.clinicName}.\n\n` +
+  `Your registration has been completed successfully.\n\n` +
+  `Patient ID: ${p.patientCode}\n\n` +
+  `Reply:\n` +
+  `1 - Book Appointment\n` +
+  `2 - Talk to AI Assistant\n` +
+  `3 - View Available Slots`;
+
+// Sent automatically on every successful patient registration (staff dashboard
+// or public self-registration). Uses a free-form session message when the 24h
+// window is open; otherwise falls back to the approved `registration_welcome`
+// template so it still delivers to cold recipients. The outbound row in
+// WhatsAppLog carries phone (`to`), wamid (`waMessageId`) and the evolving
+// delivery status (sent → delivered → read), updated by the status webhook.
+export const notifyPatientRegistered = (p: PatientRegisteredParams): void => {
   if (!isWhatsAppConfigured()) {
     return;
   }
 
   // Meta expects digits-only E.164 (no '+', spaces or dashes).
   const to = p.to.replace(/\D/g, '');
-  const body =
-    `Hello ${p.patientName},\n\n` +
-    `Welcome to ${p.clinicName}.\n\n` +
-    `Your patient profile has been created successfully.\n\n` +
-    `You can now book appointments, receive reminders and communicate with our AI assistant through WhatsApp.`;
+  const sessionBody = buildRegistrationBody(p);
 
-  void sendWhatsAppTextMessage({
+  void sendTemplatedOrSession({
     to,
-    body,
-    messageType: 'welcome',
+    templateName: WhatsAppTemplate.REGISTRATION_WELCOME,
+    components: registrationWelcomeComponents({
+      patientName: p.patientName,
+      clinicName: p.clinicName,
+      patientCode: p.patientCode
+    }),
+    sessionBody,
     clinicId: p.clinicId
-  }).catch((err) => console.error('[WhatsApp] Patient welcome send failed:', err));
+  })
+    .then((r) =>
+      console.info('[WhatsApp] Registration message dispatched', {
+        patientId: p.patientCode,
+        phone: to,
+        wamid: r.waMessageId ?? null,
+        channel: r.channel,
+        status: 'sent'
+      })
+    )
+    .catch((err) =>
+      console.error('[WhatsApp] Registration message failed', {
+        patientId: p.patientCode,
+        phone: to,
+        error: err?.message ?? String(err)
+      })
+    );
 };
 
 export interface WaitlistOfferParams {
@@ -117,4 +198,35 @@ export const notifyWaitlistOffer = (p: WaitlistOfferParams): void => {
     sessionBody,
     clinicId: p.clinicId
   }).catch((err) => console.error('[WhatsApp] Waitlist offer send failed:', err));
+};
+
+export interface WaitlistSlotOfferParams {
+  to: string;
+  clinicId: string;
+  patientName: string;
+  doctorName: string;
+  clinicName: string;
+  appointmentDate: Date;
+  appointmentTime: string;
+}
+
+// Auto-sent when a cancellation frees a slot and it is offered to the next
+// waitlisted patient. Carries the EXACT slot so a "YES" reply can be booked
+// automatically (see waitlist claimWaitlistOffer). Free-form session message.
+export const notifyWaitlistSlotOffer = (p: WaitlistSlotOfferParams): void => {
+  if (!isWhatsAppConfigured()) {
+    return;
+  }
+
+  const dateLabel = formatDateLabel(p.appointmentDate);
+  const body =
+    `Good news ${p.patientName}! A slot just opened with Dr. ${p.doctorName} at ${p.clinicName} ` +
+    `on ${dateLabel} at ${p.appointmentTime}.\n\nReply YES to claim it before someone else does.`;
+
+  void sendWhatsAppTextMessage({
+    to: p.to.replace(/\D/g, ''),
+    body,
+    messageType: 'waitlist_slot_offer',
+    clinicId: p.clinicId
+  }).catch((err) => console.error('[WhatsApp] Waitlist slot offer send failed:', err));
 };

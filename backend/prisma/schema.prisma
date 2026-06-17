@@ -41,6 +41,7 @@ enum ReminderType {
   BOOKING_CONFIRMATION
   REMINDER_24H
   REMINDER_2H
+  REMINDER_1H
   WAITLIST_OFFER
 }
 
@@ -60,6 +61,7 @@ model Clinic {
   waitlists       Waitlist[]
   aiConversations AiConversation[]
   whatsAppLogs    WhatsAppLog[]
+  notifications   Notification[]
 
   @@index([plan])
 }
@@ -82,31 +84,79 @@ model User {
 }
 
 model Patient {
-  id        String   @id @default(cuid())
-  clinicId  String
-  name      String
-  phone     String
-  language  String
+  id            String   @id @default(cuid())
+  patientCode   String?  @unique
+  clinicId      String
+  name          String
+  phone         String
+  language      String
+  age           Int?
+  gender        String?
+  healthConcern String?  @db.Text
+  source        String   @default("staff") // 'staff' (dashboard) | 'public' (self-registration)
+  createdAt     DateTime @default(now())
 
-  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointments  Appointment[]
-  waitlistEntry Waitlist?
+  clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+  waitlistEntry   Waitlist?
+  aiConversations AiConversation[]
 
   @@index([clinicId])
   @@unique([clinicId, phone])
 }
 
 model Doctor {
-  id         String   @id @default(cuid())
-  clinicId   String
-  name       String
-  speciality String
+  id           String   @id @default(cuid())
+  clinicId     String
+  name         String
+  speciality   String
+  email        String?
+  phone        String?
+  // Set when the doctor self-registers on the Doctor Portal. Null for doctors
+  // created by an admin who haven't claimed a login yet.
+  passwordHash String?
 
-  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic        Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments  Appointment[]
+  schedules     DoctorSchedule[]
+  leaves        DoctorLeave[]
 
   @@index([clinicId])
   @@unique([clinicId, name])
+}
+
+// Recurring weekly availability for a doctor. One row per active weekday.
+// Slots are generated from startTime→endTime in slotMinutes steps.
+model DoctorSchedule {
+  id          String  @id @default(cuid())
+  clinicId    String
+  doctorId    String
+  dayOfWeek   Int      // 0 = Sunday … 6 = Saturday
+  startTime   String   // "09:00" (24h, clinic local)
+  endTime     String   // "17:00"
+  slotMinutes Int      @default(30)
+  isActive    Boolean  @default(true)
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, dayOfWeek])
+  @@index([clinicId])
+  @@index([doctorId])
+}
+
+// Date-range time off; blocks availability for the doctor across the range.
+model DoctorLeave {
+  id        String   @id @default(cuid())
+  clinicId  String
+  doctorId  String
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  reason    String?
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([clinicId, startDate, endDate])
 }
 
 model Appointment {
@@ -129,6 +179,36 @@ model Appointment {
   @@index([appointmentDate])
   @@index([status])
   @@index([clinicId, appointmentDate, appointmentTime])
+  // NOTE: a PARTIAL unique index "Appointment_active_slot_key" enforces one active
+  // booking per (clinicId, doctorId, appointmentDate, appointmentTime) WHERE
+  // status <> 'CANCELLED'. Prisma's schema language can't express the WHERE clause,
+  // so it is created by scripts/applySlotUniqueIndex.ts (run after `prisma db push`).
+}
+
+enum NotificationType {
+  APPOINTMENT_BOOKED
+  APPOINTMENT_CONFIRMED
+  APPOINTMENT_CANCELLED
+  APPOINTMENT_RESCHEDULED
+}
+
+// Dashboard notifications (the bell / notification center). Written by the
+// automation engine on booking and on approve/reject/reschedule so staff see
+// activity that originated from the WhatsApp bot, not just their own actions.
+model Notification {
+  id            String           @id @default(cuid())
+  clinicId      String
+  type          NotificationType
+  title         String
+  body          String           @db.Text
+  appointmentId String?
+  read          Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, read])
+  @@index([clinicId, createdAt])
 }
 
 model Waitlist {
@@ -137,6 +217,12 @@ model Waitlist {
   patientId String        @unique
   priority Int            @default(0)
   status   WaitlistStatus @default(WAITING)
+
+  // When a freed slot is auto-offered to this entry (status OFFERED), the exact
+  // slot is parked here so a patient's "YES" reply can be booked automatically.
+  offeredDoctorId String?
+  offeredDate     DateTime? @db.Date
+  offeredTime     String?
 
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -167,16 +253,20 @@ enum AiMessageRole {
 model AiConversation {
   id        String      @id @default(cuid())
   clinicId  String
-  userId    String
+  userId    String?
+  patientId String?
+  channel   String      @default("dashboard") // 'dashboard' (staff) | 'whatsapp' (patient)
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
   clinic   Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patient  Patient?    @relation(fields: [patientId], references: [id], onDelete: Cascade)
   messages AiMessage[]
 
   @@index([clinicId])
   @@index([userId])
+  @@index([patientId])
 }
 
 model AiMessage {
@@ -219,4 +309,26 @@ model WhatsAppConversation {
   updatedAt     DateTime @updatedAt
 
   @@index([phone])
+}
+
+// Deterministic booking state machine state, one row per patient phone. The
+// WhatsApp receptionist (whatsapp.booking.ts) is a finite state machine — the
+// LLM is NOT in the control loop — so the patient's place in the flow plus the
+// options last shown to them must survive between messages. `state` is the FSM
+// node (IDLE, SPECIALITY_SELECTION, DOCTOR_SELECTION, SLOT_SELECTION,
+// CONFIRMATION, …) and `data` is a JSON blob (stored as text to avoid Prisma
+// Json default quirks) holding the chosen speciality/doctor, the exact numbered
+// options last presented, slot pagination offset and the selected slot.
+model WhatsAppSession {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  clinicId  String
+  patientId String?
+  state     String   @default("IDLE")
+  data      String   @default("{}") @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([phone])
+  @@index([clinicId])
 }

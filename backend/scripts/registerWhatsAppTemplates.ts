@@ -56,6 +56,20 @@ const templates: TemplateDefinition[] = [
     bodyText:
       "Hi {{1}}, a slot has just opened up with Dr. {{2}} at {{3}}. Reply YES to claim it before it's gone.",
     example: ['John', 'Smith', 'City Health Clinic']
+  },
+  {
+    name: 'patient_registration',
+    category: 'UTILITY',
+    bodyText:
+      'Hi {{1}}, thank you for registering with {{2}}. Your details have been received and our team will reach out shortly to confirm your appointment. You can reply to this message anytime to chat with us.',
+    example: ['John', 'City Health Clinic']
+  },
+  {
+    name: 'registration_welcome',
+    category: 'UTILITY',
+    bodyText:
+      'Hi {{1}},\n\nWelcome to {{2}}.\n\nYour registration has been completed successfully.\n\nPatient ID: {{3}}\n\nReply:\n1 - Book Appointment\n2 - Talk to AI Assistant\n3 - View Available Slots',
+    example: ['Asha Verma', 'Sunrise Medical Center', 'PT-7K4Q9D']
   }
 ];
 

@@ -8,11 +8,26 @@ import {
   appointmentReminderComponents
 } from '../modules/whatsapp/whatsapp.templates.js';
 
-// Appointment datetime is constructed from appointmentDate (UTC midnight) + appointmentTime string ("HH:MM")
+// Appointment datetime = appointmentDate (UTC midnight) + appointmentTime. Times
+// are stored in the canonical "HH:MM AM/PM" shape (e.g. "02:30 PM"); this parser
+// also tolerates 24h "HH:MM". The previous version split on ":" and treated
+// "02:30 PM" as 24h, yielding NaN minutes / a wrong hour — so reminders never
+// fired correctly. This is the fix.
 const getAppointmentDateTime = (date: Date, timeStr: string): Date => {
-  const [hours, minutes] = timeStr.split(':').map(Number);
   const dt = new Date(date);
-  dt.setUTCHours(hours, minutes ?? 0, 0, 0);
+  const m = timeStr.trim().toUpperCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
+  if (!m) {
+    dt.setUTCHours(0, 0, 0, 0);
+    return dt;
+  }
+
+  let hours = parseInt(m[1], 10);
+  const minutes = m[2] ? parseInt(m[2], 10) : 0;
+  const ampm = m[3];
+  if (ampm === 'PM' && hours !== 12) hours += 12;
+  if (ampm === 'AM' && hours === 12) hours = 0;
+
+  dt.setUTCHours(hours, minutes, 0, 0);
   return dt;
 };
 
@@ -32,14 +47,14 @@ const build24hMessage = (
 ): string =>
   `Hello ${patientName}!\n\nThis is a reminder that you have an appointment tomorrow.\n\nDate: ${dateLabel}\nTime: ${time}\nDoctor: Dr. ${doctorName}\nClinic: ${clinicName}\n\nPlease arrive 10 minutes early. Contact us if you need to reschedule.`;
 
-const build2hMessage = (
+const build1hMessage = (
   patientName: string,
   doctorName: string,
   clinicName: string,
   dateLabel: string,
   time: string
 ): string =>
-  `Hello ${patientName}!\n\nYour appointment is in 2 hours.\n\nDate: ${dateLabel}\nTime: ${time}\nDoctor: Dr. ${doctorName}\nClinic: ${clinicName}\n\nSee you soon!`;
+  `Hello ${patientName}!\n\nYour appointment is in 1 hour.\n\nDate: ${dateLabel}\nTime: ${time}\nDoctor: Dr. ${doctorName}\nClinic: ${clinicName}\n\nSee you soon!`;
 
 const dispatchReminder = async (params: {
   appointmentId: string;
@@ -141,21 +156,21 @@ export const processReminders = async (): Promise<void> => {
         }
       }
 
-      // 2-hour reminder
-      if (isInReminderWindow(apptDateTime, 2 * 60 * 60 * 1000)) {
-        const existing = appt.reminders.find(r => r.type === ReminderType.REMINDER_2H);
+      // 1-hour reminder
+      if (isInReminderWindow(apptDateTime, 1 * 60 * 60 * 1000)) {
+        const existing = appt.reminders.find(r => r.type === ReminderType.REMINDER_1H);
         if (!existing?.sent) {
-          const message = build2hMessage(patientName, doctorName, clinicName, dateLabel, appt.appointmentTime);
+          const message = build1hMessage(patientName, doctorName, clinicName, dateLabel, appt.appointmentTime);
           const channel = await dispatchReminder({
             appointmentId: appt.id,
-            type: ReminderType.REMINDER_2H,
+            type: ReminderType.REMINDER_1H,
             phone,
             clinicId: appt.clinicId,
             sessionBody: message,
             templateData,
             existingReminderId: existing?.id
           });
-          console.info(`[ReminderService] Sent 2h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
+          console.info(`[ReminderService] Sent 1h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
         }
       }
     } catch (error) {

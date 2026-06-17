@@ -1,9 +1,82 @@
-import { Appointment, AppointmentStatus } from '@prisma/client';
+import { Appointment, AppointmentStatus, Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
-import { notifyBookingConfirmation } from '../whatsapp/whatsapp.notifications.js';
+import {
+  notifyBookingConfirmation,
+  notifyAppointmentRejectedWithAlternatives
+} from '../whatsapp/whatsapp.notifications.js';
+import { recordNotification } from '../notifications/notification.service.js';
+import { autoOfferFreedSlot } from '../waitlist/waitlist.service.js';
+import { canonicalizeTime } from '../../services/scheduling.service.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
+
+// Store every appointment time in the one canonical "HH:MM AM/PM" shape so slot
+// generation, double-booking checks and reminders all compare like-for-like.
+// Falls back to the trimmed input if it can't be parsed (never silently drops it).
+const normalizeTime = (time: string): string => canonicalizeTime(time) ?? time.trim();
+
+const whenLabel = (appt: AppointmentRecord): string =>
+  `${appt.appointmentDate.toISOString().slice(0, 10)} at ${appt.appointmentTime}`;
+
+// Central place for everything that must happen when an appointment's status
+// transitions. Keeps the WhatsApp + dashboard-notification side-effects in ONE
+// spot so every path (dashboard approve/reject, AI cancel, PATCH) behaves the
+// same. All side-effects are fire-and-forget and never block the DB result.
+const onStatusTransition = (prev: AppointmentStatus, appt: AppointmentRecord): void => {
+  if (appt.status === prev) return;
+
+  const patientName = appt.patient?.name ?? 'A patient';
+  const doctorName = appt.doctor?.name ?? 'the doctor';
+
+  if (appt.status === AppointmentStatus.CONFIRMED) {
+    // Requirement 6: approval sends a WhatsApp confirmation to the patient.
+    if (appt.patient?.phone && appt.doctor && appt.clinic) {
+      notifyBookingConfirmation({
+        to: appt.patient.phone,
+        clinicId: appt.clinicId,
+        patientName: appt.patient.name,
+        doctorName: appt.doctor.name,
+        clinicName: appt.clinic.name,
+        appointmentDate: appt.appointmentDate,
+        appointmentTime: appt.appointmentTime
+      });
+    }
+    recordNotification({
+      clinicId: appt.clinicId,
+      type: 'APPOINTMENT_CONFIRMED',
+      title: 'Appointment confirmed',
+      body: `${patientName}'s appointment with ${doctorName} on ${whenLabel(appt)} was confirmed.`,
+      appointmentId: appt.id
+    });
+  } else if (appt.status === AppointmentStatus.CANCELLED) {
+    // Requirement 7: rejection sends the patient alternate slots to rebook.
+    if (appt.patient?.phone && appt.doctor && appt.clinic) {
+      notifyAppointmentRejectedWithAlternatives({
+        to: appt.patient.phone,
+        clinicId: appt.clinicId,
+        doctorId: appt.doctorId,
+        patientName: appt.patient.name,
+        doctorName: appt.doctor.name,
+        clinicName: appt.clinic.name,
+        appointmentDate: appt.appointmentDate,
+        appointmentTime: appt.appointmentTime
+      });
+    }
+    recordNotification({
+      clinicId: appt.clinicId,
+      type: 'APPOINTMENT_CANCELLED',
+      title: 'Appointment cancelled',
+      body: `${patientName}'s appointment with ${doctorName} on ${whenLabel(appt)} was cancelled. Alternate slots were offered.`,
+      appointmentId: appt.id
+    });
+
+    // Automatic waitlist recovery: offer the freed slot to the next waiting patient.
+    void autoOfferFreedSlot(appt.clinicId, appt.doctorId, appt.appointmentDate, appt.appointmentTime).catch((err) =>
+      console.error('[Waitlist] Auto-offer on cancellation failed:', err)
+    );
+  }
+};
 
 const appointmentInclude = {
   doctor: {
@@ -97,23 +170,64 @@ const ensureAppointmentExists = async (clinicId: string, id: string) => {
   }
 };
 
-export const createAppointment = async (clinicId: string, input: CreateAppointmentInput): Promise<AppointmentRecord> => {
+export const createAppointment = async (
+  clinicId: string,
+  input: CreateAppointmentInput,
+  options: { notify?: boolean } = {}
+): Promise<AppointmentRecord> => {
+  // notify defaults to true (staff dashboard path). The WhatsApp bot passes
+  // notify:false because the conversational agent sends its own single reply —
+  // a second auto-confirmation would be a duplicate message to the patient.
+  const notify = options.notify ?? true;
+
   await ensureClinicDoctorPatient(clinicId, input.doctorId, input.patientId);
 
-  const appointment = await prisma.appointment.create({
-    data: {
-      clinicId,
-      doctorId: input.doctorId,
-      patientId: input.patientId,
-      appointmentDate: normalizeDate(input.appointmentDate),
-      appointmentTime: input.appointmentTime.trim(),
-      status: input.status ?? AppointmentStatus.PENDING
-    },
-    include: appointmentInclude
-  });
+  const appointmentDate = normalizeDate(input.appointmentDate);
+  const appointmentTime = normalizeTime(input.appointmentTime);
+
+  // Atomic slot lock. Re-check inside a transaction that no active (non-cancelled)
+  // appointment already holds this doctor/date/time, then create. The partial
+  // unique index "Appointment_active_slot_key" is the final backstop against a
+  // concurrent booking that slips between the check and the insert — it surfaces
+  // as a P2002, which we translate to a clean 409.
+  let appointment: AppointmentRecord;
+  try {
+    appointment = await prisma.$transaction(async (tx) => {
+      const clash = await tx.appointment.findFirst({
+        where: {
+          clinicId,
+          doctorId: input.doctorId,
+          appointmentDate,
+          appointmentTime,
+          status: { not: AppointmentStatus.CANCELLED }
+        },
+        select: { id: true }
+      });
+      if (clash) {
+        throw new AppError('That time slot is already booked for this doctor.', 409);
+      }
+
+      return tx.appointment.create({
+        data: {
+          clinicId,
+          doctorId: input.doctorId,
+          patientId: input.patientId,
+          appointmentDate,
+          appointmentTime,
+          status: input.status ?? AppointmentStatus.PENDING
+        },
+        include: appointmentInclude
+      });
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new AppError('That time slot is already booked for this doctor.', 409);
+    }
+    throw err;
+  }
 
   // Fire-and-forget WhatsApp booking confirmation (no-op if WhatsApp unconfigured).
-  if (appointment.patient?.phone && appointment.doctor && appointment.clinic) {
+  if (notify && appointment.patient?.phone && appointment.doctor && appointment.clinic) {
     notifyBookingConfirmation({
       to: appointment.patient.phone,
       clinicId: appointment.clinicId,
@@ -124,6 +238,16 @@ export const createAppointment = async (clinicId: string, input: CreateAppointme
       appointmentTime: appointment.appointmentTime
     });
   }
+
+  // Requirement 4: every new booking raises a dashboard notification so staff see
+  // bot-originated bookings (notify:false path) the moment they land.
+  recordNotification({
+    clinicId,
+    type: 'APPOINTMENT_BOOKED',
+    title: 'New appointment booked',
+    body: `${appointment.patient?.name ?? 'A patient'} booked ${appointment.doctor?.name ?? 'a doctor'} on ${whenLabel(appointment)} (status: ${appointment.status}).`,
+    appointmentId: appointment.id
+  });
 
   return appointment;
 };
@@ -154,48 +278,95 @@ export const updateAppointment = async (
   id: string,
   input: UpdateAppointmentInput
 ): Promise<AppointmentRecord> => {
-  await ensureAppointmentExists(clinicId, id);
+  const current = await prisma.appointment.findFirst({
+    where: { id, clinicId },
+    select: { status: true, doctorId: true, patientId: true, appointmentDate: true, appointmentTime: true }
+  });
+
+  if (!current) {
+    throw new AppError('Appointment not found', 404);
+  }
 
   if (input.doctorId !== undefined || input.patientId !== undefined) {
-    const currentAppointment = await prisma.appointment.findFirst({
-      where: { id, clinicId },
-      select: { doctorId: true, patientId: true }
-    });
-
-    if (!currentAppointment) {
-      throw new AppError('Appointment not found', 404);
-    }
-
     await ensureClinicDoctorPatient(
       clinicId,
-      input.doctorId ?? currentAppointment.doctorId,
-      input.patientId ?? currentAppointment.patientId
+      input.doctorId ?? current.doctorId,
+      input.patientId ?? current.patientId
     );
   }
 
-  const appointment = await prisma.appointment.update({
-    where: { id },
-    data: {
-      ...(input.doctorId !== undefined ? { doctorId: input.doctorId } : {}),
-      ...(input.patientId !== undefined ? { patientId: input.patientId } : {}),
-      ...(input.appointmentDate !== undefined ? { appointmentDate: normalizeDate(input.appointmentDate) } : {}),
-      ...(input.appointmentTime !== undefined ? { appointmentTime: input.appointmentTime.trim() } : {}),
-      ...(input.status !== undefined ? { status: input.status } : {})
-    },
-    include: appointmentInclude
-  });
+  let appointment: AppointmentRecord;
+  try {
+    appointment = await prisma.appointment.update({
+      where: { id },
+      data: {
+        ...(input.doctorId !== undefined ? { doctorId: input.doctorId } : {}),
+        ...(input.patientId !== undefined ? { patientId: input.patientId } : {}),
+        ...(input.appointmentDate !== undefined ? { appointmentDate: normalizeDate(input.appointmentDate) } : {}),
+        ...(input.appointmentTime !== undefined ? { appointmentTime: normalizeTime(input.appointmentTime) } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {})
+      },
+      include: appointmentInclude
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new AppError('That time slot is already booked for this doctor.', 409);
+    }
+    throw err;
+  }
+
+  // Status side-effects (approve → confirm WhatsApp; cancel → alternates).
+  onStatusTransition(current.status, appointment);
+
+  // Reschedule side-effect: date/time changed without a status transition having
+  // already messaged the patient. Tell them the new time and log a notification.
+  const dateChanged =
+    input.appointmentDate !== undefined &&
+    appointment.appointmentDate.getTime() !== current.appointmentDate.getTime();
+  const timeChanged =
+    input.appointmentTime !== undefined && appointment.appointmentTime !== current.appointmentTime;
+
+  if ((dateChanged || timeChanged) && appointment.status !== AppointmentStatus.CANCELLED) {
+    if (appointment.patient?.phone && appointment.doctor && appointment.clinic) {
+      notifyBookingConfirmation({
+        to: appointment.patient.phone,
+        clinicId: appointment.clinicId,
+        patientName: appointment.patient.name,
+        doctorName: appointment.doctor.name,
+        clinicName: appointment.clinic.name,
+        appointmentDate: appointment.appointmentDate,
+        appointmentTime: appointment.appointmentTime
+      });
+    }
+    recordNotification({
+      clinicId,
+      type: 'APPOINTMENT_RESCHEDULED',
+      title: 'Appointment rescheduled',
+      body: `${appointment.patient?.name ?? 'A patient'}'s appointment with ${appointment.doctor?.name ?? 'the doctor'} was moved to ${whenLabel(appointment)}.`,
+      appointmentId: appointment.id
+    });
+  }
 
   return appointment;
 };
 
 export const cancelAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  await ensureAppointmentExists(clinicId, id);
+  const prev = await prisma.appointment.findFirst({
+    where: { id, clinicId },
+    select: { status: true }
+  });
+  if (!prev) {
+    throw new AppError('Appointment not found', 404);
+  }
 
-  return prisma.appointment.update({
+  const appointment = await prisma.appointment.update({
     where: { id },
     data: { status: AppointmentStatus.CANCELLED },
     include: appointmentInclude
   });
+
+  onStatusTransition(prev.status, appointment);
+  return appointment;
 };
 
 export const completeAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
