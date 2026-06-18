@@ -10,16 +10,17 @@
 // plus deterministic CHECK / CANCEL / RESCHEDULE branches. Every message maps to
 // exactly one next step. Numbered replies (1, 2, 3 …) always advance the state
 // against the options last shown. Doctors and slots come straight from the DB —
-// never invented. The AI is used for ONE thing only: mapping free text to an
-// intent and a real speciality (classifyPatientMessage); it never picks a slot,
-// books, or writes the reply.
+// never invented. There is NO AI/OpenAI anywhere in this flow: free text is
+// mapped to an intent and a real speciality by a deterministic keyword matcher
+// (classifyIntent, whatsapp.intent.ts). The FSM never calls the OpenAI agent and
+// never creates AiConversation / AiMessage rows.
 //
 // State + the exact options last presented are persisted per phone in
 // WhatsAppSession, so a bare "1" on the next webhook resolves deterministically.
 // ===========================================================================
 
 import { prisma } from '../../config/prisma.js';
-import { classifyPatientMessage } from '../ai/ai.service.js';
+import { classifyIntent } from './whatsapp.intent.js';
 import { createAppointment, cancelAppointment, updateAppointment } from '../appointments/appointment.service.js';
 import { getAvailableSlots } from '../../services/scheduling.service.js';
 
@@ -225,10 +226,13 @@ const startBooking = async (params: BookingParams, presetSpeciality?: string | n
     return `Sorry, no doctors are set up yet. Please contact ${params.clinicName} directly.`;
   }
 
-  // Speciality already known (from free text the AI mapped, or only one exists).
-  const preset =
-    (presetSpeciality && specs.find((s) => s.toLowerCase() === presetSpeciality.toLowerCase())) ??
-    (specs.length === 1 ? specs[0] : undefined);
+  // If the patient already named a real speciality (e.g. free text "cardiologist"),
+  // honour that explicit choice and go straight to the doctor list. We do NOT
+  // auto-pick a speciality just because the clinic happens to have only one — the
+  // patient still selects from the list, so every step waits for input.
+  const preset = presetSpeciality
+    ? specs.find((s) => s.toLowerCase() === presetSpeciality.toLowerCase())
+    : undefined;
   if (preset) return presentDoctors(params, preset);
 
   await saveSession(params, S.SPECIALITY, { mode: 'book', specialityOptions: specs });
@@ -244,8 +248,8 @@ const handleSpeciality = async (params: BookingParams, data: SessionData, t: str
   if (n && opts[n - 1]) {
     speciality = opts[n - 1];
   } else {
-    // Free text → AI maps to a real speciality from the list.
-    const { speciality: mapped } = await classifyPatientMessage(t, opts);
+    // Free text → deterministic keyword match to a real speciality from the list.
+    const { speciality: mapped } = classifyIntent(t, opts);
     speciality = mapped ?? undefined;
   }
 
@@ -266,13 +270,10 @@ const presentDoctors = async (params: BookingParams, speciality: string): Promis
     return `No doctors found for ${speciality}. Choose a speciality:\n\n${numbered(specs)}\n\nReply with a number.`;
   }
 
-  // Only one doctor → don't ask, jump straight to slots.
-  if (docs.length === 1) {
-    return presentSlots(params, docs[0], 0, 'book');
-  }
-
+  // ALWAYS present the doctor list and wait — never auto-select, even when the
+  // speciality has only one doctor. The patient must explicitly choose.
   await saveSession(params, S.DOCTOR, { mode: 'book', speciality, doctorOptions: docs });
-  why(params, `speciality "${speciality}" → present ${docs.length} doctors, await choice`);
+  why(params, `speciality "${speciality}" → present ${docs.length} doctor(s), await choice`);
   return (
     `${speciality} — please choose a doctor:\n\n` +
     `${numbered(docs.map((d) => d.name))}\n\n` +
@@ -638,8 +639,8 @@ const handleTopLevel = async (params: BookingParams, t: string): Promise<string>
   // Free text → AI maps to intent (+ speciality). AI does control flow nowhere
   // else; here it only decides which deterministic branch to enter.
   const specs = await distinctSpecialities(params.clinicId);
-  const { intent, speciality } = await classifyPatientMessage(t, specs);
-  console.info('[FSM] free-text classified', { patientMessage: t, intent, speciality: speciality ?? null });
+  const { intent, speciality } = classifyIntent(t, specs);
+  console.info('[FSM] free-text classified (deterministic)', { patientMessage: t, intent, speciality: speciality ?? null });
 
   switch (intent) {
     case 'book':

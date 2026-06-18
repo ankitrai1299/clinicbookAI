@@ -68,7 +68,7 @@ const templates: TemplateDefinition[] = [
     name: 'registration_welcome',
     category: 'UTILITY',
     bodyText:
-      'Hi {{1}},\n\nWelcome to {{2}}.\n\nYour registration has been completed successfully.\n\nPatient ID: {{3}}\n\nReply:\n1 - Book Appointment\n2 - Talk to AI Assistant\n3 - View Available Slots',
+      'Hi {{1}},\n\nWelcome to {{2}}.\n\nYour registration has been completed successfully.\n\nPatient ID: {{3}}\n\nReply:\n1 - Book Appointment\n2 - My Appointments\n3 - Cancel Appointment\n4 - Reschedule Appointment',
     example: ['Asha Verma', 'Sunrise Medical Center', 'PT-7K4Q9D']
   }
 ];

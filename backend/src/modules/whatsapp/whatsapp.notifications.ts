@@ -122,8 +122,9 @@ const buildRegistrationBody = (p: PatientRegisteredParams): string =>
   `Patient ID: ${p.patientCode}\n\n` +
   `Reply:\n` +
   `1 - Book Appointment\n` +
-  `2 - Talk to AI Assistant\n` +
-  `3 - View Available Slots`;
+  `2 - My Appointments\n` +
+  `3 - Cancel Appointment\n` +
+  `4 - Reschedule Appointment`;
 
 // Sent automatically on every successful patient registration (staff dashboard
 // or public self-registration). Uses a free-form session message when the 24h

@@ -76,10 +76,11 @@ export const patientRegistrationComponents = (
 
 // registration_welcome:
 //   {{1}} patient · {{2}} clinic · {{3}} patient ID
-// Body (static menu lines are part of the approved template, not variables):
+// Body (static menu lines are part of the approved template, not variables) —
+// kept in sync with the FSM main menu (whatsapp.booking.ts menuText):
 //   Hi {{1}},\n\nWelcome to {{2}}.\n\nYour registration has been completed
 //   successfully.\n\nPatient ID: {{3}}\n\nReply:\n1 - Book Appointment\n
-//   2 - Talk to AI Assistant\n3 - View Available Slots
+//   2 - My Appointments\n3 - Cancel Appointment\n4 - Reschedule Appointment
 export const registrationWelcomeComponents = (
   d: RegistrationWelcomeTemplateData
 ): TemplateComponent[] => bodyParams(d.patientName, d.clinicName, d.patientCode);
