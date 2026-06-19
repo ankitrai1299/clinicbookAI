@@ -15,6 +15,7 @@ import {
 import {
   addToWaitlistSchema,
   convertWaitlistSchema,
+  listWaitlistQuerySchema,
   updateWaitlistPrioritySchema
 } from './waitlist.schemas.js';
 
@@ -22,7 +23,9 @@ const waitlistRouter = Router();
 
 waitlistRouter.use(requireAuth);
 
-waitlistRouter.get('/', getWaitlistHandler);
+// Validate ?status= against the WaitlistStatus enum. Without this an arbitrary
+// status string flows straight into prisma.findMany and triggers a 500.
+waitlistRouter.get('/', validate(listWaitlistQuerySchema, 'query'), getWaitlistHandler);
 waitlistRouter.post('/', validate(addToWaitlistSchema), addToWaitlistHandler);
 waitlistRouter.get('/:id', getWaitlistEntryHandler);
 waitlistRouter.patch('/:id', validate(updateWaitlistPrioritySchema), updateWaitlistPriorityHandler);

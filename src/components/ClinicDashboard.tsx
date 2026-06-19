@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Users, Calendar, Clock, Bell, Settings, CreditCard, Activity,
   Search, Plus, CheckCircle, XCircle,
-  Mail, Phone, Globe, ExternalLink, ArrowRight, ShieldAlert
+  Mail, Phone, Globe, ExternalLink, ArrowRight, ShieldAlert,
+  QrCode, Copy, Check
 } from 'lucide-react';
+import AiAssistant from './AiAssistant';
+import DoctorWorkflow from './DoctorWorkflow';
 import { Appointment, Doctor, Patient, ReminderLog, WaitlistPatient, ClinicConfig, DashboardTab } from '../types';
 import {
   getAppointments as getAppointmentsApi,
@@ -15,6 +18,9 @@ import { getPatients as getPatientsApi, createPatient as createPatientApi, ApiPa
 import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
 import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, convertWaitlistEntry as convertWaitlistEntryApi, ApiWaitlistEntry } from '../api/waitlist';
 import { getMyClinic as getMyClinicApi, updateMyClinic as updateMyClinicApi } from '../api/clinic';
+import { getBillingStatus, createCheckoutSession as createCheckoutSessionApi, createPortalSession as createPortalSessionApi } from '../api/billing';
+import { getNotifications as getNotificationsApi, markAllNotificationsRead as markAllNotificationsReadApi, ApiNotification } from '../api/notifications';
+import { API_BASE } from '../api/client';
 
 const mapStatus = (status: string): Appointment['status'] => {
   const map: Record<string, Appointment['status']> = {
@@ -44,6 +50,10 @@ const mapApiPatient = (p: ApiPatient): Patient => ({
   phone: p.phone,
   preferredLanguage: p.language,
   status: 'active',
+  age: p.age,
+  gender: p.gender,
+  healthConcern: p.healthConcern,
+  source: p.source,
 });
 
 const mapApiDoctor = (d: ApiDoctor): Doctor => ({
@@ -94,7 +104,6 @@ export default function ClinicDashboard({
   setAppointments,
   waitlist,
   setWaitlist,
-  reminderLogs,
   setReminderLogs,
   clinicConfig,
   setClinicConfig,
@@ -108,6 +117,9 @@ export default function ClinicDashboard({
 
   // Real patients loaded from API
   const [patients, setPatients] = useState<Patient[]>([]);
+  // Clinic id for building the public patient-registration share link
+  const [clinicId, setClinicId] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
   // Raw API data for lookups
   const [apiPatients, setApiPatients] = useState<ApiPatient[]>([]);
   const [apiDoctors, setApiDoctors] = useState<ApiDoctor[]>([]);
@@ -128,10 +140,33 @@ export default function ClinicDashboard({
   const [convertForm, setConvertForm] = useState({ doctorId: '', date: '', time: '10:00' });
   const [convertLoading, setConvertLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [stripeConfigured, setStripeConfigured] = useState(false);
+
+  // Real dashboard notifications (bell + activity feed), polled for near-real-time updates.
+  const [notifications, setNotifications] = useState<ApiNotification[]>([]);
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Public, shareable patient self-registration link for this clinic.
+  const registrationUrl =
+    clinicId && typeof window !== 'undefined'
+      ? `${window.location.origin}/register?clinic=${clinicId}`
+      : '';
+
+  const handleCopyRegistrationLink = async () => {
+    if (!registrationUrl) return;
+    try {
+      await navigator.clipboard.writeText(registrationUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      triggerToast('Could not copy link. Please copy it manually.');
+    }
   };
 
   // Load real data from backend on mount
@@ -139,14 +174,17 @@ export default function ClinicDashboard({
     const loadData = async () => {
       setDataLoading(true);
       try {
-        const [aptsData, patientsData, doctorsData, waitlistData, clinicData] = await Promise.all([
+        const [aptsData, patientsData, doctorsData, waitlistData, clinicData, billingStatus, notifData] = await Promise.all([
           getAppointmentsApi(),
           getPatientsApi(),
           getDoctorsApi(),
           getWaitlistApi(),
           getMyClinicApi(),
+          getBillingStatus().catch(() => ({ configured: false })),
+          getNotificationsApi().catch(() => [] as ApiNotification[]),
         ]);
 
+        setNotifications(notifData);
         setAppointments(aptsData.map(mapApiAppointment));
         setApiPatients(patientsData);
         setPatients(patientsData.map(mapApiPatient));
@@ -158,7 +196,9 @@ export default function ClinicDashboard({
         }
         const activeWaitlist = waitlistData.filter(w => w.status !== 'CANCELLED' && w.status !== 'CONVERTED');
         setWaitlist(activeWaitlist.map(mapApiWaitlist));
-        setClinicConfig(prev => ({ ...prev, name: clinicData.name, email: clinicData.email, phone: clinicData.phone }));
+        setClinicId(clinicData.id);
+        setClinicConfig(prev => ({ ...prev, name: clinicData.name, email: clinicData.email, phone: clinicData.phone, plan: clinicData.plan }));
+        setStripeConfigured(billingStatus.configured);
       } catch {
         triggerToast('Could not load data from server. Showing cached data.');
       } finally {
@@ -168,6 +208,71 @@ export default function ClinicDashboard({
 
     loadData();
   }, []);
+
+  // Pull the latest live data (appointments, waitlist, notifications) in one shot.
+  const refreshLive = useCallback(async () => {
+    try {
+      const [apts, wl, notifs] = await Promise.all([
+        getAppointmentsApi(),
+        getWaitlistApi(),
+        getNotificationsApi(),
+      ]);
+      setAppointments(apts.map(mapApiAppointment));
+      setWaitlist(wl.filter((w) => w.status !== 'CANCELLED' && w.status !== 'CONVERTED').map(mapApiWaitlist));
+      setNotifications(notifs);
+    } catch {
+      /* transient failure ignored */
+    }
+  }, [setAppointments, setWaitlist]);
+
+  // REAL-TIME: subscribe to server-sent events so bot-driven bookings appear the
+  // instant they happen (no poll wait). On each pushed event we refetch the live
+  // data, and pop a toast for a new booking. EventSource auto-reconnects.
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const es = new EventSource(`${API_BASE}/api/notifications/stream?token=${encodeURIComponent(token)}`);
+    es.addEventListener('notification', (e) => {
+      void refreshLive();
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as { notificationType?: string; title?: string };
+        if (data.notificationType === 'APPOINTMENT_BOOKED') {
+          setToastMessage(`🔔 ${data.title ?? 'New appointment booked'}`);
+          setTimeout(() => setToastMessage(null), 4000);
+        }
+      } catch {
+        /* ignore malformed event */
+      }
+    });
+    return () => es.close();
+  }, [refreshLive]);
+
+  // Safety-net polling: covers SSE reconnect gaps / proxies that buffer streams.
+  // Fires immediately on mount and whenever the tab regains focus.
+  useEffect(() => {
+    void refreshLive();
+    const id = setInterval(refreshLive, 20000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshLive();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [refreshLive]);
+
+  const handleMarkNotificationsRead = async () => {
+    if (unreadCount === 0) return;
+    try {
+      await markAllNotificationsReadApi();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch {
+      /* ignore */
+    }
+  };
 
   // 1. Offer a cancelled slot to a waitlist patient
   const handleOfferSlot = async (wlItem: WaitlistPatient) => {
@@ -225,6 +330,32 @@ export default function ClinicDashboard({
       triggerToast('Failed to save settings.');
     } finally {
       setSettingsSaving(false);
+    }
+  };
+
+  const handleUpgradePlan = async () => {
+    setBillingLoading(true);
+    try {
+      const origin = window.location.origin;
+      const { url } = await createCheckoutSessionApi(
+        `${origin}/?billing=success`,
+        `${origin}/?billing=cancelled`
+      );
+      window.location.href = url;
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Could not start checkout.');
+      setBillingLoading(false);
+    }
+  };
+
+  const handleManageBilling = async () => {
+    setBillingLoading(true);
+    try {
+      const { url } = await createPortalSessionApi(window.location.origin + '/');
+      window.location.href = url;
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Could not open billing portal.');
+      setBillingLoading(false);
     }
   };
 
@@ -300,9 +431,13 @@ export default function ClinicDashboard({
   const waitlistQueueCount = waitlist.filter(w => w.status === 'Waiting').length;
 
   // Render bad status count
-  const utilizationPercent = activeToday.length > 0 
-    ? Math.round(((confirmedTodayCount + pendingTodayCount) / (activeToday.length)) * 100) 
-    : 85;
+  const utilizationPercent = activeToday.length > 0
+    ? Math.round(((confirmedTodayCount + pendingTodayCount) / (activeToday.length)) * 100)
+    : 0;
+  // No-show rate derived from today's roster (0 when there are no appointments)
+  const noShowRate = activeToday.length > 0
+    ? Math.round((cancelledTodayCount / activeToday.length) * 100)
+    : 0;
 
   const filteredAppointments = appointments.filter(apt => {
     const matchesSearch = apt.patientName.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -344,7 +479,7 @@ export default function ClinicDashboard({
             {[
               { id: 'overview', label: 'Overview', icon: Activity },
               { id: 'appointments', label: 'Appointments', icon: Calendar },
-              { id: 'calendar', label: 'Doctor Schedules', icon: Clock },
+              { id: 'calendar', label: 'Doctors & Schedules', icon: Clock },
               { id: 'waitlist', label: 'Waitlist Patients', icon: Users },
               { id: 'patients', label: 'Clinic Patients', icon: Users },
               { id: 'settings', label: 'Bot Settings', icon: Settings },
@@ -430,20 +565,29 @@ export default function ClinicDashboard({
               />
             </div>
 
-            {/* Notification center */}
-            <div className="relative p-1.5 text-slate-500 hover:text-slate-800 bg-slate-50 rounded-lg cursor-pointer">
+            {/* Notification center — real unread count, click to mark all read */}
+            <button
+              onClick={handleMarkNotificationsRead}
+              title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'} — click to mark read` : 'No new notifications'}
+              className="relative p-1.5 text-slate-500 hover:text-slate-800 bg-slate-50 rounded-lg cursor-pointer"
+              id="notification-bell"
+            >
               <Bell className="w-4.5 h-4.5" />
-              <span className="w-2 h-2 bg-rose-500 rounded-full absolute top-1 right-1 border border-white"></span>
-            </div>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
 
-            {/* Profile widget */}
+            {/* Profile widget — real clinic identity */}
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-sky-200 text-sky-800 font-bold flex items-center justify-center text-xs border border-sky-300">
                 🩺
               </div>
               <div className="hidden lg:block text-left">
-                <span className="block text-[11px] font-bold text-slate-900 leading-tight">Admin Desk</span>
-                <span className="block text-[9px] text-slate-400 leading-none">Standard Operator</span>
+                <span className="block text-[11px] font-bold text-slate-900 leading-tight">{clinicConfig.name}</span>
+                <span className="block text-[9px] text-slate-400 leading-none">Clinic Admin</span>
               </div>
             </div>
 
@@ -464,8 +608,8 @@ export default function ClinicDashboard({
                   { title: "Confirmed Bookings", value: confirmedTodayCount, desc: "RSVP Confirmed", icon: CheckCircle, colorClass: "bg-emerald-50 text-emerald-700" },
                   { title: "Cancelled Slots", value: cancelledTodayCount, desc: "Last-minute vacates", icon: XCircle, colorClass: "bg-red-50 text-red-600" },
                   { title: "Waitlist Patients", value: waitlistQueueCount, desc: "In waiting queue", icon: Users, colorClass: "bg-purple-50 text-purple-700" },
-                  { title: "No-show Rate", value: "3.5%", desc: "70% lower than avg", icon: ShieldAlert, colorClass: "bg-amber-50 text-amber-700" },
-                  { title: "Slot Utilization", value: `${utilizationPercent}%`, desc: "Peak performance", icon: Activity, colorClass: "bg-teal-50 text-teal-700" }
+                  { title: "No-show Rate", value: `${noShowRate}%`, desc: "Of today's roster", icon: ShieldAlert, colorClass: "bg-amber-50 text-amber-700" },
+                  { title: "Slot Utilization", value: `${utilizationPercent}%`, desc: "Booked vs roster", icon: Activity, colorClass: "bg-teal-50 text-teal-700" }
                 ].map((stat, idx) => {
                   const SIcon = stat.icon;
                   return (
@@ -773,39 +917,35 @@ export default function ClinicDashboard({
                     </div>
                   </div>
 
-                  {/* Reminder activity logs panel */}
-                  <div className="bg-white border border-slate-100 rounded-3xl p-5 space-y-4 text-left" id="reminder-panel">
+                  {/* Live notification feed — real records from the backend */}
+                  <div className="bg-white border border-slate-100 rounded-3xl p-5 space-y-4 text-left" id="notification-panel">
                     <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
                       <div>
-                        <h3 className="font-display font-extrabold text-sm text-slate-900">Bot Activity Feeds</h3>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Dispatched WhatsApp alerts.</p>
+                        <h3 className="font-display font-extrabold text-sm text-slate-900">Notifications</h3>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Live activity from the WhatsApp booking engine.</p>
                       </div>
+                      {unreadCount > 0 && (
+                        <button onClick={handleMarkNotificationsRead} className="text-[10px] font-bold text-sky-600 hover:text-sky-700">
+                          Mark all read
+                        </button>
+                      )}
                     </div>
 
                     <div className="space-y-3 max-h-[290px] overflow-y-auto">
-                      {reminderLogs.map((log) => (
-                        <div key={log.id} className="flex gap-3 text-left">
+                      {notifications.length === 0 && (
+                        <p className="text-[11px] text-slate-400 italic py-6 text-center">No notifications yet. Bookings, approvals and cancellations will appear here.</p>
+                      )}
+                      {notifications.map((n) => (
+                        <div key={n.id} className={`flex gap-3 text-left p-2 rounded-xl ${n.read ? '' : 'bg-sky-50/50'}`}>
                           <div className="shrink-0 w-8 h-8 rounded-full bg-slate-50 text-base flex items-center justify-center">
-                            {log.type === 'booking_confirmed' ? '📨' :
-                             log.type === 'slot_recovered' ? '⚡' : '⏰'}
+                            {n.type === 'APPOINTMENT_BOOKED' ? '📩' :
+                             n.type === 'APPOINTMENT_CONFIRMED' ? '✅' :
+                             n.type === 'APPOINTMENT_CANCELLED' ? '⚡' : '🔁'}
                           </div>
                           <div>
-                            <p className="text-[11px] text-slate-700 leading-normal">
-                              {log.type === 'booking_confirmed' && <>Booking confirmed alerts delivered to <strong>{log.patientName}</strong>.</>}
-                              {log.type === 'slot_recovered' && <>Enqueued bot offer to recoverable patient <strong>{log.patientName}</strong> on WhatsApp.</>}
-                              {log.type === '24h_reminder' && <>Dispatched 24-hour RSVP clinical reminder card to <strong>{log.patientName}</strong>.</>}
-                              {log.type === '2h_reminder' && <>Urgent 2-hour consultation timing text read by <strong>{log.patientName}</strong>.</>}
-                            </p>
-                            <div className="flex gap-2 items-center mt-1">
-                              <span className="text-[9px] text-slate-400 font-mono font-bold">{log.timestamp}</span>
-                              <span className={`text-[8px] font-mono tracking-wider font-extrabold uppercase ${
-                                log.status === 'read' ? 'text-emerald-600' :
-                                log.status === 'delivered' ? 'text-sky-600' :
-                                'text-slate-400'
-                              }`}>
-                                ● {log.status}
-                              </span>
-                            </div>
+                            <p className="text-[11px] font-bold text-slate-800 leading-tight">{n.title}</p>
+                            <p className="text-[11px] text-slate-600 leading-normal">{n.body}</p>
+                            <span className="text-[9px] text-slate-400 font-mono font-bold">{new Date(n.createdAt).toLocaleString()}</span>
                           </div>
                         </div>
                       ))}
@@ -908,53 +1048,7 @@ export default function ClinicDashboard({
           )}
 
           {/* TAB 3: CALENDAR GRID */}
-          {activeTab === 'calendar' && (
-            <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 animate-fadeIn" id="calendar-tab-view">
-              <div className="border-b border-slate-150 pb-4 text-left">
-                <h2 className="font-display font-extrabold text-lg text-slate-950">Active Doctor Timelines</h2>
-                <p className="text-slate-400 text-xs">Chronological timeline schedules for today ({TODAY}), built from appointments stored in PostgreSQL (Supabase) via the Express + Prisma backend. Optional Google Calendar Integration available.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="doctor-timelines-grid">
-                {doctorsList.map((doc) => {
-                  const docAppointments = appointments.filter(a => a.doctorName === doc.name && a.status !== 'Cancelled');
-                  return (
-                    <div key={doc.id} className="bg-slate-50 border border-slate-200/60 rounded-2xl p-5 text-left flex flex-col justify-between">
-                      <div>
-                        <div className="border-b border-slate-200 pb-3 mb-4">
-                          <span className="block text-slate-900 font-extrabold font-display text-sm leading-snug">{doc.name}</span>
-                          <span className="text-[10px] bg-sky-50 text-sky-700 font-bold px-2 py-0.5 rounded-full mt-1.5 inline-block font-mono uppercase tracking-wider">{doc.specialty}</span>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          {docAppointments.length === 0 ? (
-                            <div className="py-6 text-center text-slate-400 italic text-[10px] bg-white border border-dashed border-slate-200 rounded-xl">
-                              No consultations scheduled
-                            </div>
-                          ) : (
-                            docAppointments.map((da) => (
-                              <div key={da.id} className="bg-white p-3 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
-                                <div className="text-left">
-                                  <span className="block font-bold text-slate-800 text-[11px] leading-tight">{da.patientName}</span>
-                                  <span className="text-[9px] text-slate-400 block mt-0.5">{da.patientPhone}</span>
-                                </div>
-                                <span className="text-[10px] font-mono font-bold text-sky-800 bg-sky-50/50 p-1 rounded-sm">{da.time}</span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="pt-4 border-t border-slate-200 mt-6 flex justify-between items-center text-[10px] text-slate-400 font-mono">
-                        <span>Total Roster: {docAppointments.length} slots</span>
-                        <span className="text-emerald-600 font-bold">● Synced</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {activeTab === 'calendar' && <DoctorWorkflow />}
 
           {/* TAB 4: WAITLIST */}
           {activeTab === 'waitlist' && (
@@ -1086,13 +1180,81 @@ export default function ClinicDashboard({
                 <p className="text-slate-400 text-xs text-left">The central register of database contacts whose profiles are associated with WhatsApp conversation histories.</p>
               </div>
 
+              {/* Public self-registration share panel: link + QR code */}
+              <div
+                className="bg-gradient-to-br from-sky-50 to-white border border-sky-100 rounded-2xl p-5"
+                id="patient-registration-share"
+              >
+                <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
+                  <div className="shrink-0 bg-white border border-slate-200 rounded-xl p-2.5">
+                    {registrationUrl ? (
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(registrationUrl)}`}
+                        alt="Patient registration QR code"
+                        width={120}
+                        height={120}
+                        className="w-[120px] h-[120px] block"
+                      />
+                    ) : (
+                      <div className="w-[120px] h-[120px] flex items-center justify-center text-slate-300">
+                        <QrCode className="w-10 h-10" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 w-full">
+                    <div className="flex items-center gap-2 mb-1">
+                      <QrCode className="w-4 h-4 text-sky-600" />
+                      <h3 className="font-display font-black text-sm text-slate-950">Public Patient Registration</h3>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                      Share this link or QR code with patients. They can self-register from any phone, and
+                      will appear here automatically with a WhatsApp confirmation sent on submit.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={registrationUrl || 'Loading clinic link…'}
+                        onFocus={(e) => e.currentTarget.select()}
+                        className="flex-1 min-w-0 text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono text-slate-600 focus:outline-none focus:border-sky-500"
+                        id="patient-registration-url"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCopyRegistrationLink}
+                          disabled={!registrationUrl}
+                          className="px-3 py-2 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-300 text-white rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                          id="copy-registration-link-btn"
+                        >
+                          {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          {linkCopied ? 'Copied' : 'Copy'}
+                        </button>
+                        {registrationUrl && (
+                          <a
+                            href={registrationUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Open
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-xs text-left" id="patients-master-directory-table">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase text-[10px]">
                       <th className="py-3 px-2">Patient Code</th>
                       <th className="py-3 px-2">Registered Phone</th>
-                      <th className="py-3 px-2">Email Address</th>
+                      <th className="py-3 px-2">Age / Gender</th>
+                      <th className="py-3 px-2">Reason for Visit</th>
                       <th className="py-3 px-2">Preferred Chat Accent</th>
                       <th className="py-3 px-2">Activity State</th>
                       <th className="py-3 px-2 text-right">Action History</th>
@@ -1103,7 +1265,12 @@ export default function ClinicDashboard({
                       <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50/50" id={`patient-dir-row-${p.id}`}>
                         <td className="py-3 px-2 font-bold text-slate-900">{p.name}</td>
                         <td className="py-3 px-2 font-mono text-[10px] text-slate-500">{p.phone}</td>
-                        <td className="py-3 px-2 text-slate-500">{p.email}</td>
+                        <td className="py-3 px-2 text-slate-500">
+                          {p.age != null || p.gender ? `${p.age ?? '—'}${p.gender ? ` · ${p.gender}` : ''}` : '—'}
+                        </td>
+                        <td className="py-3 px-2 text-slate-500 max-w-[220px] truncate" title={p.healthConcern ?? ''}>
+                          {p.healthConcern || '—'}
+                        </td>
                         <td className="py-3 px-2 font-semibold text-sky-700">🗣 {p.preferredLanguage}</td>
                         <td className="py-3 px-2">
                           <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full font-bold font-mono text-[9px] uppercase tracking-wider">
@@ -1236,83 +1403,122 @@ export default function ClinicDashboard({
           )}
 
           {/* TAB 7: BILLING */}
-          {activeTab === 'billing' && (
-            <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 animate-fadeIn text-left" id="billing-tab-view">
-              <div className="border-b border-slate-100 pb-4">
-                <h2 className="font-display font-extrabold text-lg text-slate-950">SaaS Subscription Ledger</h2>
-                <p className="text-slate-400 text-xs">Manage your ClinicBook AI subscription billing, download invoices, or audit transaction history.</p>
-              </div>
+          {activeTab === 'billing' && (() => {
+            const isStarter = clinicConfig.plan === 'STARTER';
+            const planLabel: Record<string, string> = {
+              STARTER: 'Starter (Free)',
+              GROWTH: clinicConfig.country === 'India' ? 'Growth — ₹999 / mo' : 'Growth — $29 / mo',
+              SCALE: clinicConfig.country === 'India' ? 'Scale — ₹2,499 / mo' : 'Scale — $79 / mo',
+              ENTERPRISE: 'Enterprise',
+            };
+            const currentLabel = planLabel[clinicConfig.plan] ?? clinicConfig.plan;
+            return (
+              <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 animate-fadeIn text-left" id="billing-tab-view">
+                <div className="border-b border-slate-100 pb-4">
+                  <h2 className="font-display font-extrabold text-lg text-slate-950">SaaS Subscription Ledger</h2>
+                  <p className="text-slate-400 text-xs">Manage your ClinicBook AI subscription billing, download invoices, or audit transaction history.</p>
+                </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Active Plan info */}
-                <div className="bg-sky-50 border border-sky-100 rounded-2xl p-6 text-left space-y-4">
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-sky-150 text-sky-800 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono">
-                    Active Plan
-                  </span>
-                  <div>
-                    <h3 className="font-display text-2xl font-black text-slate-950">
-                      {clinicConfig.country === 'India' ? 'India Pro Plan' : 'International Pro Plan'}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      {clinicConfig.country === 'India' ? '₹999 / month flat' : '$49 / month flat'}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                  {/* Active Plan info */}
+                  <div className={`${isStarter ? 'bg-slate-50 border-slate-200' : 'bg-sky-50 border-sky-100'} border rounded-2xl p-6 text-left space-y-4`}>
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono ${isStarter ? 'bg-slate-200 text-slate-600' : 'bg-sky-100 text-sky-800'}`}>
+                      {isStarter ? 'Free Tier' : 'Active Plan'}
+                    </span>
+                    <div>
+                      <h3 className="font-display text-2xl font-black text-slate-950">{currentLabel}</h3>
+                      {isStarter && (
+                        <p className="text-[11px] text-slate-500 mt-1">Upgrade to unlock unlimited reminders and WhatsApp booking.</p>
+                      )}
+                    </div>
+                    {!isStarter && (
+                      <div className="pt-3 border-t border-sky-100 text-slate-600 text-xs leading-relaxed">
+                        ✔ Includes up to 10 active clinical doctors<br />
+                        ✔ Unlimited automatic WhatsApp reminders loops<br />
+                        ✔ Vernacular smart auto-booking AI
+                      </div>
+                    )}
+                    {isStarter && stripeConfigured && (
+                      <button
+                        onClick={handleUpgradePlan}
+                        disabled={billingLoading}
+                        className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer mt-2"
+                      >
+                        {billingLoading ? (
+                          <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /><span>Redirecting...</span></>
+                        ) : (
+                          <><span>Upgrade to Growth Plan</span><ExternalLink className="w-3.5 h-3.5" /></>
+                        )}
+                      </button>
+                    )}
+                    {isStarter && !stripeConfigured && (
+                      <p className="text-[10px] text-amber-600 font-semibold mt-2">Billing not yet configured — add STRIPE_SECRET_KEY and STRIPE_PRICE_ID to backend/.env to enable upgrades.</p>
+                    )}
+                  </div>
+
+                  {/* Current Month Activity */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-6 text-left space-y-4">
+                    <h4 className="font-display font-bold text-sm text-slate-900">Current Month Activity</h4>
+                    <div className="space-y-3 font-sans text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Active Consult Slots</span>
+                        <strong className="text-slate-800">{appointments.length} synced</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Patients on record</span>
+                        <strong className="text-slate-800">{patients.length} registered</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Waitlist entries</span>
+                        <strong className="text-slate-800">{waitlist.length} queued</strong>
+                      </div>
+                      <div className="h-px bg-slate-100" />
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Subscription plan</span>
+                        <strong className={`${isStarter ? 'text-slate-500' : 'text-sky-700'}`}>{clinicConfig.plan}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stripe portal / payment channel */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-left space-y-4">
+                    <h4 className="font-display font-bold text-sm text-slate-900">Secure Payment Channel</h4>
+                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                      Powered by Stripe. Manage your subscription, download invoices, update payment methods, or cancel anytime from the Stripe customer portal.
                     </p>
+                    {!isStarter ? (
+                      <button
+                        onClick={handleManageBilling}
+                        disabled={billingLoading}
+                        className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {billingLoading ? (
+                          <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /><span>Redirecting...</span></>
+                        ) : (
+                          <><span>Manage Subscription</span><ExternalLink className="w-3.5 h-3.5" /></>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="w-full py-2.5 bg-slate-200 text-slate-400 font-bold rounded-xl text-xs cursor-not-allowed flex items-center justify-center gap-1.5"
+                      >
+                        <span>No active subscription</span>
+                      </button>
+                    )}
                   </div>
-                  
-                  <div className="pt-3 border-t border-sky-100 text-slate-600 text-xs leading-relaxed">
-                    ✔ Includes up to 10 active clinical doctors<br />
-                    ✔ Unlimited automatic WhatsApp reminders loops<br />
-                    ✔ Vernacular smart auto-booking AI
-                  </div>
-                </div>
 
-                {/* Billing Summary parameters */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 text-left space-y-4">
-                  <h4 className="font-display font-bold text-sm text-slate-900">Current Month Activity</h4>
-                  <div className="space-y-3 font-sans text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">WhatsApp Texts sent</span>
-                      <strong className="text-slate-800">412 / Unlimited</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Active Consult Slots Synchronized</span>
-                      <strong className="text-slate-800">{appointments.length} synced</strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Waitlist Recovery Operations</span>
-                      <strong className="text-slate-800">12 successfully matching</strong>
-                    </div>
-                    <div className="h-px bg-slate-100"></div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Consult Fees collected on WhatsApp</span>
-                      <strong className="text-slate-800">₹14,500 via webhook</strong>
-                    </div>
-                  </div>
                 </div>
-
-                {/* Stripe/Razorpay secure info */}
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-left space-y-4">
-                  <h4 className="font-display font-bold text-sm text-slate-900">Secure Payment Channel</h4>
-                  <p className="text-slate-500 text-[11px] leading-relaxed">
-                    We use Stripe for international clinics, and Razorpay for domestic Indian clinics. This ensures hassle-free payouts, compliance, and instant bank settlement of advance consult bookings.
-                  </p>
-                  <button 
-                    onClick={() => triggerToast('🔗 Routing securely to payment processing portal...')}
-                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <span>Manage Payment Methods</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
               </div>
-
-            </div>
-          )}
+            );
+          })()}
 
         </div>
 
       </main>
+
+      <AiAssistant />
 
     </div>
   );

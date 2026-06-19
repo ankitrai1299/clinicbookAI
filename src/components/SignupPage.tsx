@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 
 import { registerClinic } from '../api/auth';
-import { createDoctor } from '../api/doctors';
 import { useAuth } from '../context/AuthContext';
 import { PageType, ClinicConfig } from '../types';
 
@@ -13,13 +12,6 @@ interface SignupPageProps {
   onSignupSuccess: (customConfig: Partial<ClinicConfig>) => void;
   setCurrentPage: (page: PageType) => void;
 }
-
-const DEMO_DOCTORS = [
-  { name: 'Dr. Sarah Jenkins', speciality: 'Dermatologist' },
-  { name: 'Dr. Amit Patel', speciality: 'General Physician' },
-  { name: 'Dr. Clara Oswald', speciality: 'Pediatrician' },
-  { name: 'Dr. Marcus Vance', speciality: 'Orthopedic' },
-];
 
 export default function SignupPage({ onSignupSuccess, setCurrentPage }: SignupPageProps) {
   const { setAuth } = useAuth();
@@ -53,8 +45,8 @@ export default function SignupPage({ onSignupSuccess, setCurrentPage }: SignupPa
 
       setAuth(accessToken, user);
 
-      // Seed demo doctors for the new clinic (ignore individual failures)
-      await Promise.allSettled(DEMO_DOCTORS.map((d) => createDoctor(d)));
+      // New clinics start with an empty doctor roster — the owner adds their own
+      // doctors from the Doctors & Schedules page. No demo/seed doctors.
 
       setRegistered(true);
 

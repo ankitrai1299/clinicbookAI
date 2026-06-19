@@ -190,6 +190,9 @@ enum NotificationType {
   APPOINTMENT_CONFIRMED
   APPOINTMENT_CANCELLED
   APPOINTMENT_RESCHEDULED
+  // Operational/system alert surfaced to clinic admins (e.g. WhatsApp sending is
+  // failing or the access token has expired so patients aren't getting replies).
+  SYSTEM_ALERT
 }
 
 // Dashboard notifications (the bell / notification center). Written by the
@@ -241,7 +244,10 @@ model Reminder {
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
-  @@index([appointmentId])
+  // At most one reminder row per (appointment, type). This is the DB backstop
+  // that lets the cron claim a reminder before sending so two overlapping runs
+  // can never both fire the same reminder (P2002 on the loser).
+  @@unique([appointmentId, type])
   @@index([type, sent])
 }
 

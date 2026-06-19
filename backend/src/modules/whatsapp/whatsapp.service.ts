@@ -2,6 +2,8 @@ import axios, { AxiosResponse } from 'axios';
 
 import { prisma } from '../../config/prisma.js';
 import { getWhatsAppApiClient, getWhatsAppPhoneNumberId } from '../../config/whatsapp.js';
+import { noteSendFailure, noteSendSuccess } from './whatsapp.alerts.js';
+import { isTokenExpiredError, withRetry } from './whatsapp.retry.js';
 import {
   TemplateComponent,
   WHATSAPP_TEMPLATE_LANGUAGE,
@@ -63,38 +65,55 @@ export const sendWhatsAppTextMessage = async (
 ): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
   const phoneNumberId = getWhatsAppPhoneNumberId();
   const client = getWhatsAppApiClient();
+  const messageType = input.messageType ?? 'session_text';
 
   try {
-    const response = await client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: input.to,
-      type: 'text',
-      text: {
-        preview_url: input.previewUrl ?? false,
-        body: input.body
+    const response = await withRetry(
+      () =>
+        client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: input.to,
+          type: 'text',
+          text: {
+            preview_url: input.previewUrl ?? false,
+            body: input.body
+          }
+        }),
+      {
+        onRetry: ({ attempt, delayMs, error }) =>
+          console.warn(
+            `[WhatsApp] text send to ${input.to} failed (attempt ${attempt}) — retrying in ${delayMs}ms: ${describeError(error)}`
+          )
       }
-    });
+    );
 
     await logOutbound({
       to: input.to,
-      messageType: input.messageType ?? 'session_text',
+      messageType,
       body: input.body,
       clinicId: input.clinicId,
       waMessageId: extractWaMessageId(response.data),
       status: 'sent'
     });
+    noteSendSuccess();
 
     return response;
   } catch (error) {
+    const tokenExpired = isTokenExpiredError(error);
+    const detail = describeError(error);
+    console.error(
+      `[WhatsApp] text send to ${input.to} FAILED after retries${tokenExpired ? ' (ACCESS TOKEN EXPIRED)' : ''}: ${detail}`
+    );
     await logOutbound({
       to: input.to,
-      messageType: input.messageType ?? 'session_text',
+      messageType,
       body: input.body,
       clinicId: input.clinicId,
       status: 'failed',
-      error: describeError(error)
+      error: `${tokenExpired ? '[token_expired] ' : ''}${detail}`
     });
+    noteSendFailure({ clinicId: input.clinicId, tokenExpired, error: detail });
     throw error;
   }
 };
@@ -110,39 +129,56 @@ export const sendWhatsAppTemplateMessage = async (params: {
 }): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
   const phoneNumberId = getWhatsAppPhoneNumberId();
   const client = getWhatsAppApiClient();
+  const messageType = `template:${params.templateName}`;
 
   try {
-    const response = await client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: params.to,
-      type: 'template',
-      template: {
-        name: params.templateName,
-        language: { code: params.languageCode ?? WHATSAPP_TEMPLATE_LANGUAGE },
-        ...(params.components ? { components: params.components } : {})
+    const response = await withRetry(
+      () =>
+        client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: params.to,
+          type: 'template',
+          template: {
+            name: params.templateName,
+            language: { code: params.languageCode ?? WHATSAPP_TEMPLATE_LANGUAGE },
+            ...(params.components ? { components: params.components } : {})
+          }
+        }),
+      {
+        onRetry: ({ attempt, delayMs, error }) =>
+          console.warn(
+            `[WhatsApp] template send to ${params.to} failed (attempt ${attempt}) — retrying in ${delayMs}ms: ${describeError(error)}`
+          )
       }
-    });
+    );
 
     await logOutbound({
       to: params.to,
-      messageType: `template:${params.templateName}`,
+      messageType,
       body: params.bodyForLog,
       clinicId: params.clinicId,
       waMessageId: extractWaMessageId(response.data),
       status: 'sent'
     });
+    noteSendSuccess();
 
     return response;
   } catch (error) {
+    const tokenExpired = isTokenExpiredError(error);
+    const detail = describeError(error);
+    console.error(
+      `[WhatsApp] template send to ${params.to} FAILED after retries${tokenExpired ? ' (ACCESS TOKEN EXPIRED)' : ''}: ${detail}`
+    );
     await logOutbound({
       to: params.to,
-      messageType: `template:${params.templateName}`,
+      messageType,
       body: params.bodyForLog,
       clinicId: params.clinicId,
       status: 'failed',
-      error: describeError(error)
+      error: `${tokenExpired ? '[token_expired] ' : ''}${detail}`
     });
+    noteSendFailure({ clinicId: params.clinicId, tokenExpired, error: detail });
     throw error;
   }
 };

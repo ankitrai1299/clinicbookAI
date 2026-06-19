@@ -17,6 +17,10 @@ export interface Patient {
   email?: string;
   preferredLanguage: string;
   status: 'active' | 'inactive';
+  age?: number | null;
+  gender?: string | null;
+  healthConcern?: string | null;
+  source?: string | null;
 }
 
 export interface Appointment {
@@ -59,6 +63,7 @@ export interface ClinicConfig {
   clinicType: string;
   preferredLanguage: string;
   whatsappNumber: string;
+  plan: string;
   workingHours: {
     start: string;
     end: string;

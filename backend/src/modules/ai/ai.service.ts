@@ -428,8 +428,11 @@ export const chat = async (
     { role: 'user', content: message }
   ];
 
-  // Agentic tool-use loop
-  while (true) {
+  // Agentic tool-use loop, bounded to a fixed number of steps. An unbounded
+  // `while (true)` let a single authenticated request drive an arbitrary number
+  // of sequential OpenAI calls (cost-amplification + event-loop starvation).
+  const MAX_STEPS = 8;
+  for (let step = 0; step < MAX_STEPS; step++) {
     const response = await client.chat.completions.create({
       model: AI_MODEL,
       messages,
@@ -478,6 +481,19 @@ export const chat = async (
       });
     }
   }
+
+  // Step budget exhausted without the model producing a final text answer.
+  // Return a graceful message instead of looping indefinitely.
+  const fallback =
+    "I couldn't finish that request in time. Please try rephrasing it or breaking it into smaller steps.";
+  await prisma.aiMessage.create({
+    data: { conversationId: conversation.id, role: 'ASSISTANT', content: fallback }
+  });
+  await prisma.aiConversation.update({
+    where: { id: conversation.id },
+    data: { updatedAt: new Date() }
+  });
+  return { conversationId: conversation.id, message: fallback };
 };
 
 export const getHistory = async (clinicId: string, userId: string, conversationId: string) => {

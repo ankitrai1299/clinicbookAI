@@ -5,27 +5,23 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
 import ClinicDashboard from './components/ClinicDashboard';
-import BookingDemo from './components/BookingDemo';
 import SignupPage from './components/SignupPage';
 import LoginPage from './components/LoginPage';
+import PatientRegistration from './components/PatientRegistration';
 
-import {
-  INITIAL_APPOINTMENTS,
-  INITIAL_WAITLIST,
-  INITIAL_REMINDERS,
-  DEFAULT_CLINIC_CONFIG,
-  INITIAL_DOCTORS
-} from './data/mockData';
+import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
 
 function AppShell() {
   const { user, loading, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageType>('landing');
 
-  const [appointments, setAppointments] = useState<Appointment[]>(INITIAL_APPOINTMENTS);
-  const [waitlist, setWaitlist] = useState<WaitlistPatient[]>(INITIAL_WAITLIST);
-  const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>(INITIAL_REMINDERS);
+  // Dashboard lists start empty and are populated from the backend on load.
+  // No demo/sample data is seeded into the UI.
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [waitlist, setWaitlist] = useState<WaitlistPatient[]>([]);
+  const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>([]);
   const [clinicConfig, setClinicConfig] = useState<ClinicConfig>(DEFAULT_CLINIC_CONFIG);
-  const [doctorsList, setDoctorsList] = useState<Doctor[]>(INITIAL_DOCTORS);
+  const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
   const [globalNotification, setGlobalNotification] = useState<string | null>(null);
 
   // Redirect to login when accessing dashboard without auth, and vice versa
@@ -51,30 +47,17 @@ function AppShell() {
   const handleLogout = () => {
     logout();
     setCurrentPage('landing');
-    // Reset to mock data on logout
-    setAppointments(INITIAL_APPOINTMENTS);
-    setWaitlist(INITIAL_WAITLIST);
-    setReminderLogs(INITIAL_REMINDERS);
+    // Clear dashboard state on logout (no demo data)
+    setAppointments([]);
+    setWaitlist([]);
+    setReminderLogs([]);
     setClinicConfig(DEFAULT_CLINIC_CONFIG);
-    setDoctorsList(INITIAL_DOCTORS);
+    setDoctorsList([]);
   };
 
   const displayGlobalNotification = (message: string) => {
     setGlobalNotification(message);
     setTimeout(() => setGlobalNotification(null), 6000);
-  };
-
-  const handleNewAppointmentBooked = (newApt: Appointment) => {
-    setAppointments(prev => [newApt, ...prev]);
-    const newLog: ReminderLog = {
-      id: 'rem-log-' + Date.now(),
-      patientName: newApt.patientName,
-      type: 'booking_confirmed',
-      timestamp: 'Just now',
-      status: 'sent'
-    };
-    setReminderLogs(prev => [newLog, ...prev]);
-    displayGlobalNotification(`🔔 Inbound WhatsApp Booking! Patient ${newApt.patientName} scheduled with ${newApt.doctorName}.`);
   };
 
   const handleClinicSignup = (customConfig: Partial<ClinicConfig>) => {
@@ -121,13 +104,6 @@ function AppShell() {
           <LoginPage setCurrentPage={handleSetPage} />
         )}
 
-        {currentPage === 'demo' && (
-          <BookingDemo
-            onNewAppointmentBooked={handleNewAppointmentBooked}
-            whatsappNumber={clinicConfig.whatsappNumber}
-          />
-        )}
-
         {currentPage === 'signup' && (
           <SignupPage
             onSignupSuccess={handleClinicSignup}
@@ -156,6 +132,17 @@ function AppShell() {
 }
 
 export default function App() {
+  const path = typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '') : '';
+
+  // Public, unauthenticated patient self-registration page. Served at /register
+  // with the clinic identified by a ?clinic=<clinicId> query param. Rendered
+  // outside the auth shell so anonymous visitors can reach it directly.
+  if (path === '/register') {
+    const params = new URLSearchParams(window.location.search);
+    const clinicId = params.get('clinic') ?? params.get('c') ?? '';
+    return <PatientRegistration clinicId={clinicId} />;
+  }
+
   return (
     <AuthProvider>
       <AppShell />

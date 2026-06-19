@@ -21,7 +21,7 @@ import { prisma } from '../../config/prisma.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { handleWhatsAppMessage } from './whatsapp.booking.js';
-import { logInboundMessage, sendWhatsAppTextMessage } from './whatsapp.service.js';
+import { logInboundMessage, recordInboundMessage, sendWhatsAppTextMessage } from './whatsapp.service.js';
 import { recordOutbound } from './whatsapp.diagnostics.js';
 
 // Last-resort reply so the assistant is NEVER silent, even if OpenAI, the DB, or
@@ -61,26 +61,64 @@ const nationalKey = (s: string): string => {
 // Which clinic owns the WhatsApp number every inbound message arrives on. The
 // patient does NOT determine the clinic — the clinic owns the conversation, so a
 // brand-new sender is still bound to the right clinic (and lands in that admin's
-// dashboard). Configured via WHATSAPP_CLINIC_ID; falls back to the most set-up
-// clinic so the demo keeps working. (Future: map metadata.phone_number_id here.)
+// dashboard). Configured via WHATSAPP_CLINIC_ID. (Future: map
+// metadata.phone_number_id here.)
+//
+// In PRODUCTION we refuse to GUESS a clinic: if WHATSAPP_CLINIC_ID is unset or
+// points at a non-existent clinic we return null (the caller then sends a safe
+// "being set up" message) rather than silently routing a real patient's booking
+// into some other clinic's dashboard. Only outside production do we fall back to
+// the most set-up clinic, so local/demo keeps working without configuration.
+export type ClinicBindingDecision = 'use-configured' | 'refuse' | 'fallback';
+
+// Pure policy for which clinic an inbound message binds to. Extracted so it can
+// be unit-tested without a DB or env mutation. In production a missing or
+// unresolvable WHATSAPP_CLINIC_ID means REFUSE (never guess); only outside
+// production do we fall back to the most set-up clinic.
+export const decideClinicBinding = (params: {
+  hasConfiguredId: boolean;
+  configuredResolves: boolean;
+  isProduction: boolean;
+}): ClinicBindingDecision => {
+  if (params.hasConfiguredId && params.configuredResolves) {
+    return 'use-configured';
+  }
+  return params.isProduction ? 'refuse' : 'fallback';
+};
+
 let cachedClinicId: string | null = null;
 const resolveInboundClinicId = async (): Promise<string | null> => {
   if (cachedClinicId) return cachedClinicId;
 
-  if (env.WHATSAPP_CLINIC_ID) {
-    const c = await prisma.clinic.findUnique({
-      where: { id: env.WHATSAPP_CLINIC_ID },
-      select: { id: true }
-    });
-    if (c) {
-      cachedClinicId = c.id;
-      return c.id;
-    }
-    console.warn('[WhatsApp] WHATSAPP_CLINIC_ID set but no matching clinic:', env.WHATSAPP_CLINIC_ID);
+  const hasConfiguredId = Boolean(env.WHATSAPP_CLINIC_ID);
+  const configured = hasConfiguredId
+    ? await prisma.clinic.findUnique({ where: { id: env.WHATSAPP_CLINIC_ID }, select: { id: true } })
+    : null;
+
+  const decision = decideClinicBinding({
+    hasConfiguredId,
+    configuredResolves: Boolean(configured),
+    isProduction: env.NODE_ENV === 'production'
+  });
+
+  if (decision === 'use-configured' && configured) {
+    cachedClinicId = configured.id;
+    return configured.id;
   }
 
-  // Fallback: the clinic with the most doctors (excluding the hidden platform
-  // clinic). Keeps inbound working if the env var isn't set yet.
+  if (decision === 'refuse') {
+    // Not cached, so it re-checks on the next message (config can be fixed
+    // without a restart). The caller sends a safe "being set up" message.
+    console.error(
+      hasConfiguredId
+        ? `[WhatsApp] WHATSAPP_CLINIC_ID set but no matching clinic: ${env.WHATSAPP_CLINIC_ID}`
+        : '[WhatsApp] WHATSAPP_CLINIC_ID is not set — refusing to bind inbound to a guessed clinic in production.'
+    );
+    return null;
+  }
+
+  // Non-production fallback only: the clinic with the most doctors (excluding the
+  // hidden platform clinic). Keeps inbound working in dev/demo without config.
   const clinic = await prisma.clinic.findFirst({
     where: { email: { not: PLATFORM_CLINIC_EMAIL } },
     orderBy: { doctors: { _count: 'desc' } },
@@ -170,6 +208,11 @@ const processOne = async (from: string, text: string, inboundWamid?: string): Pr
   try {
     clinicId = await resolveInboundClinicId();
     await logInboundMessage({ from: to, body: text, waMessageId: inboundWamid, clinicId }).catch(() => undefined);
+    // Refresh the 24h WhatsApp session window on EVERY processed inbound, keyed on
+    // the same digits-only number the send path checks. Uses server time (now) so
+    // it can never be left stale by a missing/old Meta webhook timestamp — this is
+    // the single funnel every inbound passes through (webhook or re-injection).
+    await recordInboundMessage(to).catch(() => undefined);
 
     if (clinicId) {
       const patient = await findOrCreatePatient(clinicId, from);

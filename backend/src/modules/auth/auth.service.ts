@@ -35,9 +35,9 @@ const buildAuthResult = (user: PublicUser): AuthResult => ({
   })
 });
 
-export const signupUser = async (input: SignupInput): Promise<AuthResult> => {
+export const signupUser = async (input: SignupInput, clinicId: string): Promise<AuthResult> => {
   const clinic = await prisma.clinic.findUnique({
-    where: { id: input.clinicId }
+    where: { id: clinicId }
   });
 
   if (!clinic) {
@@ -55,7 +55,7 @@ export const signupUser = async (input: SignupInput): Promise<AuthResult> => {
 
   const user = await prisma.user.create({
     data: {
-      clinicId: input.clinicId,
+      clinicId,
       name: input.name.trim(),
       email,
       passwordHash

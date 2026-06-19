@@ -6,6 +6,10 @@ export interface ApiPatient {
   name: string;
   phone: string;
   language: string;
+  age?: number | null;
+  gender?: string | null;
+  healthConcern?: string | null;
+  source?: string | null;
 }
 
 export const getPatients = () => apiFetch<ApiPatient[]>('/api/patients');

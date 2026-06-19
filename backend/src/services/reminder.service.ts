@@ -1,6 +1,7 @@
-import { AppointmentStatus, ReminderType } from '@prisma/client';
+import { AppointmentStatus, Prisma, ReminderType } from '@prisma/client';
 
 import { prisma } from '../config/prisma.js';
+import { formatDoctorName, normalizeDoctorName } from '../utils/doctorName.js';
 import { sendTemplatedOrSession } from '../modules/whatsapp/whatsapp.service.js';
 import {
   AppointmentTemplateData,
@@ -45,7 +46,7 @@ const build24hMessage = (
   dateLabel: string,
   time: string
 ): string =>
-  `Hello ${patientName}!\n\nThis is a reminder that you have an appointment tomorrow.\n\nDate: ${dateLabel}\nTime: ${time}\nDoctor: Dr. ${doctorName}\nClinic: ${clinicName}\n\nPlease arrive 10 minutes early. Contact us if you need to reschedule.`;
+  `Hello ${patientName}!\n\nThis is a reminder that you have an appointment tomorrow.\n\nDate: ${dateLabel}\nTime: ${time}\nDoctor: ${formatDoctorName(doctorName)}\nClinic: ${clinicName}\n\nPlease arrive 10 minutes early. Contact us if you need to reschedule.`;
 
 const build1hMessage = (
   patientName: string,
@@ -54,7 +55,7 @@ const build1hMessage = (
   dateLabel: string,
   time: string
 ): string =>
-  `Hello ${patientName}!\n\nYour appointment is in 1 hour.\n\nDate: ${dateLabel}\nTime: ${time}\nDoctor: Dr. ${doctorName}\nClinic: ${clinicName}\n\nSee you soon!`;
+  `Hello ${patientName}!\n\nYour appointment is in 1 hour.\n\nDate: ${dateLabel}\nTime: ${time}\nDoctor: ${formatDoctorName(doctorName)}\nClinic: ${clinicName}\n\nSee you soon!`;
 
 const dispatchReminder = async (params: {
   appointmentId: string;
@@ -64,7 +65,27 @@ const dispatchReminder = async (params: {
   sessionBody: string;
   templateData: AppointmentTemplateData;
   existingReminderId: string | undefined;
-}): Promise<'session' | 'template'> => {
+}): Promise<'session' | 'template' | 'skipped'> => {
+  // Claim the reminder BEFORE sending. If no row exists yet we insert one
+  // (sent:false); the @@unique([appointmentId, type]) index makes a concurrent
+  // run's insert fail with P2002, so only one cron run proceeds to actually
+  // send — preventing duplicate reminders even if two runs overlap.
+  let reminderId = params.existingReminderId;
+  if (!reminderId) {
+    try {
+      const created = await prisma.reminder.create({
+        data: { appointmentId: params.appointmentId, type: params.type, sent: false }
+      });
+      reminderId = created.id;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        // Another run already claimed (and is sending/sent) this reminder.
+        return 'skipped';
+      }
+      throw err;
+    }
+  }
+
   // Inside the 24h window the patient gets the richer free-form message;
   // outside it, the approved appointment_reminder template is used instead.
   const { channel } = await sendTemplatedOrSession({
@@ -75,16 +96,12 @@ const dispatchReminder = async (params: {
     clinicId: params.clinicId
   });
 
-  if (params.existingReminderId) {
-    await prisma.reminder.update({
-      where: { id: params.existingReminderId },
-      data: { sent: true }
-    });
-  } else {
-    await prisma.reminder.create({
-      data: { appointmentId: params.appointmentId, type: params.type, sent: true }
-    });
-  }
+  // Mark sent only after a successful send. If the send threw, the claimed row
+  // stays sent:false and a later run retries it (at-least-once, never twice).
+  await prisma.reminder.update({
+    where: { id: reminderId },
+    data: { sent: true }
+  });
 
   return channel;
 };
@@ -101,7 +118,10 @@ export const processReminders = async (): Promise<void> => {
 
   const appointments = await prisma.appointment.findMany({
     where: {
-      status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
+      // Only CONFIRMED appointments get reminders. PENDING (awaiting clinic
+      // approval), CANCELLED/rejected, COMPLETED and NO_SHOW must never trigger
+      // a "your appointment is in 1 hour" message — that was the prior bug.
+      status: AppointmentStatus.CONFIRMED,
       appointmentDate: {
         gte: todayUtcMidnight,
         lt: dayAfterTomorrowUtcMidnight
@@ -134,7 +154,9 @@ export const processReminders = async (): Promise<void> => {
         patientName,
         dateLabel,
         time: appt.appointmentTime,
-        doctorName,
+        // Meta's approved template body already prints "Dr.", so pass the BARE
+        // normalized name to avoid a "Dr. Dr. X" double prefix on that channel.
+        doctorName: normalizeDoctorName(doctorName),
         clinicName
       };
 
@@ -152,7 +174,9 @@ export const processReminders = async (): Promise<void> => {
             templateData,
             existingReminderId: existing?.id
           });
-          console.info(`[ReminderService] Sent 24h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
+          if (channel !== 'skipped') {
+            console.info(`[ReminderService] Sent 24h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
+          }
         }
       }
 
@@ -170,7 +194,9 @@ export const processReminders = async (): Promise<void> => {
             templateData,
             existingReminderId: existing?.id
           });
-          console.info(`[ReminderService] Sent 1h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
+          if (channel !== 'skipped') {
+            console.info(`[ReminderService] Sent 1h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
+          }
         }
       }
     } catch (error) {

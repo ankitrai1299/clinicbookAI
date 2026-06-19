@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarCheck, LayoutDashboard, LogIn, LogOut, Menu, PlayCircle, UserPlus, X } from 'lucide-react';
+import { CalendarCheck, LayoutDashboard, LogIn, LogOut, Menu, UserPlus, X } from 'lucide-react';
 
 import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
@@ -49,19 +49,6 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
 
           {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center gap-1.5">
-            <button
-              id="nav-item-demo"
-              onClick={() => handleNavClick('demo')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
-                currentPage === 'demo'
-                  ? 'bg-sky-50 text-sky-700'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <PlayCircle className="w-4 h-4" />
-              Booking Demo
-            </button>
-
             {user && (
               <button
                 id="nav-item-dashboard"
@@ -135,17 +122,6 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
       {/* Mobile Menu panel */}
       {isOpen && (
         <div className="md:hidden bg-white border-b border-slate-100 py-3 px-4 space-y-1 shadow-lg animate-fadeIn" id="mobile-menu-panel">
-          <button
-            id="mobile-nav-item-demo"
-            onClick={() => handleNavClick('demo')}
-            className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl text-base font-medium transition-colors ${
-              currentPage === 'demo' ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <PlayCircle className="w-5 h-5 text-slate-400" />
-            Booking Demo
-          </button>
-
           {user && (
             <button
               id="mobile-nav-item-dashboard"

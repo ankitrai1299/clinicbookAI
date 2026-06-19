@@ -6,7 +6,13 @@ import { getAuthenticatedUser, loginUser, signupUser } from './auth.service.js';
 import { LoginInput, SignupInput } from './auth.schemas.js';
 
 export const signup = asyncHandler(async (req: Request, res: Response) => {
-  const result = await signupUser(req.body as SignupInput);
+  const clinicId = req.user?.clinicId;
+
+  if (!clinicId) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const result = await signupUser(req.body as SignupInput, clinicId);
 
   res.status(201).json({
     success: true,

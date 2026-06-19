@@ -7,7 +7,9 @@ import { loginSchema, signupSchema } from './auth.schemas.js';
 
 const authRouter = Router();
 
-authRouter.post('/signup', validate(signupSchema), signup);
+// Creating a staff account requires an authenticated clinic admin; the new
+// user is bound to that admin's clinic (clinicId comes from the JWT, never the body).
+authRouter.post('/signup', requireAuth, validate(signupSchema), signup);
 authRouter.post('/login', validate(loginSchema), login);
 authRouter.get('/me', requireAuth, me);
 

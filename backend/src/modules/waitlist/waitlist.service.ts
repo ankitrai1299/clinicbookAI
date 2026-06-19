@@ -135,31 +135,44 @@ export const convertWaitlistToAppointment = async (
   });
   if (!waitlistEntry) throw new AppError('Waitlist entry not found', 404);
 
-  const doctor = await prisma.doctor.findFirst({
-    where: { id: input.doctorId, clinicId },
-    select: { id: true }
-  });
-  if (!doctor) throw new AppError('Doctor not found', 404);
-
-  const date = new Date(input.appointmentDate);
-  if (Number.isNaN(date.getTime())) throw new AppError('Invalid appointment date', 400);
-
-  const [updatedEntry, appointment] = await prisma.$transaction([
-    prisma.waitlist.update({
-      where: { id },
-      data: { status: WaitlistStatus.CONVERTED },
-      include: waitlistInclude
-    }),
-    prisma.appointment.create({
-      data: {
-        clinicId,
+  // Book the slot through the SAME path as a normal booking. createAppointment:
+  //  - validates the doctor AND patient belong to this clinic,
+  //  - normalizes the date and time,
+  //  - inside a transaction, re-checks that no active (non-cancelled) appointment
+  //    already holds this doctor/date/time and throws a 409 BEFORE inserting.
+  // So a taken slot is rejected up front (not via a DB unique-index exception)
+  // and no appointment row — i.e. no partial record — is ever created.
+  let appointment;
+  try {
+    appointment = await createAppointment(
+      clinicId,
+      {
         patientId: waitlistEntry.patientId,
         doctorId: input.doctorId,
-        appointmentDate: date,
-        appointmentTime: input.appointmentTime.trim()
-      }
-    })
-  ]);
+        appointmentDate: input.appointmentDate,
+        appointmentTime: input.appointmentTime
+      },
+      { notify: false }
+    );
+  } catch (err) {
+    if (err instanceof AppError && err.statusCode === 409) {
+      // Slot was taken between the offer and this conversion. Surface a clean,
+      // patient-facing 409 and leave the waitlist entry untouched.
+      throw new AppError(
+        'Sorry, this slot is no longer available. Please choose another available time.',
+        409
+      );
+    }
+    throw err;
+  }
+
+  // Mark the entry CONVERTED only after the appointment was successfully created,
+  // so a failed booking never leaves the entry in a half-converted state.
+  const updatedEntry = await prisma.waitlist.update({
+    where: { id },
+    data: { status: WaitlistStatus.CONVERTED },
+    include: waitlistInclude
+  });
 
   return { waitlistEntry: updatedEntry, appointment };
 };

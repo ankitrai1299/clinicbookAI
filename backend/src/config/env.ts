@@ -59,4 +59,16 @@ if (FORBIDDEN_JWT_SECRETS.has(parsedEnv.data.JWT_SECRET)) {
   );
 }
 
+// Refuse to boot with a wildcard CORS origin in production. The app sends
+// `credentials: true`, and a wildcard origin (`*` / reflect-any) combined with
+// credentials is both rejected by browsers and a security hole (any site could
+// make credentialed cross-origin calls). Production must pin an explicit
+// allowlist of frontend origins.
+if (parsedEnv.data.NODE_ENV === 'production' && parsedEnv.data.CORS_ORIGIN.trim() === '*') {
+  throw new Error(
+    'CORS_ORIGIN must not be "*" in production. Set it to your deployed frontend URL ' +
+      '(comma-separated for multiple origins), e.g. https://app.yourclinic.com'
+  );
+}
+
 export const env = parsedEnv.data;

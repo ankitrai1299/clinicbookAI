@@ -6,6 +6,7 @@ export interface ApiClinic {
   email: string;
   phone: string;
   plan: string;
+  stripeCustomerId?: string;
 }
 
 export const getMyClinic = () => apiFetch<ApiClinic>('/api/clinics/me');

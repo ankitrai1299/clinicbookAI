@@ -20,6 +20,7 @@
 // ===========================================================================
 
 import { prisma } from '../../config/prisma.js';
+import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
 import { createAppointment, cancelAppointment, updateAppointment } from '../appointments/appointment.service.js';
 import { getAvailableSlots } from '../../services/scheduling.service.js';
@@ -165,6 +166,31 @@ const activeAppointments = async (clinicId: string, patientId: string) => {
   });
 };
 
+// Duplicate-booking guard. A patient must not stack a second active
+// (PENDING/CONFIRMED) appointment that either (a) duplicates the same doctor on
+// the same day, or (b) collides with another booking at the exact same date+time
+// (a time clash, even with a different doctor). Returns the offending
+// appointment so the caller can explain it, or null when the slot is clear.
+const findConflictingActiveAppointment = async (
+  clinicId: string,
+  patientId: string,
+  doctorId: string,
+  date: string,
+  time: string
+) => {
+  const target = new Date(`${date}T00:00:00.000Z`);
+  return prisma.appointment.findFirst({
+    where: {
+      clinicId,
+      patientId,
+      status: { in: ['PENDING', 'CONFIRMED'] },
+      appointmentDate: target,
+      OR: [{ doctorId }, { appointmentTime: time }]
+    },
+    include: { doctor: { select: { name: true, speciality: true } } }
+  });
+};
+
 // --- Session persistence --------------------------------------------------
 const loadSession = async (phone: string): Promise<{ state: string; data: SessionData }> => {
   const row = await prisma.whatsAppSession.findUnique({ where: { phone } });
@@ -276,7 +302,7 @@ const presentDoctors = async (params: BookingParams, speciality: string): Promis
   why(params, `speciality "${speciality}" → present ${docs.length} doctor(s), await choice`);
   return (
     `${speciality} — please choose a doctor:\n\n` +
-    `${numbered(docs.map((d) => d.name))}\n\n` +
+    `${numbered(docs.map((d) => formatDoctorName(d.name)))}\n\n` +
     `Reply with a number.`
   );
 };
@@ -286,7 +312,7 @@ const handleDoctor = async (params: BookingParams, data: SessionData, t: string)
   const n = parseChoice(t);
   if (!n || !opts[n - 1]) {
     why(params, `input "${t}" is not a valid doctor number → re-prompt DOCTOR (no advance)`);
-    return `Please choose a doctor by number:\n\n${numbered(opts.map((d) => d.name))}`;
+    return `Please choose a doctor by number:\n\n${numbered(opts.map((d) => formatDoctorName(d.name)))}`;
   }
   return presentSlots(params, opts[n - 1], 0, data.mode ?? 'book');
 };
@@ -329,7 +355,7 @@ const presentSlots = async (
     params,
     `${mode === 'reschedule' ? 'reschedule' : 'doctor'} "${doctor.name}" → present ${page.length} slots (offset ${offset}), await choice`
   );
-  return `Available times with ${doctor.name} (${doctor.speciality}):\n\n${numbered(page.map(slotLabel))}${footer}`;
+  return `Available times with ${formatDoctorName(doctor.name)} (${doctor.speciality}):\n\n${numbered(page.map(slotLabel))}${footer}`;
 };
 
 const handleSlot = async (params: BookingParams, data: SessionData, t: string): Promise<string> => {
@@ -355,7 +381,7 @@ const handleSlot = async (params: BookingParams, data: SessionData, t: string): 
   why(params, `slot #${n} (${slotLabel(selected)}) chosen → ask CONFIRMATION, await YES/NO`);
   return (
     `Please confirm your appointment:\n\n` +
-    `👨‍⚕️ ${doctor.name} (${doctor.speciality})\n` +
+    `👨‍⚕️ ${formatDoctorName(doctor.name)} (${doctor.speciality})\n` +
     `📅 ${slotLabel(selected)}\n\n` +
     `Reply YES to confirm or NO to cancel.`
   );
@@ -390,9 +416,32 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
       why(params, 'patient replied YES → appointment RESCHEDULED, terminal state BOOKED');
       return (
         `✅ Your appointment has been moved to:\n\n` +
-        `👨‍⚕️ ${updated.doctor?.name ?? data.doctorName}\n` +
+        `👨‍⚕️ ${formatDoctorName(updated.doctor?.name ?? data.doctorName)}\n` +
         `📅 ${slotLabel(selected)}\n\n` +
         `Reply MENU for more options.`
+      );
+    }
+
+    // Duplicate-booking guard: refuse to stack a second active appointment that
+    // duplicates the same doctor that day or clashes with the same date+time.
+    const conflict = await findConflictingActiveAppointment(
+      params.clinicId,
+      params.patientId,
+      doctorId,
+      selected.date,
+      selected.time
+    );
+    if (conflict) {
+      await resetSession(params, S.MENU);
+      const sameDoctor = conflict.doctorId === doctorId;
+      why(
+        params,
+        `duplicate guard: patient already has active appt ${conflict.id} (${sameDoctor ? 'same doctor' : 'same time'}) → not booked, MENU`
+      );
+      return (
+        `⚠️ You already have an appointment with ${formatDoctorName(conflict.doctor?.name)} ` +
+        `on ${slotLabel({ date: selected.date, time: conflict.appointmentTime })} [${conflict.status}].\n\n` +
+        `I didn't book a duplicate. Reply 2 to view your appointments, or 4 to reschedule.`
       );
     }
 
@@ -412,7 +461,7 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
     why(params, 'patient replied YES → appointment CREATED (PENDING), terminal state BOOKED');
     return (
       `✅ Appointment request received!\n\n` +
-      `👨‍⚕️ ${data.doctorName} (${data.doctorSpeciality})\n` +
+      `👨‍⚕️ ${formatDoctorName(data.doctorName)} (${data.doctorSpeciality})\n` +
       `📅 ${slotLabel(selected)}\n\n` +
       `Status: PENDING — ${params.clinicName} will confirm shortly and you'll get a confirmation message. ` +
       `Reply MENU for more options.`
@@ -442,7 +491,7 @@ const doCheck = async (params: BookingParams): Promise<string> => {
   }
   const lines = appts.map(
     (a) =>
-      `${a.doctor?.name ?? 'Doctor'} (${a.doctor?.speciality ?? ''}) — ` +
+      `${formatDoctorName(a.doctor?.name)} (${a.doctor?.speciality ?? ''}) — ` +
       `${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime} [${a.status}]`
   );
   return `Your upcoming appointments:\n\n${numbered(lines)}\n\nReply MENU for options.`;
@@ -461,7 +510,7 @@ const startCancel = async (params: BookingParams): Promise<string> => {
     doctorId: a.doctorId,
     doctorName: a.doctor?.name ?? 'Doctor',
     doctorSpeciality: a.doctor?.speciality ?? '',
-    label: `${a.doctor?.name ?? 'Doctor'} — ${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime}`
+    label: `${formatDoctorName(a.doctor?.name)} — ${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime}`
   }));
   await saveSession(params, S.CANCEL_SELECT, { apptOptions });
   why(params, `menu option 3 → present ${apptOptions.length} appt(s) to cancel, await choice`);
@@ -522,7 +571,7 @@ const startReschedule = async (params: BookingParams): Promise<string> => {
     doctorId: a.doctorId,
     doctorName: a.doctor?.name ?? 'Doctor',
     doctorSpeciality: a.doctor?.speciality ?? '',
-    label: `${a.doctor?.name ?? 'Doctor'} — ${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime}`
+    label: `${formatDoctorName(a.doctor?.name)} — ${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime}`
   }));
   await saveSession(params, S.RESCHED_SELECT, { mode: 'reschedule', apptOptions });
   why(params, `menu option 4 → present ${apptOptions.length} appt(s) to reschedule, await choice`);

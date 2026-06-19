@@ -3,6 +3,7 @@
 // short-circuit when WhatsApp isn't configured and swallow/log any send error.
 
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
+import { formatDoctorName, normalizeDoctorName } from '../../utils/doctorName.js';
 import { getAvailableSlots } from '../../services/scheduling.service.js';
 import { sendTemplatedOrSession, sendWhatsAppTextMessage } from './whatsapp.service.js';
 import {
@@ -43,11 +44,12 @@ export const notifyBookingConfirmation = (p: BookingConfirmationParams): void =>
     patientName: p.patientName,
     dateLabel,
     time: p.appointmentTime,
-    doctorName: p.doctorName,
+    // Template body already prints "Dr." → pass the bare name.
+    doctorName: normalizeDoctorName(p.doctorName),
     clinicName: p.clinicName
   };
   const sessionBody =
-    `Hello ${p.patientName}! Your appointment with Dr. ${p.doctorName} at ${p.clinicName} ` +
+    `Hello ${p.patientName}! Your appointment with ${formatDoctorName(p.doctorName)} at ${p.clinicName} ` +
     `on ${dateLabel} at ${p.appointmentTime} is confirmed. See you soon!`;
 
   void sendTemplatedOrSession({
@@ -87,12 +89,15 @@ export const notifyAppointmentRejectedWithAlternatives = (p: AppointmentRejected
     const alternatives = slots.filter((s) => s !== p.appointmentTime).slice(0, 6);
 
     const body =
-      `Hello ${p.patientName}, unfortunately your requested appointment with Dr. ${p.doctorName} ` +
+      `Hello ${p.patientName}, unfortunately your requested appointment with ${formatDoctorName(p.doctorName)} ` +
       `at ${p.clinicName} on ${dateLabel} at ${p.appointmentTime} could not be confirmed.\n\n` +
+      // Deterministic FSM only — never invite free-text ("reply a time / another
+      // day"); those replies aren't parsed. Always route back to the menu so the
+      // patient rebooks by picking numbered options.
       (alternatives.length
-        ? `Here are other available times that day:\n${alternatives.map((s) => `• ${s}`).join('\n')}\n\n` +
-          `Reply with a time to rebook, or let me know another day that suits you.`
-        : `There are no other openings that day. Reply with another date and I'll find you a slot.`);
+        ? `These times are still open that day:\n${alternatives.map((s) => `• ${s}`).join('\n')}\n\n` +
+          `Reply MENU to rebook and pick a new time.`
+        : `Reply MENU to see other available times.`);
 
     await sendWhatsAppTextMessage({
       to: p.to.replace(/\D/g, ''),
@@ -184,8 +189,9 @@ export const notifyWaitlistOffer = (p: WaitlistOfferParams): void => {
   }
 
   const data: WaitlistTemplateData = {
+    // Template body prints "Dr." → bare name; fall back to a neutral phrase.
+    doctorName: p.doctorName ? normalizeDoctorName(p.doctorName) : 'our team',
     patientName: p.patientName,
-    doctorName: p.doctorName ?? 'our team',
     clinicName: p.clinicName
   };
   const sessionBody =
@@ -221,7 +227,7 @@ export const notifyWaitlistSlotOffer = (p: WaitlistSlotOfferParams): void => {
 
   const dateLabel = formatDateLabel(p.appointmentDate);
   const body =
-    `Good news ${p.patientName}! A slot just opened with Dr. ${p.doctorName} at ${p.clinicName} ` +
+    `Good news ${p.patientName}! A slot just opened with ${formatDoctorName(p.doctorName)} at ${p.clinicName} ` +
     `on ${dateLabel} at ${p.appointmentTime}.\n\nReply YES to claim it before someone else does.`;
 
   void sendWhatsAppTextMessage({

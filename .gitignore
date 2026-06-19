@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local-only / not for the repo
+backups/
+.tools/
+verify-shots/
+*.exe

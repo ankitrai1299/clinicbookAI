@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
+import { ensureSlotUniqueIndex } from './config/ensureIndexes.js';
 import { connectDatabase, disconnectDatabase } from './config/prisma.js';
 import { startReminderCron } from './cron/reminder.cron.js';
 import { logWhatsAppStartupInfo } from './modules/whatsapp/whatsapp.diagnostics.js';
@@ -24,6 +25,10 @@ const shutdown = async (signal: NodeJS.Signals) => {
 
 const startServer = async () => {
   await connectDatabase();
+
+  // Ensure the partial unique index that hard-prevents double-booking exists
+  // (prisma db push cannot create it). Idempotent; safe on every boot.
+  await ensureSlotUniqueIndex();
 
   server = app.listen(env.PORT, () => {
     console.info(`ClinicBook AI backend listening on port ${env.PORT}`);

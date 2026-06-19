@@ -87,14 +87,6 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                   Start Free Trial
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
-                <button
-                  id="hero-cta-demo"
-                  onClick={() => setCurrentPage('demo')}
-                  className="px-8 py-4 bg-slate-100 text-slate-800 rounded-xl font-bold hover:bg-slate-200 transition-all duration-300 flex items-center justify-center gap-2 group border border-slate-200 cursor-pointer"
-                >
-                  View Demo
-                  <MessageSquare className="w-5 h-5 text-slate-500" />
-                </button>
               </div>
 
               {/* Trust badges */}
