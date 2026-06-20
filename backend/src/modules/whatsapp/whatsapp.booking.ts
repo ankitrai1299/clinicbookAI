@@ -296,8 +296,16 @@ const presentDoctors = async (params: BookingParams, speciality: string): Promis
     return `No doctors found for ${speciality}. Choose a speciality:\n\n${numbered(specs)}\n\nReply with a number.`;
   }
 
-  // ALWAYS present the doctor list and wait — never auto-select, even when the
-  // speciality has only one doctor. The patient must explicitly choose.
+  // If the speciality has exactly ONE doctor, skip the pointless "choose a
+  // doctor: 1. Dr. X" step and jump straight to that doctor's slots. A
+  // single-option prompt only confuses patients and causes a re-prompt loop when
+  // they reply with anything other than "1".
+  if (docs.length === 1) {
+    why(params, `speciality "${speciality}" has a single doctor (${docs[0].name}) → auto-select, present slots`);
+    return presentSlots(params, docs[0], 0, 'book');
+  }
+
+  // Multiple doctors → present the list and wait for an explicit choice.
   await saveSession(params, S.DOCTOR, { mode: 'book', speciality, doctorOptions: docs });
   why(params, `speciality "${speciality}" → present ${docs.length} doctor(s), await choice`);
   return (
@@ -604,7 +612,7 @@ const handleRescheduleSelect = async (params: BookingParams, data: SessionData, 
 // Public entry point — called once per inbound text by the webhook controller.
 // Always returns a single reply string; every branch sets the next state.
 // ===========================================================================
-export const handleWhatsAppMessage = async (params: BookingParams): Promise<string> => {
+export const handleWhatsAppMessage = async (params: BookingParams): Promise<string | null> => {
   const t = params.message.trim();
   const { state, data } = await loadSession(params.phone);
 
@@ -619,7 +627,7 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<stri
     patientMessage: t
   });
 
-  let reply: string;
+  let reply: string | null;
   try {
     // Universal escape hatch: greetings / "menu" always reset to the main menu.
     if (isReset(t)) {
@@ -677,8 +685,9 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<stri
   return reply;
 };
 
-// Top-level routing: numbered menu choice first (deterministic), then AI intent.
-const handleTopLevel = async (params: BookingParams, t: string): Promise<string> => {
+// Top-level routing: numbered menu choice first (deterministic), then intent.
+// Returns null to mean "stay silent" (no reply at all) for non-actionable chatter.
+const handleTopLevel = async (params: BookingParams, t: string): Promise<string | null> => {
   const n = parseChoice(t);
   if (n === 1) return startBooking(params);
   if (n === 2) return doCheck(params);
@@ -700,8 +709,15 @@ const handleTopLevel = async (params: BookingParams, t: string): Promise<string>
       return startReschedule(params);
     case 'check':
       return doCheck(params);
-    default:
-      why(params, `input "${t}" did not map to a known intent → MENU`);
+    case 'menu':
+      why(params, `input "${t}" is a greeting/menu request → MENU`);
       return showMenu(params);
+    default:
+      // Nothing actionable in a settled (IDLE/MENU/BOOKED) state — e.g. the
+      // patient just said "ok", "thanks", "👍" after a booking. Stay SILENT
+      // (return null → no outbound) instead of spamming the menu. A clear
+      // command or greeting ("hi", "book", "cancel", a list number) re-engages.
+      why(params, `input "${t}" is not an actionable command in a settled state → STAY SILENT (no reply)`);
+      return null;
   }
 };

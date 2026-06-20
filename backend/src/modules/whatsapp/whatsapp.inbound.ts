@@ -202,7 +202,8 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
 const processOne = async (from: string, text: string, inboundWamid?: string): Promise<void> => {
   const to = from.replace(/\D/g, '');
   let clinicId: string | null = null;
-  let reply = SAFE_FALLBACK;
+  // null === the FSM deliberately chose to stay silent (no outbound at all).
+  let reply: string | null = SAFE_FALLBACK;
   let patientCode: string | null = null;
 
   try {
@@ -219,18 +220,18 @@ const processOne = async (from: string, text: string, inboundWamid?: string): Pr
       patientCode = patient.patientCode;
       // Deterministic booking state machine owns the ENTIRE conversation. No AI
       // controls flow, picks doctors, or books — every reply is FSM-generated.
-      reply =
-        (
-          await handleWhatsAppMessage({
-            clinicId,
-            patientId: patient.id,
-            patientName: patient.name,
-            clinicName: patient.clinic?.name ?? 'our clinic',
-            phone: to,
-            patientCode: patient.patientCode,
-            message: text
-          })
-        )?.trim() || SAFE_FALLBACK;
+      // A null result means "stay silent" (non-actionable chatter once the
+      // booking/conversation is settled) — keep it null so nothing is sent.
+      const fsmReply = await handleWhatsAppMessage({
+        clinicId,
+        patientId: patient.id,
+        patientName: patient.name,
+        clinicName: patient.clinic?.name ?? 'our clinic',
+        phone: to,
+        patientCode: patient.patientCode,
+        message: text
+      });
+      reply = fsmReply === null ? null : fsmReply.trim() || SAFE_FALLBACK;
     } else {
       // No clinic bound → cannot run the FSM (it needs a clinic's doctors). Send a
       // FIXED deterministic message. Never fall back to an AI responder.
@@ -242,6 +243,15 @@ const processOne = async (from: string, text: string, inboundWamid?: string): Pr
   } catch (err) {
     console.error('[WhatsApp] Reply generation failed — sending safe fallback:', err);
     reply = SAFE_FALLBACK;
+  }
+
+  // Silent turn: the FSM decided this message needs no reply (e.g. "ok"/"thanks"
+  // after a completed booking). Send nothing — the inbound is still logged above.
+  if (reply === null) {
+    console.info('[WhatsApp] FSM stayed silent — no reply sent (non-actionable message in a settled state).', {
+      phone: to
+    });
+    return;
   }
 
   // Record the reply for diagnostics before sending (so /debug reflects it even
