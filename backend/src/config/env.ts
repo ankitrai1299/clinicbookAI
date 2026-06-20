@@ -23,11 +23,14 @@ const envSchema = z.object({
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),
   VERIFY_TOKEN: z.string().optional(),
   // Meta App Secret for inbound webhook signature verification.
-  WHATSAPP_APP_SECRET: z.string().optional(),
+  // Trimmed: a stray trailing newline/space (common when pasting into a host's
+  // dashboard) would otherwise break HMAC signature comparison.
+  WHATSAPP_APP_SECRET: z.string().trim().optional(),
   // The clinic that owns the configured WhatsApp number. All inbound patient
   // messages are bound to this clinic (booking, onboarding, dashboard). When a
   // clinic later gets its own number, map metadata.phone_number_id → clinic here.
-  WHATSAPP_CLINIC_ID: z.string().optional(),
+  // Trimmed: a trailing newline/space would make the clinic lookup-by-id miss.
+  WHATSAPP_CLINIC_ID: z.string().trim().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID: z.string().optional(),

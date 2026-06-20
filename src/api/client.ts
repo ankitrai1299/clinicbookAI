@@ -1,4 +1,6 @@
-export const API_BASE = (import.meta.env.VITE_API_URL as string) ?? 'http://localhost:4000';
+// Strip any trailing slash so `${API_BASE}${path}` never produces a double slash
+// (e.g. VITE_API_URL="https://host/" + "/api/auth/login" → ".../api/..." not "...//api/...").
+export const API_BASE = ((import.meta.env.VITE_API_URL as string) ?? 'http://localhost:4000').replace(/\/+$/, '');
 
 export class ApiError extends Error {
   constructor(
