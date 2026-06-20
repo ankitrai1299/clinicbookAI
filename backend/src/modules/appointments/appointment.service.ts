@@ -295,10 +295,18 @@ export const updateAppointment = async (
     );
   }
 
+  // Race guard for status changes (e.g. a double-clicked "Confirm" on the
+  // dashboard). When the status is actually changing, scope the update to the
+  // status we just read: only ONE concurrent request can match and flip it, so
+  // onStatusTransition (which messages the patient) fires exactly once. The
+  // loser matches no row → Prisma throws P2025 → we return the current record
+  // with no duplicate WhatsApp confirmation.
+  const statusChanging = input.status !== undefined && input.status !== current.status;
+
   let appointment: AppointmentRecord;
   try {
     appointment = await prisma.appointment.update({
-      where: { id },
+      where: statusChanging ? { id, status: current.status } : { id },
       data: {
         ...(input.doctorId !== undefined ? { doctorId: input.doctorId } : {}),
         ...(input.patientId !== undefined ? { patientId: input.patientId } : {}),
@@ -311,6 +319,12 @@ export const updateAppointment = async (
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       throw new AppError('That time slot is already booked for this doctor.', 409);
+    }
+    // Lost the concurrent status-change race: another request already applied
+    // this exact transition (and sent any patient notification). Return the
+    // current record instead of erroring or sending a duplicate message.
+    if (statusChanging && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      return getSingleAppointment(clinicId, id);
     }
     throw err;
   }
