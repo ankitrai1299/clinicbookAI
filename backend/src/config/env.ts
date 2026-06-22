@@ -7,6 +7,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolves to backend/.env regardless of where the process is started from
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: false });
 
+// Parse a boolean-ish env var. Unlike z.coerce.boolean() (which treats the
+// string "false" as true), this only treats the explicit truthy tokens as true,
+// and falls back to `def` when unset/blank — so a flag left out of .env keeps
+// the documented default.
+const envBool = (def: boolean) =>
+  z.preprocess((v) => {
+    if (typeof v !== 'string') return def;
+    const s = v.trim().toLowerCase();
+    if (s === '') return def;
+    return ['1', 'true', 'yes', 'on'].includes(s);
+  }, z.boolean());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(5000),
@@ -37,7 +49,22 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional()
+  OPENAI_API_KEY: z.string().optional(),
+  // --- WhatsApp AI Receptionist feature flags ------------------------------
+  // All default OFF so the live deterministic FSM booking line is unchanged
+  // until these are explicitly enabled.
+  //
+  // WA_AI_RECEPTIONIST: turn on the AI natural-language understanding layer in
+  //   front of the FSM (intent/speciality/date/doctor extraction, FAQs, returning-
+  //   patient memory, confidence-based clarify/handoff). Needs OPENAI_API_KEY;
+  //   falls back to the deterministic keyword classifier when off or unkeyed.
+  // WA_INTERACTIVE: render replies as WhatsApp interactive buttons / list
+  //   messages instead of numbered plain text.
+  // WA_AI_CONFIDENCE_MIN: below this score the receptionist asks the patient to
+  //   clarify (or offers a human) instead of guessing an intent.
+  WA_AI_RECEPTIONIST: envBool(false),
+  WA_INTERACTIVE: envBool(false),
+  WA_AI_CONFIDENCE_MIN: z.coerce.number().min(0).max(1).default(0.6)
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

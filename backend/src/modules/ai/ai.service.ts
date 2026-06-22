@@ -657,6 +657,136 @@ export const classifyPatientMessage = async (
 };
 
 // ---------------------------------------------------------------------------
+// Enriched receptionist UNDERSTANDING (NLU only — never acts).
+//
+// Used by the AI Receptionist layer (whatsapp.receptionist.ts) when
+// WA_AI_RECEPTIONIST is on. It extends classifyPatientMessage with entity
+// extraction (date phrase, doctor name), a confidence score, a short FAQ answer
+// for generic capability questions, and an explicit "human" intent. It returns
+// ONLY structured understanding — it picks no slot, books nothing. The caller
+// resolves the date deterministically and validates speciality/doctor against
+// the DB. Returns null when OpenAI is unconfigured or errors, so the caller
+// falls back to the deterministic keyword classifier.
+// ---------------------------------------------------------------------------
+
+export type ReceptionistIntent =
+  | 'book'
+  | 'cancel'
+  | 'reschedule'
+  | 'check'
+  | 'availability'
+  | 'faq'
+  | 'human'
+  | 'menu'
+  | 'unknown';
+
+export interface PatientUnderstanding {
+  intent: ReceptionistIntent;
+  speciality: string | null; // EXACT value from the provided list, or null
+  doctorName: string | null; // EXACT value from the provided list, or null
+  dateText: string | null; // the raw date PHRASE ("tomorrow", "friday"); not resolved
+  confidence: number; // 0..1
+  faqAnswer: string | null; // short answer for a generic capability question, else null
+}
+
+const RECEPTIONIST_INTENTS: ReceptionistIntent[] = [
+  'book',
+  'cancel',
+  'reschedule',
+  'check',
+  'availability',
+  'faq',
+  'human',
+  'menu',
+  'unknown'
+];
+
+export const understandPatientMessage = async (
+  message: string,
+  specialities: string[],
+  doctorNames: string[]
+): Promise<PatientUnderstanding | null> => {
+  if (!env.OPENAI_API_KEY) return null;
+
+  try {
+    const client = getClient();
+    const res = await client.chat.completions.create({
+      model: AI_MODEL,
+      max_tokens: 200,
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are the natural-language UNDERSTANDING layer for a clinic WhatsApp receptionist. ' +
+            'You do NOT chat, book, cancel, reschedule, or pick slots — a deterministic state machine does all of that. ' +
+            'Read ONE patient message and return ONLY a JSON object with these fields: ' +
+            '{"intent": one of ["book","cancel","reschedule","check","availability","faq","human","menu","unknown"], ' +
+            '"speciality": one EXACT value from the speciality list or null, ' +
+            '"doctorName": one EXACT value from the doctor list or null, ' +
+            '"dateText": the literal date/day phrase the patient used (e.g. "tomorrow","friday","12 June") or null — DO NOT resolve it to a calendar date, ' +
+            '"confidence": a number 0..1 for how clearly the message expresses a single actionable intent, ' +
+            '"faqAnswer": ONLY when intent is "faq" AND it is a general capability question (what can you do, which doctors/specialities, how booking works), a friendly 1-2 sentence answer; otherwise null}. ' +
+            'Intent guide: "availability" = asking whether a doctor/speciality is free (e.g. "is Dr Ruchi available today"); ' +
+            '"human" = wants a person/staff/receptionist; "menu" = a bare greeting; "unknown" = unclear/none. ' +
+            'NEVER invent a speciality or doctor not in the provided lists. Map informal words ("heart doctor"→a cardiology speciality, "skin"→dermatology). ' +
+            'For clinic hours/address/fees you do NOT have data: set intent "human" and faqAnswer null. ' +
+            `Speciality list: ${JSON.stringify(specialities)}. Doctor list: ${JSON.stringify(doctorNames)}.`
+        },
+        { role: 'user', content: message }
+      ]
+    });
+
+    const raw = res.choices[0]?.message?.content?.trim() || '{}';
+    const parsed = JSON.parse(raw) as {
+      intent?: string;
+      speciality?: string | null;
+      doctorName?: string | null;
+      dateText?: string | null;
+      confidence?: number;
+      faqAnswer?: string | null;
+    };
+
+    const intent: ReceptionistIntent = RECEPTIONIST_INTENTS.includes(parsed.intent as ReceptionistIntent)
+      ? (parsed.intent as ReceptionistIntent)
+      : 'unknown';
+
+    // Only accept a speciality/doctor that really exists in the provided lists.
+    const speciality =
+      (parsed.speciality && specialities.find((s) => s.toLowerCase() === String(parsed.speciality).toLowerCase())) ||
+      null;
+    const doctorName =
+      (parsed.doctorName && doctorNames.find((d) => d.toLowerCase() === String(parsed.doctorName).toLowerCase())) ||
+      null;
+
+    const confidence =
+      typeof parsed.confidence === 'number' && parsed.confidence >= 0 && parsed.confidence <= 1
+        ? parsed.confidence
+        : intent === 'unknown'
+          ? 0
+          : 0.5;
+
+    const faqAnswer =
+      intent === 'faq' && typeof parsed.faqAnswer === 'string' && parsed.faqAnswer.trim()
+        ? parsed.faqAnswer.trim()
+        : null;
+
+    return {
+      intent,
+      speciality,
+      doctorName,
+      dateText: typeof parsed.dateText === 'string' && parsed.dateText.trim() ? parsed.dateText.trim() : null,
+      confidence,
+      faqAnswer
+    };
+  } catch (err) {
+    console.error('[AI] understandPatientMessage failed — caller will use keyword fallback:', err);
+    return null;
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Patient-facing agentic WhatsApp assistant.
 //
 // A SEPARATE agent from staff `chat`: every tool is scoped to the messaging

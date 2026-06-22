@@ -10,6 +10,7 @@ import {
   WhatsAppTemplateName
 } from './whatsapp.templates.js';
 import { WhatsAppTextMessageInput } from './whatsapp.types.js';
+import { InteractiveReply, botReplyText } from './whatsapp.reply.js';
 
 interface WhatsAppSendMessageResponse {
   messaging_product?: string;
@@ -118,6 +119,112 @@ export const sendWhatsAppTextMessage = async (
   }
 };
 
+// --- Interactive (buttons / list) messages --------------------------------
+// Build the Graph API `interactive` payload from a BotReply, enforcing Meta's
+// length limits (silently truncating titles/bodies that would otherwise be
+// rejected with a 400).
+const trunc = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+const buildInteractivePayload = (r: InteractiveReply): Record<string, unknown> => {
+  const header = r.header ? { header: { type: 'text', text: trunc(r.header, 60) } } : {};
+  const footer = r.footer ? { footer: { text: trunc(r.footer, 60) } } : {};
+  const body = { body: { text: trunc(r.body, 1024) } };
+
+  if (r.kind === 'buttons') {
+    return {
+      type: 'button',
+      ...header,
+      ...body,
+      ...footer,
+      action: {
+        buttons: r.buttons.slice(0, 3).map((b) => ({
+          type: 'reply',
+          reply: { id: b.id.slice(0, 256), title: trunc(b.title, 20) }
+        }))
+      }
+    };
+  }
+
+  return {
+    type: 'list',
+    ...header,
+    ...body,
+    ...footer,
+    action: {
+      button: trunc(r.button, 20),
+      sections: [
+        {
+          ...(r.sectionTitle ? { title: trunc(r.sectionTitle, 24) } : {}),
+          rows: r.rows.slice(0, 10).map((row) => ({
+            id: row.id.slice(0, 200),
+            title: trunc(row.title, 24),
+            ...(row.description ? { description: trunc(row.description, 72) } : {})
+          }))
+        }
+      ]
+    }
+  };
+};
+
+export const sendWhatsAppInteractive = async (input: {
+  to: string;
+  reply: InteractiveReply;
+  messageType?: string;
+  clinicId?: string | null;
+}): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
+  const phoneNumberId = getWhatsAppPhoneNumberId();
+  const client = getWhatsAppApiClient();
+  const messageType = input.messageType ?? 'interactive';
+  const bodyForLog = botReplyText(input.reply);
+
+  try {
+    const response = await withRetry(
+      () =>
+        client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: input.to,
+          type: 'interactive',
+          interactive: buildInteractivePayload(input.reply)
+        }),
+      {
+        onRetry: ({ attempt, delayMs, error }) =>
+          console.warn(
+            `[WhatsApp] interactive send to ${input.to} failed (attempt ${attempt}) — retrying in ${delayMs}ms: ${describeError(error)}`
+          )
+      }
+    );
+
+    await logOutbound({
+      to: input.to,
+      messageType,
+      body: bodyForLog,
+      clinicId: input.clinicId,
+      waMessageId: extractWaMessageId(response.data),
+      status: 'sent'
+    });
+    noteSendSuccess();
+
+    return response;
+  } catch (error) {
+    const tokenExpired = isTokenExpiredError(error);
+    const detail = describeError(error);
+    console.error(
+      `[WhatsApp] interactive send to ${input.to} FAILED after retries${tokenExpired ? ' (ACCESS TOKEN EXPIRED)' : ''}: ${detail}`
+    );
+    await logOutbound({
+      to: input.to,
+      messageType,
+      body: bodyForLog,
+      clinicId: input.clinicId,
+      status: 'failed',
+      error: `${tokenExpired ? '[token_expired] ' : ''}${detail}`
+    });
+    noteSendFailure({ clinicId: input.clinicId, tokenExpired, error: detail });
+    throw error;
+  }
+};
+
 export const sendWhatsAppTemplateMessage = async (params: {
   to: string;
   templateName: WhatsAppTemplateName;
@@ -205,6 +312,44 @@ export const logInboundMessage = async (params: {
     });
   } catch (err) {
     console.error('[WhatsApp] Failed to log inbound message:', err);
+  }
+};
+
+// Persist one audit row per inbound receptionist turn (best-effort). Records
+// what was understood (intent/confidence/speciality), the FSM state transition,
+// and any terminal booking action — the trail proving the AI only understood and
+// the FSM owned every transition. Never throws (auditing must not break a reply).
+export const recordWhatsAppAudit = async (a: {
+  phone: string;
+  clinicId?: string | null;
+  patientId?: string | null;
+  message: string;
+  intent?: string | null;
+  confidence?: number | null;
+  speciality?: string | null;
+  fsmStateFrom?: string | null;
+  fsmStateTo?: string | null;
+  action?: string | null;
+  source?: string | null;
+}): Promise<void> => {
+  try {
+    await prisma.whatsAppAudit.create({
+      data: {
+        phone: a.phone,
+        clinicId: a.clinicId ?? null,
+        patientId: a.patientId ?? null,
+        message: a.message,
+        intent: a.intent ?? null,
+        confidence: a.confidence ?? null,
+        speciality: a.speciality ?? null,
+        fsmStateFrom: a.fsmStateFrom ?? null,
+        fsmStateTo: a.fsmStateTo ?? null,
+        action: a.action ?? null,
+        source: a.source ?? 'fsm'
+      }
+    });
+  } catch (err) {
+    console.error('[WhatsApp] Failed to write WhatsAppAudit:', err);
   }
 };
 

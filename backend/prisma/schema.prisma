@@ -306,6 +306,33 @@ model WhatsAppLog {
   @@index([waMessageId])
 }
 
+// One row per inbound patient turn through the WhatsApp receptionist. Captures
+// the patient message, what the AI/keyword layer understood (intent +
+// confidence + extracted speciality), the FSM state transition it drove, and the
+// terminal booking action (if any). This is the audit trail for "AI understood X
+// → FSM moved A→B → did Y". The AI NEVER acts directly; this records that the FSM
+// owned every transition. Writes are best-effort and never block a reply.
+model WhatsAppAudit {
+  id           String   @id @default(cuid())
+  phone        String
+  clinicId     String?
+  patientId    String?
+  message      String   @db.Text
+  intent       String?
+  confidence   Float?
+  speciality   String?
+  fsmStateFrom String?
+  fsmStateTo   String?
+  action       String?
+  // 'ai' (LLM understanding), 'deterministic' (keyword fallback), or 'fsm'
+  // (in-flow numbered/interactive selection, no fresh understanding this turn).
+  source       String   @default("fsm")
+  createdAt    DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+  @@index([phone])
+}
+
 // Tracks the recipient's last inbound message so we know whether the 24h
 // WhatsApp customer-service (session) window is open for free-form replies.
 model WhatsAppConversation {

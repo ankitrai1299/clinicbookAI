@@ -27,6 +27,12 @@ export interface IncomingWhatsAppWebhook {
           timestamp?: string;
           type?: string;
           text?: { body?: string };
+          // Present when type === 'interactive' (patient tapped a button / list row).
+          interactive?: {
+            type?: string;
+            button_reply?: { id?: string; title?: string };
+            list_reply?: { id?: string; title?: string };
+          };
         }>;
         statuses?: Array<{
           id?: string;

@@ -10,20 +10,44 @@
 // plus deterministic CHECK / CANCEL / RESCHEDULE branches. Every message maps to
 // exactly one next step. Numbered replies (1, 2, 3 …) always advance the state
 // against the options last shown. Doctors and slots come straight from the DB —
-// never invented. There is NO AI/OpenAI anywhere in this flow: free text is
-// mapped to an intent and a real speciality by a deterministic keyword matcher
-// (classifyIntent, whatsapp.intent.ts). The FSM never calls the OpenAI agent and
-// never creates AiConversation / AiMessage rows.
+// never invented.
+//
+// AI RECEPTIONIST LAYER (optional, flag-gated by WA_AI_RECEPTIONIST): free text
+// at the TOP LEVEL is interpreted by the receptionist (whatsapp.receptionist.ts)
+// into an intent + extracted speciality/doctor/date + a confidence score. That
+// understanding ONLY chooses which deterministic branch to enter and pre-seeds
+// the date — it never books, cancels, reschedules, or picks a slot. With the flag
+// off (or no OpenAI key) it falls back to the deterministic keyword classifier
+// and the flow is byte-for-byte the legacy menu bot.
+//
+// INTERACTIVE MESSAGES (optional, flag-gated by WA_INTERACTIVE): renderers emit
+// WhatsApp buttons / list messages instead of numbered text. A tapped option id
+// is normalised back into the exact text the handlers already accept, so the
+// state machine core is untouched.
 //
 // State + the exact options last presented are persisted per phone in
-// WhatsAppSession, so a bare "1" on the next webhook resolves deterministically.
+// WhatsAppSession, so a bare "1" (typed or tapped) on the next webhook resolves
+// deterministically.
 // ===========================================================================
 
 import { prisma } from '../../config/prisma.js';
+import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
 import { createAppointment, cancelAppointment, updateAppointment } from '../appointments/appointment.service.js';
 import { getAvailableSlots } from '../../services/scheduling.service.js';
+import { recordWhatsAppAudit } from './whatsapp.service.js';
+import { understand, confidenceMin, type Understanding } from './whatsapp.receptionist.js';
+import {
+  type BotReply,
+  type ReplyRow,
+  buttons,
+  list,
+  optionId,
+  OPT_PREFIX,
+  prefixReply,
+  RID
+} from './whatsapp.reply.js';
 
 // --- States ---------------------------------------------------------------
 const S = {
@@ -36,11 +60,17 @@ const S = {
   BOOKED: 'BOOKED',
   CANCEL_SELECT: 'CANCEL_SELECTION',
   CANCEL_CONFIRM: 'CANCEL_CONFIRMATION',
-  RESCHED_SELECT: 'RESCHEDULE_SELECTION'
+  RESCHED_SELECT: 'RESCHEDULE_SELECTION',
+  HANDOFF: 'HUMAN_HANDOFF'
 } as const;
 
 const SLOTS_PER_PAGE = 5;
 const SLOT_SCAN_DAYS = 21;
+
+// Modernisation toggles. When BOTH are off the flow is the legacy deterministic
+// menu bot (no AI, no personalisation, plain numbered text).
+const interactiveOn = (): boolean => env.WA_INTERACTIVE;
+const modernEnabled = (): boolean => env.WA_AI_RECEPTIONIST || env.WA_INTERACTIVE;
 
 // --- Session shape --------------------------------------------------------
 interface DoctorOption {
@@ -74,6 +104,9 @@ interface SessionData {
   cancelApptId?: string;
   cancelLabel?: string;
   rescheduleApptId?: string;
+  // Preferred date extracted from the patient's words ("tomorrow", "friday"),
+  // threaded through speciality/doctor/slot states so MORE pagination keeps it.
+  preferredDate?: string;
 }
 
 export interface BookingParams {
@@ -84,10 +117,18 @@ export interface BookingParams {
   phone: string; // digits-only
   patientCode?: string | null;
   message: string;
+  // Set by the inbound webhook when the patient TAPPED an interactive button /
+  // list row: the stable option id (e.g. "OPT_2", "CONF_YES"). Normalised back
+  // into the canonical text the handlers expect before routing.
+  replyId?: string;
   // Internal (set by handlers, read by the central transition logger): a short
   // human-readable explanation of WHY the last transition happened. Last writer
   // wins, so the innermost/terminal action's reason is what gets logged.
   reason?: string;
+  // Internal: the receptionist understanding for this turn (free-text top level
+  // only) and the terminal action taken — both captured in WhatsAppAudit.
+  understanding?: Understanding;
+  action?: string;
 }
 
 // Annotate the reason for the transition about to be persisted. A one-liner so
@@ -109,6 +150,37 @@ const isReset = (t: string): boolean =>
     t
   ) || t.trim() === '0';
 const isMore = (t: string): boolean => /^\s*(more|next|aur|more\s*options?)\s*$/i.test(t);
+
+// Normalise a tapped interactive option id into the canonical text the existing
+// handlers already accept, or a "special" out-of-band action. Keeping this here
+// means a tap and a typed reply travel the exact same deterministic code path.
+const normalizeReplyId = (id: string): { text?: string; special?: 'human' | 'book_again' | 'change_time' } => {
+  switch (id) {
+    case RID.MENU_BOOK:
+      return { text: '1' };
+    case RID.MENU_APPTS:
+      return { text: '2' };
+    case RID.MENU_CANCEL:
+      return { text: '3' };
+    case RID.MENU_RESCHED:
+      return { text: '4' };
+    case RID.CONF_YES:
+      return { text: 'yes' };
+    case RID.CONF_NO:
+      return { text: 'no' };
+    case RID.MORE:
+      return { text: 'more' };
+    case RID.CHANGE_TIME:
+      return { special: 'change_time' };
+    case RID.TALK_HUMAN:
+      return { special: 'human' };
+    case RID.BOOK_AGAIN:
+      return { special: 'book_again' };
+    default:
+      if (id.startsWith(OPT_PREFIX)) return { text: id.slice(OPT_PREFIX.length) };
+      return {};
+  }
+};
 
 // --- Date formatting (UTC, matches the YYYY-MM-DD slot dates) --------------
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -135,11 +207,59 @@ const doctorsForSpeciality = async (clinicId: string, speciality: string): Promi
   return docs;
 };
 
-// Scan forward from today and collect up to `needed` real open (date,time) slots.
-const collectUpcomingSlots = async (clinicId: string, doctorId: string, needed: number): Promise<SlotOption[]> => {
+const doctorNamesForClinic = async (clinicId: string): Promise<string[]> => {
+  const docs = await prisma.doctor.findMany({ where: { clinicId }, select: { name: true } });
+  return docs.map((d) => d.name);
+};
+
+// Resolve a free-text doctor mention ("Dr Ruchi", "ruchi") to a real doctor.
+const findDoctorByName = async (clinicId: string, name: string): Promise<DoctorOption | null> => {
+  const docs = await prisma.doctor.findMany({
+    where: { clinicId },
+    select: { id: true, name: true, speciality: true }
+  });
+  const t = name.toLowerCase();
+  return (
+    docs.find((d) => {
+      const full = d.name.toLowerCase();
+      const bare = full.replace(/^dr\.?\s*/, '');
+      return full.includes(t) || t.includes(full) || (bare.length >= 3 && (t.includes(bare) || bare.includes(t)));
+    }) ?? null
+  );
+};
+
+// Returning-patient memory: the doctor from this patient's most recent
+// appointment (any status). Used to personalise the menu and offer "book again".
+const lastDoctorForPatient = async (clinicId: string, patientId: string): Promise<DoctorOption | null> => {
+  const appt = await prisma.appointment.findFirst({
+    where: { clinicId, patientId },
+    orderBy: [{ appointmentDate: 'desc' }],
+    include: { doctor: { select: { id: true, name: true, speciality: true } } }
+  });
+  return appt?.doctor ?? null;
+};
+
+// Scan forward and collect up to `needed` real open (date,time) slots. When
+// `fromDate` (YYYY-MM-DD, today or later) is given, start the scan there so a
+// patient who said "Friday" sees Friday's slots first — still falling forward to
+// the next open day if that date is full.
+const collectUpcomingSlots = async (
+  clinicId: string,
+  doctorId: string,
+  needed: number,
+  fromDate?: string
+): Promise<SlotOption[]> => {
   const out: SlotOption[] = [];
   const now = new Date();
-  for (let i = 0; i < SLOT_SCAN_DAYS && out.length < needed; i += 1) {
+  const today0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  let startOffset = 0;
+  if (fromDate) {
+    const from = new Date(`${fromDate}T00:00:00.000Z`);
+    if (!Number.isNaN(from.getTime()) && from >= today0) {
+      startOffset = Math.round((from.getTime() - today0.getTime()) / 86_400_000);
+    }
+  }
+  for (let i = startOffset; i < startOffset + SLOT_SCAN_DAYS && out.length < needed; i += 1) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + i));
     const dateStr = d.toISOString().slice(0, 10);
     const times = await getAvailableSlots(clinicId, doctorId, dateStr);
@@ -204,11 +324,7 @@ const loadSession = async (phone: string): Promise<{ state: string; data: Sessio
   return { state: row.state, data };
 };
 
-const saveSession = async (
-  params: BookingParams,
-  state: string,
-  data: SessionData
-): Promise<void> => {
+const saveSession = async (params: BookingParams, state: string, data: SessionData): Promise<void> => {
   const serialized = JSON.stringify(data);
   await prisma.whatsAppSession.upsert({
     where: { phone: params.phone },
@@ -217,12 +333,12 @@ const saveSession = async (
   });
 };
 
-const resetSession = (params: BookingParams, state: string = S.IDLE): Promise<void> =>
-  saveSession(params, state, {});
+const resetSession = (params: BookingParams, state: string = S.IDLE): Promise<void> => saveSession(params, state, {});
 
 // --- Renderers ------------------------------------------------------------
 const displayName = (name: string): string => (/^WhatsApp Patient/i.test(name) ? 'there' : name.split(' ')[0]);
 
+// Legacy plain menu — kept EXACTLY as-is for the flag-off (non-modern) path.
 const menuText = (params: BookingParams): string =>
   `👋 Welcome to ${params.clinicName}, ${displayName(params.patientName)}!\n\n` +
   `1. Book Appointment\n` +
@@ -233,18 +349,122 @@ const menuText = (params: BookingParams): string =>
 
 const numbered = (items: string[]): string => items.map((it, i) => `${i + 1}. ${it}`).join('\n');
 
+// Conversational, optionally personalised menu. Returns plain text or an
+// interactive list depending on WA_INTERACTIVE.
+const buildMenu = async (params: BookingParams): Promise<BotReply> => {
+  if (!modernEnabled()) return menuText(params);
+
+  const lastDoc = await lastDoctorForPatient(params.clinicId, params.patientId);
+  const name = displayName(params.patientName);
+  const hello = lastDoc ? `👋 Welcome back, ${name}!` : `👋 Hi ${name}!`;
+  const memory = lastDoc ? ` Last time you saw ${formatDoctorName(lastDoc.name)} (${lastDoc.speciality}).` : '';
+
+  if (!interactiveOn()) {
+    return (
+      `${hello}${memory}\n\nHow can I help you today?\n\n` +
+      `1. Book Appointment\n2. My Appointments\n3. Cancel Appointment\n4. Reschedule Appointment\n\n` +
+      `Reply with a number, or just tell me what you need (e.g. "book a cardiologist tomorrow").`
+    );
+  }
+
+  const rows: ReplyRow[] = [{ id: RID.MENU_BOOK, title: 'Book Appointment' }];
+  if (lastDoc) {
+    rows.push({
+      id: RID.BOOK_AGAIN,
+      title: 'Book again',
+      description: `With ${formatDoctorName(lastDoc.name)} (${lastDoc.speciality})`
+    });
+  }
+  rows.push(
+    { id: RID.MENU_APPTS, title: 'My Appointments' },
+    { id: RID.MENU_CANCEL, title: 'Cancel Appointment' },
+    { id: RID.MENU_RESCHED, title: 'Reschedule' },
+    { id: RID.TALK_HUMAN, title: 'Talk to clinic staff' }
+  );
+
+  return list({
+    header: params.clinicName,
+    body: `${hello}${memory} How can I help you today?`,
+    button: 'Choose option',
+    rows
+  });
+};
+
 // ===========================================================================
 // Flow entry points
 // ===========================================================================
 
-const showMenu = async (params: BookingParams): Promise<string> => {
+const showMenu = async (params: BookingParams): Promise<BotReply> => {
   await resetSession(params, S.MENU);
   if (!params.reason) why(params, 'rendering main menu (MENU)');
-  return menuText(params);
+  return buildMenu(params);
+};
+
+// Low-confidence / ambiguous free text — ask the patient to clarify with quick
+// options instead of guessing an intent. (AI mode only.)
+const clarifyReply = async (params: BookingParams): Promise<BotReply> => {
+  await resetSession(params, S.MENU);
+  why(params, 'low-confidence understanding → clarify (no guess)');
+  const body = `I want to make sure I help you correctly 🙂 What would you like to do?`;
+  if (!interactiveOn()) {
+    return (
+      `${body}\n\n1. Book Appointment\n2. My Appointments\n3. Cancel Appointment\n4. Reschedule Appointment\n\n` +
+      `Reply with a number, or type what you need — or say "staff" to reach a person.`
+    );
+  }
+  return buttons({
+    body,
+    buttons: [
+      { id: RID.MENU_BOOK, title: 'Book Appointment' },
+      { id: RID.MENU_APPTS, title: 'My Appointments' },
+      { id: RID.TALK_HUMAN, title: 'Talk to staff' }
+    ]
+  });
+};
+
+// Human handoff — flag a dashboard notification for staff and go quiet until the
+// patient re-engages with a greeting/menu. The FSM still owns this: AI only
+// surfaced the request.
+const handleHandoff = async (params: BookingParams, reason: string): Promise<BotReply> => {
+  await saveSession(params, S.HANDOFF, {});
+  params.action = 'handoff';
+  why(params, `human handoff: ${reason} → HANDOFF`);
+  try {
+    await prisma.notification.create({
+      data: {
+        clinicId: params.clinicId,
+        type: 'SYSTEM_ALERT',
+        title: 'Patient asked to talk to staff (WhatsApp)',
+        body:
+          `${params.patientName}${params.patientCode ? ` (${params.patientCode})` : ''} on ${params.phone} ` +
+          `asked to speak with a person. Last message: "${params.message.trim()}".`
+      }
+    });
+  } catch (err) {
+    console.error('[WhatsApp][booking] handoff notification failed:', err);
+  }
+  return (
+    `No problem — I've let the ${params.clinicName} team know and someone will reach out to you shortly. 🙏\n\n` +
+    `Reply MENU anytime to continue on your own.`
+  );
+};
+
+// "Book again with Dr X" quick action — jump straight to that doctor's slots.
+// Still flows through SLOT → CONFIRM in the FSM (no auto-booking).
+const startBookAgain = async (params: BookingParams): Promise<BotReply> => {
+  const lastDoc = await lastDoctorForPatient(params.clinicId, params.patientId);
+  if (!lastDoc) return startBooking(params);
+  why(params, `book-again → last doctor ${lastDoc.name}, present slots`);
+  return presentSlots(params, lastDoc, 0, 'book');
 };
 
 // --- BOOK: speciality -----------------------------------------------------
-const startBooking = async (params: BookingParams, presetSpeciality?: string | null): Promise<string> => {
+const startBooking = async (
+  params: BookingParams,
+  presetSpeciality?: string | null,
+  preferredDate?: string | null,
+  doctorName?: string | null
+): Promise<BotReply> => {
   const specs = await distinctSpecialities(params.clinicId);
   if (specs.length === 0) {
     await resetSession(params);
@@ -252,21 +472,41 @@ const startBooking = async (params: BookingParams, presetSpeciality?: string | n
     return `Sorry, no doctors are set up yet. Please contact ${params.clinicName} directly.`;
   }
 
-  // If the patient already named a real speciality (e.g. free text "cardiologist"),
-  // honour that explicit choice and go straight to the doctor list. We do NOT
-  // auto-pick a speciality just because the clinic happens to have only one — the
-  // patient still selects from the list, so every step waits for input.
-  const preset = presetSpeciality
-    ? specs.find((s) => s.toLowerCase() === presetSpeciality.toLowerCase())
-    : undefined;
-  if (preset) return presentDoctors(params, preset);
+  // Patient named a doctor directly (e.g. "book Dr Ruchi") → jump to that
+  // doctor's slots, skipping speciality + doctor selection. Still goes through
+  // SLOT → CONFIRM, so nothing is booked without explicit confirmation.
+  if (doctorName) {
+    const doc = await findDoctorByName(params.clinicId, doctorName);
+    if (doc) {
+      why(params, `doctor named "${doctorName}" → present slots for ${doc.name}`);
+      return presentSlots(params, doc, 0, 'book', undefined, preferredDate ?? undefined);
+    }
+  }
 
-  await saveSession(params, S.SPECIALITY, { mode: 'book', specialityOptions: specs });
+  // If the patient already named a real speciality, honour it and go straight to
+  // the doctor list. We never auto-pick a speciality just because the clinic has
+  // one — the patient still selects, so every step waits for input.
+  const preset = presetSpeciality ? specs.find((s) => s.toLowerCase() === presetSpeciality.toLowerCase()) : undefined;
+  if (preset) return presentDoctors(params, preset, preferredDate ?? undefined);
+
+  await saveSession(params, S.SPECIALITY, {
+    mode: 'book',
+    specialityOptions: specs,
+    preferredDate: preferredDate ?? undefined
+  });
   why(params, `book intent → present ${specs.length} specialities, await choice`);
-  return `Which speciality would you like to see?\n\n${numbered(specs)}\n\nReply with a number.`;
+  if (!interactiveOn()) {
+    return `Which speciality would you like to see?\n\n${numbered(specs)}\n\nReply with a number.`;
+  }
+  return list({
+    header: 'Book Appointment',
+    body: 'Which speciality would you like to see?',
+    button: 'Choose speciality',
+    rows: specs.slice(0, 10).map((s, i) => ({ id: optionId(i + 1), title: s }))
+  });
 };
 
-const handleSpeciality = async (params: BookingParams, data: SessionData, t: string): Promise<string> => {
+const handleSpeciality = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
   const opts = data.specialityOptions ?? [];
   const n = parseChoice(t);
   let speciality: string | undefined;
@@ -283,46 +523,55 @@ const handleSpeciality = async (params: BookingParams, data: SessionData, t: str
     why(params, `input "${t}" did not match any speciality → re-prompt SPECIALITY (no advance)`);
     return `Please choose a speciality by number:\n\n${numbered(opts)}`;
   }
-  return presentDoctors(params, speciality);
+  return presentDoctors(params, speciality, data.preferredDate);
 };
 
 // --- BOOK: doctor ---------------------------------------------------------
-const presentDoctors = async (params: BookingParams, speciality: string): Promise<string> => {
+const presentDoctors = async (
+  params: BookingParams,
+  speciality: string,
+  preferredDate?: string
+): Promise<BotReply> => {
   const docs = await doctorsForSpeciality(params.clinicId, speciality);
   if (docs.length === 0) {
     const specs = await distinctSpecialities(params.clinicId);
-    await saveSession(params, S.SPECIALITY, { mode: 'book', specialityOptions: specs });
+    await saveSession(params, S.SPECIALITY, { mode: 'book', specialityOptions: specs, preferredDate });
     why(params, `no doctors for "${speciality}" → re-show speciality list`);
     return `No doctors found for ${speciality}. Choose a speciality:\n\n${numbered(specs)}\n\nReply with a number.`;
   }
 
-  // If the speciality has exactly ONE doctor, skip the pointless "choose a
-  // doctor: 1. Dr. X" step and jump straight to that doctor's slots. A
-  // single-option prompt only confuses patients and causes a re-prompt loop when
-  // they reply with anything other than "1".
+  // Single doctor → skip the pointless one-option prompt and present slots.
   if (docs.length === 1) {
     why(params, `speciality "${speciality}" has a single doctor (${docs[0].name}) → auto-select, present slots`);
-    return presentSlots(params, docs[0], 0, 'book');
+    return presentSlots(params, docs[0], 0, 'book', undefined, preferredDate);
   }
 
   // Multiple doctors → present the list and wait for an explicit choice.
-  await saveSession(params, S.DOCTOR, { mode: 'book', speciality, doctorOptions: docs });
+  await saveSession(params, S.DOCTOR, { mode: 'book', speciality, doctorOptions: docs, preferredDate });
   why(params, `speciality "${speciality}" → present ${docs.length} doctor(s), await choice`);
-  return (
-    `${speciality} — please choose a doctor:\n\n` +
-    `${numbered(docs.map((d) => formatDoctorName(d.name)))}\n\n` +
-    `Reply with a number.`
-  );
+  if (!interactiveOn()) {
+    return (
+      `${speciality} — please choose a doctor:\n\n` +
+      `${numbered(docs.map((d) => formatDoctorName(d.name)))}\n\n` +
+      `Reply with a number.`
+    );
+  }
+  return list({
+    header: speciality,
+    body: 'Please choose a doctor:',
+    button: 'Choose doctor',
+    rows: docs.slice(0, 10).map((d, i) => ({ id: optionId(i + 1), title: formatDoctorName(d.name), description: d.speciality }))
+  });
 };
 
-const handleDoctor = async (params: BookingParams, data: SessionData, t: string): Promise<string> => {
+const handleDoctor = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
   const opts = data.doctorOptions ?? [];
   const n = parseChoice(t);
   if (!n || !opts[n - 1]) {
     why(params, `input "${t}" is not a valid doctor number → re-prompt DOCTOR (no advance)`);
     return `Please choose a doctor by number:\n\n${numbered(opts.map((d) => formatDoctorName(d.name)))}`;
   }
-  return presentSlots(params, opts[n - 1], 0, data.mode ?? 'book');
+  return presentSlots(params, opts[n - 1], 0, data.mode ?? 'book', undefined, data.preferredDate);
 };
 
 // --- Shared: slots (used by both book and reschedule) ---------------------
@@ -331,9 +580,10 @@ const presentSlots = async (
   doctor: DoctorOption,
   offset: number,
   mode: 'book' | 'reschedule',
-  rescheduleApptId?: string
-): Promise<string> => {
-  const all = await collectUpcomingSlots(params.clinicId, doctor.id, offset + SLOTS_PER_PAGE + 1);
+  rescheduleApptId?: string,
+  preferredDate?: string
+): Promise<BotReply> => {
+  const all = await collectUpcomingSlots(params.clinicId, doctor.id, offset + SLOTS_PER_PAGE + 1, preferredDate);
   const page = all.slice(offset, offset + SLOTS_PER_PAGE);
 
   if (page.length === 0) {
@@ -352,21 +602,34 @@ const presentSlots = async (
     doctorSpeciality: doctor.speciality,
     slotOptions: page,
     slotOffset: offset,
-    rescheduleApptId
+    rescheduleApptId,
+    preferredDate
   });
 
   const hasMore = all.length > offset + SLOTS_PER_PAGE;
-  const footer = hasMore
-    ? `\n\nReply with a number to pick a time, or MORE for later dates.`
-    : `\n\nReply with a number to pick a time.`;
   why(
     params,
     `${mode === 'reschedule' ? 'reschedule' : 'doctor'} "${doctor.name}" → present ${page.length} slots (offset ${offset}), await choice`
   );
-  return `Available times with ${formatDoctorName(doctor.name)} (${doctor.speciality}):\n\n${numbered(page.map(slotLabel))}${footer}`;
+
+  if (!interactiveOn()) {
+    const footer = hasMore
+      ? `\n\nReply with a number to pick a time, or MORE for later dates.`
+      : `\n\nReply with a number to pick a time.`;
+    return `Available times with ${formatDoctorName(doctor.name)} (${doctor.speciality}):\n\n${numbered(page.map(slotLabel))}${footer}`;
+  }
+
+  const rows = page.map((s, i) => ({ id: optionId(i + 1), title: s.time, description: dateLabel(s.date) }));
+  if (hasMore) rows.push({ id: RID.MORE, title: 'See more times', description: 'Later dates' });
+  return list({
+    header: formatDoctorName(doctor.name),
+    body: `Available times (${doctor.speciality}):`,
+    button: 'Pick a time',
+    rows
+  });
 };
 
-const handleSlot = async (params: BookingParams, data: SessionData, t: string): Promise<string> => {
+const handleSlot = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
   const opts = data.slotOptions ?? [];
   const doctor: DoctorOption = {
     id: data.doctorId ?? '',
@@ -375,28 +638,46 @@ const handleSlot = async (params: BookingParams, data: SessionData, t: string): 
   };
 
   if (isMore(t)) {
-    return presentSlots(params, doctor, (data.slotOffset ?? 0) + SLOTS_PER_PAGE, data.mode ?? 'book', data.rescheduleApptId);
+    return presentSlots(
+      params,
+      doctor,
+      (data.slotOffset ?? 0) + SLOTS_PER_PAGE,
+      data.mode ?? 'book',
+      data.rescheduleApptId,
+      data.preferredDate
+    );
   }
 
   const n = parseChoice(t);
   if (!n || !opts[n - 1]) {
     why(params, `input "${t}" is not a valid slot number → re-prompt SLOT (no advance)`);
-    return `Please reply with a number to choose a time${opts.length ? '' : ''}:\n\n${numbered(opts.map(slotLabel))}`;
+    return `Please reply with a number to choose a time:\n\n${numbered(opts.map(slotLabel))}`;
   }
 
   const selected = opts[n - 1];
   await saveSession(params, S.CONFIRM, { ...data, selected });
   why(params, `slot #${n} (${slotLabel(selected)}) chosen → ask CONFIRMATION, await YES/NO`);
-  return (
-    `Please confirm your appointment:\n\n` +
-    `👨‍⚕️ ${formatDoctorName(doctor.name)} (${doctor.speciality})\n` +
-    `📅 ${slotLabel(selected)}\n\n` +
-    `Reply YES to confirm or NO to cancel.`
-  );
+
+  if (!interactiveOn()) {
+    return (
+      `Please confirm your appointment:\n\n` +
+      `👨‍⚕️ ${formatDoctorName(doctor.name)} (${doctor.speciality})\n` +
+      `📅 ${slotLabel(selected)}\n\n` +
+      `Reply YES to confirm or NO to cancel.`
+    );
+  }
+  return buttons({
+    header: 'Confirm appointment',
+    body: `👨‍⚕️ ${formatDoctorName(doctor.name)} (${doctor.speciality})\n📅 ${slotLabel(selected)}`,
+    buttons: [
+      { id: RID.CONF_YES, title: '✅ Confirm' },
+      { id: RID.CHANGE_TIME, title: '🔁 Change time' }
+    ]
+  });
 };
 
 // --- Shared: confirmation -------------------------------------------------
-const handleConfirm = async (params: BookingParams, data: SessionData, t: string): Promise<string> => {
+const handleConfirm = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
   if (isNo(t)) {
     await resetSession(params);
     why(params, 'patient replied NO at CONFIRMATION → nothing booked, reset to IDLE');
@@ -421,6 +702,7 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
         appointmentTime: selected.time
       });
       await resetSession(params, S.BOOKED);
+      params.action = 'reschedule';
       why(params, 'patient replied YES → appointment RESCHEDULED, terminal state BOOKED');
       return (
         `✅ Your appointment has been moved to:\n\n` +
@@ -430,8 +712,7 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
       );
     }
 
-    // Duplicate-booking guard: refuse to stack a second active appointment that
-    // duplicates the same doctor that day or clashes with the same date+time.
+    // Duplicate-booking guard.
     const conflict = await findConflictingActiveAppointment(
       params.clinicId,
       params.patientId,
@@ -442,6 +723,7 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
     if (conflict) {
       await resetSession(params, S.MENU);
       const sameDoctor = conflict.doctorId === doctorId;
+      params.action = 'book_blocked_duplicate';
       why(
         params,
         `duplicate guard: patient already has active appt ${conflict.id} (${sameDoctor ? 'same doctor' : 'same time'}) → not booked, MENU`
@@ -461,11 +743,10 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
         appointmentDate: selected.date,
         appointmentTime: selected.time
       },
-      // The state machine sends its own single confirmation — suppress the
-      // duplicate auto-message from the booking side-effect.
       { notify: false }
     );
     await resetSession(params, S.BOOKED);
+    params.action = 'book';
     why(params, 'patient replied YES → appointment CREATED (PENDING), terminal state BOOKED');
     return (
       `✅ Appointment request received!\n\n` +
@@ -483,14 +764,14 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
       name: data.doctorName ?? 'the doctor',
       speciality: data.doctorSpeciality ?? ''
     };
-    const reshow = await presentSlots(params, doctor, 0, data.mode ?? 'book', data.rescheduleApptId);
+    const reshow = await presentSlots(params, doctor, 0, data.mode ?? 'book', data.rescheduleApptId, data.preferredDate);
     why(params, `booking failed on confirm (${msg}) → re-show fresh slots, back to SLOT`);
-    return `⚠️ ${msg}\n\n${reshow}`;
+    return prefixReply(`⚠️ ${msg}\n\n`, reshow);
   }
 };
 
 // --- CHECK ----------------------------------------------------------------
-const doCheck = async (params: BookingParams): Promise<string> => {
+const doCheck = async (params: BookingParams): Promise<BotReply> => {
   const appts = await activeAppointments(params.clinicId, params.patientId);
   await resetSession(params, S.MENU);
   why(params, `menu option 2 → listed ${appts.length} appointment(s), back to MENU`);
@@ -506,26 +787,53 @@ const doCheck = async (params: BookingParams): Promise<string> => {
 };
 
 // --- CANCEL ---------------------------------------------------------------
-const startCancel = async (params: BookingParams): Promise<string> => {
-  const appts = await activeAppointments(params.clinicId, params.patientId);
-  if (appts.length === 0) {
-    await resetSession(params, S.MENU);
-    why(params, 'menu option 3 but no appointments to cancel → MENU');
-    return `You have no upcoming appointments to cancel. Reply MENU for options.`;
-  }
-  const apptOptions: ApptOption[] = appts.map((a) => ({
+const apptOptionsFrom = (
+  appts: Awaited<ReturnType<typeof activeAppointments>>
+): ApptOption[] =>
+  appts.map((a) => ({
     id: a.id,
     doctorId: a.doctorId,
     doctorName: a.doctor?.name ?? 'Doctor',
     doctorSpeciality: a.doctor?.speciality ?? '',
     label: `${formatDoctorName(a.doctor?.name)} — ${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime}`
   }));
-  await saveSession(params, S.CANCEL_SELECT, { apptOptions });
-  why(params, `menu option 3 → present ${apptOptions.length} appt(s) to cancel, await choice`);
-  return `Which appointment would you like to cancel?\n\n${numbered(apptOptions.map((a) => a.label))}\n\nReply with a number, or NO to keep them.`;
+
+// Render an appointment-selection prompt (shared by cancel + reschedule).
+const apptSelectReply = (opts: ApptOption[], verb: 'cancel' | 'reschedule'): BotReply => {
+  if (!interactiveOn()) {
+    return (
+      `Which appointment would you like to ${verb}?\n\n${numbered(opts.map((a) => a.label))}\n\n` +
+      `Reply with a number, or NO to ${verb === 'cancel' ? 'keep them' : 'cancel'}.`
+    );
+  }
+  const rows = opts.slice(0, 9).map((a, i) => ({
+    id: optionId(i + 1),
+    title: formatDoctorName(a.doctorName),
+    description: a.label.replace(/^.*?—\s*/, '')
+  }));
+  rows.push({ id: RID.CONF_NO, title: verb === 'cancel' ? 'Keep all' : 'Never mind', description: 'Go back to menu' });
+  return list({
+    header: verb === 'cancel' ? 'Cancel appointment' : 'Reschedule appointment',
+    body: `Which appointment would you like to ${verb}?`,
+    button: 'Select',
+    rows
+  });
 };
 
-const handleCancelSelect = async (params: BookingParams, data: SessionData, t: string): Promise<string> => {
+const startCancel = async (params: BookingParams): Promise<BotReply> => {
+  const appts = await activeAppointments(params.clinicId, params.patientId);
+  if (appts.length === 0) {
+    await resetSession(params, S.MENU);
+    why(params, 'menu option 3 but no appointments to cancel → MENU');
+    return `You have no upcoming appointments to cancel. Reply MENU for options.`;
+  }
+  const apptOptions = apptOptionsFrom(appts);
+  await saveSession(params, S.CANCEL_SELECT, { apptOptions });
+  why(params, `menu option 3 → present ${apptOptions.length} appt(s) to cancel, await choice`);
+  return apptSelectReply(apptOptions, 'cancel');
+};
+
+const handleCancelSelect = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
   if (isNo(t)) {
     why(params, 'patient replied NO at CANCEL_SELECTION → keep appointments, MENU');
     return showMenu(params);
@@ -539,10 +847,20 @@ const handleCancelSelect = async (params: BookingParams, data: SessionData, t: s
   const chosen = opts[n - 1];
   await saveSession(params, S.CANCEL_CONFIRM, { cancelApptId: chosen.id, cancelLabel: chosen.label });
   why(params, `appointment #${n} chosen → ask CANCEL_CONFIRMATION, await YES/NO`);
-  return `Cancel this appointment?\n\n${chosen.label}\n\nReply YES to cancel, NO to keep it.`;
+  if (!interactiveOn()) {
+    return `Cancel this appointment?\n\n${chosen.label}\n\nReply YES to cancel, NO to keep it.`;
+  }
+  return buttons({
+    header: 'Cancel appointment',
+    body: chosen.label,
+    buttons: [
+      { id: RID.CONF_YES, title: 'Yes, cancel' },
+      { id: RID.CONF_NO, title: 'No, keep it' }
+    ]
+  });
 };
 
-const handleCancelConfirm = async (params: BookingParams, data: SessionData, t: string): Promise<string> => {
+const handleCancelConfirm = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
   if (isNo(t)) {
     await resetSession(params, S.MENU);
     why(params, 'patient replied NO at CANCEL_CONFIRMATION → keep appointment, MENU');
@@ -562,31 +880,26 @@ const handleCancelConfirm = async (params: BookingParams, data: SessionData, t: 
     // ignore — fall through to a clean message
   }
   await resetSession(params, S.BOOKED);
+  params.action = 'cancel';
   why(params, 'patient replied YES → appointment CANCELLED, terminal state BOOKED');
   return `Your appointment has been cancelled. Reply 1 to book a new one, or MENU for options.`;
 };
 
 // --- RESCHEDULE -----------------------------------------------------------
-const startReschedule = async (params: BookingParams): Promise<string> => {
+const startReschedule = async (params: BookingParams): Promise<BotReply> => {
   const appts = await activeAppointments(params.clinicId, params.patientId);
   if (appts.length === 0) {
     await resetSession(params, S.MENU);
     why(params, 'menu option 4 but no appointments to reschedule → MENU');
     return `You have no upcoming appointments to reschedule. Reply 1 to book one.`;
   }
-  const apptOptions: ApptOption[] = appts.map((a) => ({
-    id: a.id,
-    doctorId: a.doctorId,
-    doctorName: a.doctor?.name ?? 'Doctor',
-    doctorSpeciality: a.doctor?.speciality ?? '',
-    label: `${formatDoctorName(a.doctor?.name)} — ${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime}`
-  }));
+  const apptOptions = apptOptionsFrom(appts);
   await saveSession(params, S.RESCHED_SELECT, { mode: 'reschedule', apptOptions });
   why(params, `menu option 4 → present ${apptOptions.length} appt(s) to reschedule, await choice`);
-  return `Which appointment would you like to reschedule?\n\n${numbered(apptOptions.map((a) => a.label))}\n\nReply with a number, or NO to cancel.`;
+  return apptSelectReply(apptOptions, 'reschedule');
 };
 
-const handleRescheduleSelect = async (params: BookingParams, data: SessionData, t: string): Promise<string> => {
+const handleRescheduleSelect = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
   if (isNo(t)) {
     why(params, 'patient replied NO at RESCHEDULE_SELECTION → MENU');
     return showMenu(params);
@@ -610,27 +923,46 @@ const handleRescheduleSelect = async (params: BookingParams, data: SessionData, 
 
 // ===========================================================================
 // Public entry point — called once per inbound text by the webhook controller.
-// Always returns a single reply string; every branch sets the next state.
+// Always returns a single reply (text or interactive), or null to stay silent;
+// every branch sets the next state.
 // ===========================================================================
-export const handleWhatsAppMessage = async (params: BookingParams): Promise<string | null> => {
-  const t = params.message.trim();
+export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotReply | null> => {
+  let t = params.message.trim();
   const { state, data } = await loadSession(params.phone);
 
-  // [FSM] One inbound message = one turn. We log the state we ENTERED this turn
-  // with and the patient text that drives it, run exactly ONE handler (which
-  // persists the single next state and returns the single prompt to send), then
-  // log the state we LEFT in. There is no loop here: the function returns after
-  // one handler, so the bot sends one prompt and waits for the next webhook.
+  // A tapped interactive option is normalised to the canonical text the handlers
+  // already accept (or a special out-of-band action).
+  let special: 'human' | 'book_again' | 'change_time' | null = null;
+  if (params.replyId) {
+    const norm = normalizeReplyId(params.replyId);
+    if (norm.special) special = norm.special;
+    else if (norm.text !== undefined) t = norm.text;
+  }
+
   console.info('[FSM] ▶ turn start', {
     phone: params.phone,
     currentState: state,
-    patientMessage: t
+    patientMessage: params.message.trim(),
+    tappedReplyId: params.replyId ?? null
   });
 
-  let reply: string | null;
+  let reply: BotReply | null;
   try {
-    // Universal escape hatch: greetings / "menu" always reset to the main menu.
-    if (isReset(t)) {
+    if (special === 'human') {
+      reply = await handleHandoff(params, 'tapped "Talk to staff"');
+    } else if (special === 'book_again') {
+      reply = await startBookAgain(params);
+    } else if (special === 'change_time') {
+      const doctor: DoctorOption = {
+        id: data.doctorId ?? '',
+        name: data.doctorName ?? 'the doctor',
+        speciality: data.doctorSpeciality ?? ''
+      };
+      why(params, 'tapped "Change time" → re-show slots');
+      reply = doctor.id
+        ? await presentSlots(params, doctor, 0, data.mode ?? 'book', data.rescheduleApptId, data.preferredDate)
+        : await showMenu(params);
+    } else if (isReset(t)) {
       why(params, `input "${t}" matched reset/greeting → MENU`);
       reply = await showMenu(params);
     } else {
@@ -656,6 +988,12 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<stri
         case S.RESCHED_SELECT:
           reply = await handleRescheduleSelect(params, data, t);
           break;
+        case S.HANDOFF:
+          // After a handoff stay quiet until a greeting/menu re-engages (handled
+          // by the isReset branch above). Any other chatter → no reply.
+          why(params, 'in HANDOFF, non-reset message → STAY SILENT (no reply)');
+          reply = null;
+          break;
 
         // IDLE / MENU / BOOKED — interpret as a fresh top-level choice.
         default:
@@ -665,44 +1003,101 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<stri
     }
   } catch (err) {
     console.error('[WhatsApp][booking] handler error:', err);
-    // Never strand the patient: reset to a known-good state and show the menu.
     why(params, 'handler threw → safe reset to MENU');
     reply = await showMenu(params);
   }
 
-  // Re-read the persisted state so the log reflects what was ACTUALLY saved
-  // (authoritative — handlers own their own saveSession calls).
+  // Re-read the persisted state so the log reflects what was ACTUALLY saved.
   const { state: nextState } = await loadSession(params.phone);
+  const u = params.understanding;
   console.info('[FSM] ◀ transition', {
     phone: params.phone,
     currentState: state,
     patientMessage: t,
     nextState,
+    intent: u?.intent ?? null,
+    confidence: u?.confidence ?? null,
+    source: u?.source ?? 'fsm',
+    action: params.action ?? null,
     reason: params.reason ?? '(no transition — re-prompted same state)',
     waiting: nextState !== S.BOOKED
+  });
+
+  // Audit trail (best-effort, never blocks the reply): message → understanding →
+  // FSM transition → action. Proves the AI only understood; the FSM transitioned.
+  void recordWhatsAppAudit({
+    phone: params.phone,
+    clinicId: params.clinicId,
+    patientId: params.patientId,
+    message: params.message.trim(),
+    intent: u?.intent ?? null,
+    confidence: u?.confidence ?? null,
+    speciality: u?.speciality ?? null,
+    fsmStateFrom: state,
+    fsmStateTo: nextState,
+    action: params.action ?? null,
+    source: u?.source ?? 'fsm'
   });
 
   return reply;
 };
 
-// Top-level routing: numbered menu choice first (deterministic), then intent.
-// Returns null to mean "stay silent" (no reply at all) for non-actionable chatter.
-const handleTopLevel = async (params: BookingParams, t: string): Promise<string | null> => {
+// Top-level routing: numbered menu choice first (deterministic), then the AI
+// receptionist understanding. Returns null to mean "stay silent" for
+// non-actionable chatter in a settled state.
+const handleTopLevel = async (params: BookingParams, t: string): Promise<BotReply | null> => {
   const n = parseChoice(t);
   if (n === 1) return startBooking(params);
   if (n === 2) return doCheck(params);
   if (n === 3) return startCancel(params);
   if (n === 4) return startReschedule(params);
 
-  // Free text → AI maps to intent (+ speciality). AI does control flow nowhere
-  // else; here it only decides which deterministic branch to enter.
-  const specs = await distinctSpecialities(params.clinicId);
-  const { intent, speciality } = classifyIntent(t, specs);
-  console.info('[FSM] free-text classified (deterministic)', { patientMessage: t, intent, speciality: speciality ?? null });
+  // Free text → AI Receptionist understanding (or deterministic fallback). It
+  // ONLY classifies + extracts; the branch it routes into is pure FSM.
+  const [specs, doctorNames] = await Promise.all([
+    distinctSpecialities(params.clinicId),
+    doctorNamesForClinic(params.clinicId)
+  ]);
+  const u = await understand({ message: t, specialities: specs, doctorNames });
+  params.understanding = u;
+  console.info('[FSM] receptionist understanding', {
+    patientMessage: t,
+    intent: u.intent,
+    speciality: u.speciality,
+    doctorName: u.doctorName,
+    preferredDate: u.preferredDate,
+    confidence: u.confidence,
+    wantsHuman: u.wantsHuman,
+    source: u.source
+  });
 
-  switch (intent) {
+  // --- AI-only enrichments (never affect the deterministic/flag-off path) ----
+  if (u.source === 'ai') {
+    // Generic capability FAQ → answer, then show the menu.
+    if (u.faqAnswer) {
+      params.action = 'faq';
+      why(params, 'receptionist answered FAQ → MENU');
+      const menu = await showMenu(params);
+      return prefixReply(`${u.faqAnswer}\n\n`, menu);
+    }
+    // Explicit human request or data we can't answer → handoff.
+    if (u.wantsHuman) {
+      return handleHandoff(params, 'patient asked for a person');
+    }
+    // Low confidence → clarify instead of guessing (menu greetings excepted).
+    if (u.confidence < confidenceMin() && u.intent !== 'menu') {
+      params.action = 'clarify';
+      return clarifyReply(params);
+    }
+  }
+
+  switch (u.intent) {
     case 'book':
-      return startBooking(params, speciality);
+    case 'availability':
+      // "availability" (e.g. "is Dr Ruchi free today?") presents that doctor's /
+      // speciality's real open slots — read-only info that flows into the normal
+      // book → confirm path; nothing is booked without explicit confirmation.
+      return startBooking(params, u.speciality, u.preferredDate, u.doctorName);
     case 'cancel':
       return startCancel(params);
     case 'reschedule':
@@ -713,10 +1108,7 @@ const handleTopLevel = async (params: BookingParams, t: string): Promise<string 
       why(params, `input "${t}" is a greeting/menu request → MENU`);
       return showMenu(params);
     default:
-      // Nothing actionable in a settled (IDLE/MENU/BOOKED) state — e.g. the
-      // patient just said "ok", "thanks", "👍" after a booking. Stay SILENT
-      // (return null → no outbound) instead of spamming the menu. A clear
-      // command or greeting ("hi", "book", "cancel", a list number) re-engages.
+      // Nothing actionable in a settled state — stay SILENT (existing behaviour).
       why(params, `input "${t}" is not an actionable command in a settled state → STAY SILENT (no reply)`);
       return null;
   }

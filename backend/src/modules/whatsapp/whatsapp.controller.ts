@@ -51,6 +51,9 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
           messageId: message.id,
           type: message.type,
           text: message.text?.body,
+          // Set when the patient tapped an interactive button / list row.
+          interactiveId: message.interactive?.button_reply?.id ?? message.interactive?.list_reply?.id,
+          interactiveTitle: message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title,
           timestamp: message.timestamp
         })) ?? []
       ) ?? []
@@ -89,7 +92,7 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
 
   // Record the latest inbound (phone + text) for the diagnostics endpoint.
   for (const m of incomingMessages) {
-    if (m.from) recordInbound(m.from, m.text ?? `[${m.type ?? 'non-text'}]`);
+    if (m.from) recordInbound(m.from, m.text ?? m.interactiveTitle ?? `[${m.type ?? 'non-text'}]`);
   }
 
   // Persist webhook side-effects. Wrapped so a DB hiccup never makes us return
@@ -118,9 +121,16 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
   // the reply (AI call + send) never delays the 200 Meta needs — a slow/non-200
   // response would make Meta retry and replay the whole batch.
   for (const m of incomingMessages) {
-    if (m.from && m.type === 'text' && m.text) {
+    if (!m.from) continue;
+    if (m.type === 'text' && m.text) {
       void handleInboundText(m.from, m.text, m.messageId).catch((err) =>
         console.error('[WhatsApp] Inbound auto-reply failed:', err)
+      );
+    } else if (m.type === 'interactive' && m.interactiveId) {
+      // Pass the tapped row/button title as the human-readable text (for logs /
+      // audit) and the stable id as the routing key.
+      void handleInboundText(m.from, m.interactiveTitle ?? m.interactiveId, m.messageId, m.interactiveId).catch((err) =>
+        console.error('[WhatsApp] Inbound interactive reply failed:', err)
       );
     }
   }

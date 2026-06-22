@@ -21,7 +21,13 @@ import { prisma } from '../../config/prisma.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { handleWhatsAppMessage } from './whatsapp.booking.js';
-import { logInboundMessage, recordInboundMessage, sendWhatsAppTextMessage } from './whatsapp.service.js';
+import {
+  logInboundMessage,
+  recordInboundMessage,
+  sendWhatsAppInteractive,
+  sendWhatsAppTextMessage
+} from './whatsapp.service.js';
+import { type BotReply, botReplyText } from './whatsapp.reply.js';
 import { recordOutbound } from './whatsapp.diagnostics.js';
 
 // Last-resort reply so the assistant is NEVER silent, even if OpenAI, the DB, or
@@ -199,11 +205,17 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
 // patientAssistantReply are deliberately NOT called. The only outbound for an
 // inbound message is the FSM's single reply. If no clinic can be bound we send a
 // fixed, deterministic message (still no AI) so the patient is never left silent.
-const processOne = async (from: string, text: string, inboundWamid?: string): Promise<void> => {
+const processOne = async (
+  from: string,
+  text: string,
+  inboundWamid?: string,
+  interactiveId?: string
+): Promise<void> => {
   const to = from.replace(/\D/g, '');
   let clinicId: string | null = null;
   // null === the FSM deliberately chose to stay silent (no outbound at all).
-  let reply: string | null = SAFE_FALLBACK;
+  // A BotReply is either a plain string or an interactive (buttons/list) reply.
+  let reply: BotReply | null = SAFE_FALLBACK;
   let patientCode: string | null = null;
 
   try {
@@ -229,9 +241,17 @@ const processOne = async (from: string, text: string, inboundWamid?: string): Pr
         clinicName: patient.clinic?.name ?? 'our clinic',
         phone: to,
         patientCode: patient.patientCode,
-        message: text
+        message: text,
+        replyId: interactiveId
       });
-      reply = fsmReply === null ? null : fsmReply.trim() || SAFE_FALLBACK;
+      // null = stay silent. A plain string is trimmed (empty → safe fallback);
+      // an interactive reply is passed through untouched.
+      reply =
+        fsmReply === null
+          ? null
+          : typeof fsmReply === 'string'
+            ? fsmReply.trim() || SAFE_FALLBACK
+            : fsmReply;
     } else {
       // No clinic bound → cannot run the FSM (it needs a clinic's doctors). Send a
       // FIXED deterministic message. Never fall back to an AI responder.
@@ -255,17 +275,22 @@ const processOne = async (from: string, text: string, inboundWamid?: string): Pr
   }
 
   // Record the reply for diagnostics before sending (so /debug reflects it even
-  // if the Meta send fails).
-  recordOutbound(reply);
+  // if the Meta send fails). Interactive replies are flattened to text.
+  recordOutbound(botReplyText(reply));
 
   // Guaranteed single outbound reply. A send failure is logged, not thrown.
+  // Plain string → text message; interactive reply → buttons/list message.
   try {
-    const res = await sendWhatsAppTextMessage({ to, body: reply, messageType: 'auto_reply', clinicId });
+    const res =
+      typeof reply === 'string'
+        ? await sendWhatsAppTextMessage({ to, body: reply, messageType: 'auto_reply', clinicId })
+        : await sendWhatsAppInteractive({ to, reply, messageType: 'auto_reply', clinicId });
     console.info('[WhatsApp] Inbound reply sent', {
       phone: to,
       clinicId,
       patientId: patientCode,
       inboundText: text,
+      interactiveId: interactiveId ?? null,
       inboundWamid: inboundWamid ?? null,
       outboundWamid: res.data.messages?.[0]?.id ?? null
     });
@@ -274,9 +299,17 @@ const processOne = async (from: string, text: string, inboundWamid?: string): Pr
   }
 };
 
-// Public entry point called by the webhook controller for each inbound text.
-// Returns the queued promise so the controller can attach a .catch.
-export const handleInboundText = (from: string, text: string, inboundWamid?: string): Promise<void> => {
+// Public entry point called by the webhook controller for each inbound message.
+// `text` is the human-readable text (the typed message, or the title of a tapped
+// button/row); `interactiveId` is the stable option id when the patient tapped
+// an interactive reply. Returns the queued promise so the controller can attach
+// a .catch.
+export const handleInboundText = (
+  from: string,
+  text: string,
+  inboundWamid?: string,
+  interactiveId?: string
+): Promise<void> => {
   if (!isWhatsAppConfigured()) {
     return Promise.resolve();
   }
@@ -295,7 +328,7 @@ export const handleInboundText = (from: string, text: string, inboundWamid?: str
   const prev = queues.get(key) ?? Promise.resolve();
   const next = prev
     .catch(() => undefined) // a failed prior turn must not block the next one
-    .then(() => processOne(from, text, inboundWamid))
+    .then(() => processOne(from, text, inboundWamid, interactiveId))
     .catch((err) => console.error('[WhatsApp] Inbound processing failed:', err));
 
   queues.set(
