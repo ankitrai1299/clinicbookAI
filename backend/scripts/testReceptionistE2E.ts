@@ -223,6 +223,16 @@ const run = async () => {
     check('AI understood BOOK intent', aud1a?.intent === 'book', `intent=${aud1a?.intent} conf=${aud1a?.confidence}`);
     check('AI did NOT book directly (0 appts after routing)', (await countActive(A)) === 0);
 
+    // Mid-flow abort: patient changes their mind during slot selection.
+    const rAbort = await say(A, { message: 'cancel kro nahi karna' });
+    check(
+      'Mid-flow "cancel/nahi karna" aborts to menu (not stuck on number prompt)',
+      /stopped that/i.test(botReplyText(rAbort)) && /help you/i.test(botReplyText(rAbort))
+    );
+    check('Abort created no appointment', (await countActive(A)) === 0);
+    // Re-enter the booking flow to finish the scenario.
+    r = await say(A, { message: `book a ${speciality} appointment ${datePhrase}` });
+
     r = await advanceToConfirm(A, r);
     check('AI did NOT book during slot selection (0 appts at confirm)', (await countActive(A)) === 0);
     check('Confirmation step shows Confirm/Change buttons', hasButton(r, RID.CONF_YES));

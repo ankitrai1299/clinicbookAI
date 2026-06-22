@@ -97,7 +97,22 @@ export const buildDiagnostics = async (webhookUrlSeenFromRequest: string | null)
     signatureVerification: isSignatureVerificationEnabled() ? 'ENABLED' : 'DISABLED',
     webhookUrlConfigured: getConfiguredWebhookUrl(),
     webhookUrlSeenFromRequest,
-    inboundLoggedTotal // persistent (survives restart), from WhatsAppLog
+    inboundLoggedTotal, // persistent (survives restart), from WhatsAppLog
+    // AI Receptionist feature flags AS SEEN BY THIS RUNNING PROCESS — the ground
+    // truth for "are the new experience flags actually live?". If these read OFF,
+    // patients get the legacy plain numbered menu no matter what the repo/.env say.
+    receptionist: {
+      aiUnderstanding: env.WA_AI_RECEPTIONIST ? 'ON' : 'OFF',
+      interactiveMessages: env.WA_INTERACTIVE ? 'ON' : 'OFF',
+      confidenceMin: env.WA_AI_CONFIDENCE_MIN,
+      openAiKey: env.OPENAI_API_KEY ? 'set' : 'MISSING',
+      // The effective mode a patient will experience right now.
+      effectiveMode: env.WA_AI_RECEPTIONIST
+        ? env.OPENAI_API_KEY
+          ? `AI receptionist${env.WA_INTERACTIVE ? ' + interactive buttons' : ' (plain text)'}`
+          : `deterministic${env.WA_INTERACTIVE ? ' + interactive buttons' : ''} (WA_AI_RECEPTIONIST on but OPENAI_API_KEY missing)`
+        : `legacy deterministic menu${env.WA_INTERACTIVE ? ' + interactive buttons' : ' (plain numbered text)'}`
+    }
   };
 };
 
@@ -124,6 +139,9 @@ export const logWhatsAppStartupInfo = async (): Promise<void> => {
   console.info(`[WhatsApp] Webhook: ${getConfiguredWebhookUrl()}`);
   console.info(`[WhatsApp] Signature verification: ${isSignatureVerificationEnabled() ? 'ENABLED' : 'DISABLED'}`);
   console.info(`[WhatsApp] WhatsApp API configured: ${isWhatsAppConfigured() ? 'YES' : 'NO'}`);
+  console.info(
+    `[WhatsApp] Receptionist: AI=${env.WA_AI_RECEPTIONIST ? 'ON' : 'OFF'} | Interactive=${env.WA_INTERACTIVE ? 'ON' : 'OFF'} | OpenAI key=${env.OPENAI_API_KEY ? 'set' : 'MISSING'}`
+  );
   if (!env.PUBLIC_BASE_URL) {
     console.warn('[WhatsApp] PUBLIC_BASE_URL is not set — webhook URL shown is localhost. Set it to your tunnel/Railway domain so it matches the Meta callback.');
   }

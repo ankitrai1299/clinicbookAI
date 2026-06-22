@@ -150,6 +150,14 @@ const isReset = (t: string): boolean =>
     t
   ) || t.trim() === '0';
 const isMore = (t: string): boolean => /^\s*(more|next|aur|more\s*options?)\s*$/i.test(t);
+// "Get me out of this booking" — recognised in the MIDDLE of a flow (speciality/
+// doctor/slot picking) where a number/MORE is otherwise expected, so a patient who
+// changes their mind ("cancel", "stop", "nahi karna", "rehne do") is taken back to
+// the menu instead of being stuck on "please reply with a number".
+const isAbort = (t: string): boolean =>
+  /\b(cancel|stop|abort|quit|exit|chh?od(o|\s?do)?|rehne\s?do|rahne\s?do|nah?i+\s*(karna|chahiye|chahie)|nvm|never\s?mind|forget\s?it|leave\s?it|rahne\s?de)\b/i.test(
+    t
+  );
 
 // Normalise a tapped interactive option id into the canonical text the existing
 // handlers already accept, or a "special" out-of-band action. Keeping this here
@@ -420,6 +428,16 @@ const clarifyReply = async (params: BookingParams): Promise<BotReply> => {
       { id: RID.TALK_HUMAN, title: 'Talk to staff' }
     ]
   });
+};
+
+// Abort the current booking flow (patient said cancel/stop/nahi karna mid-way) →
+// abandon and show the menu. Works in both deterministic and AI modes.
+const abortToMenu = async (params: BookingParams): Promise<BotReply> => {
+  await resetSession(params, S.MENU);
+  params.action = 'aborted';
+  why(params, 'patient aborted current booking flow (cancel/stop) → MENU');
+  const menu = await buildMenu(params);
+  return prefixReply(`No problem — I've stopped that. 🙆\n\n`, menu);
 };
 
 // Human handoff — flag a dashboard notification for staff and go quiet until the
@@ -965,6 +983,11 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotR
     } else if (isReset(t)) {
       why(params, `input "${t}" matched reset/greeting → MENU`);
       reply = await showMenu(params);
+    } else if (isAbort(t) && (state === S.SPECIALITY || state === S.DOCTOR || state === S.SLOT)) {
+      // Mid-booking "cancel / stop / nahi karna" → abandon this flow, show menu.
+      // (At the top level "cancel" instead means the cancel-an-appointment flow,
+      // and at CONFIRM/selection steps the handlers' own NO already abandons.)
+      reply = await abortToMenu(params);
     } else {
       switch (state) {
         case S.SPECIALITY:
