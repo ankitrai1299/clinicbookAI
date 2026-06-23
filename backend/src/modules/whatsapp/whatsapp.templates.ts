@@ -10,6 +10,7 @@ export const WHATSAPP_TEMPLATE_LANGUAGE = 'en_US';
 export const WhatsAppTemplate = {
   APPOINTMENT_REMINDER: 'appointment_reminder',
   BOOKING_CONFIRMATION: 'booking_confirmation',
+  APPOINTMENT_COMPLETED: 'appointment_completed',
   WAITLIST_OFFER: 'waitlist_offer',
   PATIENT_REGISTRATION: 'patient_registration',
   REGISTRATION_WELCOME: 'registration_welcome'
@@ -38,6 +39,12 @@ export interface AppointmentTemplateData {
   clinicName: string;
 }
 
+export interface AppointmentCompletedTemplateData {
+  clinicName: string;
+  patientName: string;
+  doctorName: string;
+}
+
 export interface WaitlistTemplateData {
   patientName: string;
   doctorName: string;
@@ -62,6 +69,12 @@ export const appointmentReminderComponents = (d: AppointmentTemplateData): Templ
 
 export const bookingConfirmationComponents = (d: AppointmentTemplateData): TemplateComponent[] =>
   bodyParams(d.patientName, d.dateLabel, d.time, d.doctorName, d.clinicName);
+
+// appointment_completed:
+//   {{1}} clinic · {{2}} patient · {{3}} doctor (bare name; body prints "Dr.")
+export const appointmentCompletedComponents = (
+  d: AppointmentCompletedTemplateData
+): TemplateComponent[] => bodyParams(d.clinicName, d.patientName, d.doctorName);
 
 // waitlist_offer:
 //   {{1}} patient · {{2}} doctor · {{3}} clinic

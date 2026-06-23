@@ -51,6 +51,13 @@ const templates: TemplateDefinition[] = [
     example: ['John', 'Monday, June 15, 2026', '10:00', 'Smith', 'City Health Clinic']
   },
   {
+    name: 'appointment_completed',
+    category: 'UTILITY',
+    bodyText:
+      'Thank you for visiting {{1}} today, {{2}}. We hope your consultation with Dr. {{3}} was helpful.\n\nIf you need another appointment or follow-up, simply send a message here anytime.\n\nWishing you good health!',
+    example: ['City Health Clinic', 'John', 'Smith']
+  },
+  {
     name: 'waitlist_offer',
     category: 'UTILITY',
     bodyText:

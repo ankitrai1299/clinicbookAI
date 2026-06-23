@@ -10,6 +10,7 @@ import {
   AppointmentTemplateData,
   WaitlistTemplateData,
   WhatsAppTemplate,
+  appointmentCompletedComponents,
   bookingConfirmationComponents,
   registrationWelcomeComponents,
   waitlistOfferComponents
@@ -70,25 +71,33 @@ export interface AppointmentCompletedParams {
 }
 
 // Sent automatically when staff mark a consultation COMPLETED. A warm thank-you
-// that keeps the WhatsApp thread open for follow-ups. Free-form session message
-// (the patient just visited, so their 24h window is open); no-op if WhatsApp is
-// unconfigured and never blocks the request.
+// that keeps the WhatsApp thread open for follow-ups. Uses the approved
+// `appointment_completed` template so it delivers even when the patient's 24h
+// session window has closed (a visit-day thank-you almost always falls outside
+// it), and falls back to a free-form session message when the window is open.
+// No-op if WhatsApp is unconfigured and never blocks the request.
 export const notifyAppointmentCompleted = (p: AppointmentCompletedParams): void => {
   if (!isWhatsAppConfigured()) {
     return;
   }
 
-  const body =
+  const sessionBody =
     `Thank you for visiting ${p.clinicName} today, ${p.patientName}. 🙏\n\n` +
     `We hope your consultation with ${formatDoctorName(p.doctorName)} was helpful.\n\n` +
     `If you need another appointment or follow-up, simply send a message here anytime.\n\n` +
     `Wishing you good health!\n` +
     `— ${p.clinicName}`;
 
-  void sendWhatsAppTextMessage({
+  void sendTemplatedOrSession({
     to: p.to.replace(/\D/g, ''),
-    body,
-    messageType: 'appointment_completed',
+    templateName: WhatsAppTemplate.APPOINTMENT_COMPLETED,
+    // Template body prints "Dr." → pass the bare doctor name.
+    components: appointmentCompletedComponents({
+      clinicName: p.clinicName,
+      patientName: p.patientName,
+      doctorName: normalizeDoctorName(p.doctorName)
+    }),
+    sessionBody,
     clinicId: p.clinicId
   }).catch((err) => console.error('[WhatsApp] Completion message send failed:', err));
 };
