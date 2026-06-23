@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle, HeartPulse, Loader2, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CheckCircle, HeartPulse, Loader2, AlertTriangle, Mic, Square } from 'lucide-react';
 
 import { ApiError } from '../api/client';
 import {
@@ -32,6 +32,54 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // --- Voice dictation for the health-concern field -----------------------
+  const [listening, setListening] = useState(false);
+  const [voiceLang, setVoiceLang] = useState<'hi-IN' | 'en-IN'>('hi-IN');
+  const recognitionRef = useRef<any>(null);
+  const baseTextRef = useRef('');
+
+  const voiceSupported =
+    typeof window !== 'undefined' &&
+    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+
+  const toggleVoice = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+
+    const recognition = new SR();
+    recognition.lang = voiceLang;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    // Keep whatever the patient has already typed/dictated, then append.
+    baseTextRef.current = healthConcern ? healthConcern.trim() + ' ' : '';
+
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          baseTextRef.current += transcript + ' ';
+        } else {
+          interim += transcript;
+        }
+      }
+      setHealthConcern((baseTextRef.current + interim).trimStart());
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  };
+
+  useEffect(() => () => recognitionRef.current?.stop(), []);
 
   useEffect(() => {
     if (!clinicId) {
@@ -246,17 +294,61 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
             </div>
 
             <div>
-              <label className={labelClass} htmlFor="reg-concern">
-                Health Concern / Reason for Visit
-              </label>
-              <textarea
-                id="reg-concern"
-                value={healthConcern}
-                onChange={(e) => setHealthConcern(e.target.value)}
-                placeholder="Briefly describe your symptoms or the reason for your visit"
-                rows={4}
-                className={`${inputClass} resize-none`}
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={`${labelClass} mb-0`} htmlFor="reg-concern">
+                  Health Concern / Reason for Visit
+                </label>
+                {voiceSupported && (
+                  <div className="flex items-center gap-1">
+                    {(['hi-IN', 'en-IN'] as const).map((lang) => (
+                      <button
+                        key={lang}
+                        type="button"
+                        onClick={() => setVoiceLang(lang)}
+                        disabled={listening}
+                        className={`px-2 py-0.5 text-[11px] font-bold rounded-md transition-colors disabled:opacity-50 ${
+                          voiceLang === lang
+                            ? 'bg-sky-100 text-sky-700'
+                            : 'bg-slate-100 text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        {lang === 'hi-IN' ? 'हिंदी' : 'EN'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <textarea
+                  id="reg-concern"
+                  value={healthConcern}
+                  onChange={(e) => setHealthConcern(e.target.value)}
+                  placeholder="Briefly describe your symptoms or the reason for your visit"
+                  rows={4}
+                  className={`${inputClass} resize-none ${voiceSupported ? 'pr-14' : ''}`}
+                />
+                {voiceSupported && (
+                  <button
+                    type="button"
+                    onClick={toggleVoice}
+                    title={listening ? 'Stop recording' : 'Speak your concern'}
+                    aria-label={listening ? 'Stop recording' : 'Speak your concern'}
+                    className={`absolute bottom-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-colors shadow-sm ${
+                      listening
+                        ? 'bg-rose-500 text-white animate-pulse'
+                        : 'bg-sky-600 text-white hover:bg-sky-700'
+                    }`}
+                  >
+                    {listening ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+              {listening && (
+                <p className="text-[11px] text-rose-500 font-medium mt-1.5 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                  Listening… {voiceLang === 'hi-IN' ? 'ab boliye' : 'speak now'}
+                </p>
+              )}
             </div>
 
             {submitError && (
