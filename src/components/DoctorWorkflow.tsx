@@ -53,7 +53,7 @@ export default function DoctorWorkflow() {
 
   // Add-doctor form
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', speciality: '', email: '', phone: '' });
+  const [form, setForm] = useState({ name: '', speciality: '', experience: '', email: '', phone: '' });
   const [saving, setSaving] = useState(false);
 
   const [subTab, setSubTab] = useState<SubTab>('schedule');
@@ -124,10 +124,11 @@ export default function DoctorWorkflow() {
       const created = await createDoctor({
         name: form.name.trim(),
         speciality: form.speciality.trim(),
+        experienceYears: form.experience.trim() ? Number(form.experience) : undefined,
         email: form.email.trim() || undefined,
         phone: form.phone.trim() || undefined
       });
-      setForm({ name: '', speciality: '', email: '', phone: '' });
+      setForm({ name: '', speciality: '', experience: '', email: '', phone: '' });
       setShowAdd(false);
       await loadDoctors();
       setSelectedId(created.id);
@@ -239,6 +240,10 @@ export default function DoctorWorkflow() {
             <input value={form.speciality} onChange={(e) => setForm({ ...form, speciality: e.target.value })} required placeholder="Cardiologist" className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500" />
           </div>
           <div>
+            <label className="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1">Experience (years, optional)</label>
+            <input type="number" min={0} max={80} value={form.experience} onChange={(e) => setForm({ ...form, experience: e.target.value })} placeholder="e.g. 10" className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500" />
+          </div>
+          <div>
             <label className="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1">Email (optional)</label>
             <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="dr.jane@clinic.com" className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500" />
           </div>
@@ -269,7 +274,7 @@ export default function DoctorWorkflow() {
                 <Stethoscope className={`w-4 h-4 mt-0.5 ${selectedId === d.id ? 'text-sky-100' : 'text-sky-500'}`} />
                 <span>
                   <span className="block font-bold text-sm leading-tight">{d.name}</span>
-                  <span className={`text-[10px] ${selectedId === d.id ? 'text-sky-100' : 'text-slate-400'}`}>{d.speciality}</span>
+                  <span className={`text-[10px] ${selectedId === d.id ? 'text-sky-100' : 'text-slate-400'}`}>{d.speciality}{d.experienceYears != null ? ` · ${d.experienceYears} yrs` : ''}</span>
                 </span>
               </span>
             </button>
@@ -287,6 +292,7 @@ export default function DoctorWorkflow() {
                   <h3 className="font-display font-extrabold text-slate-900">{selected.name}</h3>
                   <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 mt-1">
                     <span className="bg-sky-50 text-sky-700 font-bold px-2 py-0.5 rounded-full">{selected.speciality}</span>
+                    {selected.experienceYears != null && <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full">{selected.experienceYears} yrs exp</span>}
                     {selected.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{selected.email}</span>}
                     {selected.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{selected.phone}</span>}
                   </div>

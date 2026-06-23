@@ -20,6 +20,7 @@ export const createDoctor = async (clinicId: string, input: CreateDoctorInput) =
       clinicId,
       name: input.name.trim(),
       speciality: input.speciality.trim(),
+      experienceYears: input.experienceYears ?? null,
       email: input.email?.trim() || null,
       phone: input.phone?.trim() || null,
     },
@@ -47,6 +48,7 @@ export const updateDoctor = async (clinicId: string, id: string, input: UpdateDo
     data: {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.speciality !== undefined ? { speciality: input.speciality.trim() } : {}),
+      ...(input.experienceYears !== undefined ? { experienceYears: input.experienceYears } : {}),
       ...(input.email !== undefined ? { email: input.email.trim() || null } : {}),
       ...(input.phone !== undefined ? { phone: input.phone.trim() || null } : {}),
     },

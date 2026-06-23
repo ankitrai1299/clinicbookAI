@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const createDoctorSchema = z.object({
   name: z.string().trim().min(2).max(100),
   speciality: z.string().trim().min(2).max(100),
+  experienceYears: z.coerce.number().int().min(0).max(80).optional(),
   email: z.string().trim().email().max(150).optional(),
   phone: z.string().trim().min(6).max(30).optional(),
 });
@@ -11,6 +12,7 @@ export const updateDoctorSchema = z
   .object({
     name: z.string().trim().min(2).max(100).optional(),
     speciality: z.string().trim().min(2).max(100).optional(),
+    experienceYears: z.coerce.number().int().min(0).max(80).nullable().optional(),
     email: z.string().trim().email().max(150).optional(),
     phone: z.string().trim().min(6).max(30).optional(),
   })

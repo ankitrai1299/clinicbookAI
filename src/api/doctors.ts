@@ -5,6 +5,7 @@ export interface ApiDoctor {
   clinicId: string;
   name: string;
   speciality: string;
+  experienceYears?: number | null;
   email?: string | null;
   phone?: string | null;
 }
@@ -12,6 +13,7 @@ export interface ApiDoctor {
 export interface DoctorInput {
   name: string;
   speciality: string;
+  experienceYears?: number;
   email?: string;
   phone?: string;
 }

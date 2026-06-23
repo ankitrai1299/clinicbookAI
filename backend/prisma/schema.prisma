@@ -110,6 +110,7 @@ model Doctor {
   clinicId     String
   name         String
   speciality   String
+  experienceYears Int?
   email        String?
   phone        String?
   // Set when the doctor self-registers on the Doctor Portal. Null for doctors
