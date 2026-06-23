@@ -168,6 +168,10 @@ model Appointment {
   appointmentDate DateTime          @db.Date
   appointmentTime String
   status          AppointmentStatus @default(PENDING)
+  // Audit trail for the completion workflow: when the consultation was marked
+  // finished and which User (clinic staff) marked it. Null until COMPLETED.
+  completedAt     DateTime?
+  completedBy     String?
 
   clinic   Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   doctor   Doctor   @relation(fields: [doctorId], references: [id])
@@ -191,6 +195,7 @@ enum NotificationType {
   APPOINTMENT_CONFIRMED
   APPOINTMENT_CANCELLED
   APPOINTMENT_RESCHEDULED
+  APPOINTMENT_COMPLETED
   // Operational/system alert surfaced to clinic admins (e.g. WhatsApp sending is
   // failing or the access token has expired so patients aren't getting replies).
   SYSTEM_ALERT

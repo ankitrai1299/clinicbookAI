@@ -3,7 +3,7 @@ import { apiFetch } from './client';
 export interface ApiNotification {
   id: string;
   clinicId: string;
-  type: 'APPOINTMENT_BOOKED' | 'APPOINTMENT_CONFIRMED' | 'APPOINTMENT_CANCELLED' | 'APPOINTMENT_RESCHEDULED';
+  type: 'APPOINTMENT_BOOKED' | 'APPOINTMENT_CONFIRMED' | 'APPOINTMENT_CANCELLED' | 'APPOINTMENT_RESCHEDULED' | 'APPOINTMENT_COMPLETED';
   title: string;
   body: string;
   appointmentId: string | null;

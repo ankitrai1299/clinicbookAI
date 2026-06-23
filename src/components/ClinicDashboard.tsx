@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Users, Calendar, Clock, Bell, Settings, CreditCard, Activity,
-  Search, Plus, CheckCircle, XCircle,
+  Search, Plus, CheckCircle, CheckCheck, XCircle,
   Mail, Phone, Globe, ExternalLink, ArrowRight, ShieldAlert,
   QrCode, Copy, Check
 } from 'lucide-react';
@@ -12,6 +12,7 @@ import {
   getAppointments as getAppointmentsApi,
   createAppointment as createAppointmentApi,
   patchAppointment as patchAppointmentApi,
+  completeAppointment as completeAppointmentApi,
   ApiAppointment
 } from '../api/appointments';
 import { getPatients as getPatientsApi, createPatient as createPatientApi, ApiPatient } from '../api/patients';
@@ -27,7 +28,7 @@ const mapStatus = (status: string): Appointment['status'] => {
     CONFIRMED: 'Confirmed',
     PENDING: 'Pending',
     CANCELLED: 'Cancelled',
-    COMPLETED: 'Confirmed',
+    COMPLETED: 'Completed',
     NO_SHOW: 'Cancelled',
   };
   return map[status] ?? 'Pending';
@@ -42,6 +43,7 @@ const mapApiAppointment = (a: ApiAppointment): Appointment => ({
   time: a.appointmentTime,
   status: mapStatus(a.status),
   language: a.patient?.language ?? 'English',
+  completedAt: a.completedAt ?? null,
 });
 
 const mapApiPatient = (p: ApiPatient): Patient => ({
@@ -385,6 +387,23 @@ export default function ClinicDashboard({
     }
   };
 
+  // 3b. Action Trigger: Mark a CONFIRMED appointment as COMPLETED. The backend
+  // validates the transition, stamps completedAt/completedBy, and sends the
+  // patient an automatic thank-you message on WhatsApp.
+  const handleCompleteAppointment = async (id: string, patientName: string) => {
+    try {
+      const updated = await completeAppointmentApi(id);
+      setAppointments(prev => prev.map(apt =>
+        apt.id === id
+          ? { ...apt, status: 'Completed' as const, completedAt: updated.completedAt ?? new Date().toISOString() }
+          : apt
+      ));
+      triggerToast(`✅ Visit completed for ${patientName}. Thank-you message sent on WhatsApp.`);
+    } catch (err: unknown) {
+      triggerToast(`Error: ${err instanceof Error ? err.message : 'Failed to mark completed'}`);
+    }
+  };
+
   // 4. Create new Quick walk-in appointment
   const handleCreateWalkIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -428,6 +447,7 @@ export default function ClinicDashboard({
   const confirmedTodayCount = activeToday.filter(a => a.status === 'Confirmed').length;
   const cancelledTodayCount = activeToday.filter(a => a.status === 'Cancelled').length;
   const pendingTodayCount = activeToday.filter(a => a.status === 'Pending').length;
+  const completedTodayCount = activeToday.filter(a => a.status === 'Completed').length;
   const waitlistQueueCount = waitlist.filter(w => w.status === 'Waiting').length;
 
   // Render bad status count
@@ -602,10 +622,12 @@ export default function ClinicDashboard({
             <div className="space-y-6 animate-fadeIn" id="overview-tab-view">
               
               {/* Today's Operational KPI Stats Array */}
-              <div className="grid grid-cols-2 lg:grid-cols-6 gap-4" id="stats-widget-row">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats-widget-row">
                 {[
                   { title: "Today's Appts", value: activeToday.length, desc: "Roster count", icon: Calendar, colorClass: "bg-sky-50 text-sky-700" },
                   { title: "Confirmed Bookings", value: confirmedTodayCount, desc: "RSVP Confirmed", icon: CheckCircle, colorClass: "bg-emerald-50 text-emerald-700" },
+                  { title: "Pending Bookings", value: pendingTodayCount, desc: "Awaiting confirm", icon: Clock, colorClass: "bg-amber-50 text-amber-700" },
+                  { title: "Completed Visits", value: completedTodayCount, desc: "Consultations done", icon: CheckCheck, colorClass: "bg-indigo-50 text-indigo-700" },
                   { title: "Cancelled Slots", value: cancelledTodayCount, desc: "Last-minute vacates", icon: XCircle, colorClass: "bg-red-50 text-red-600" },
                   { title: "Waitlist Patients", value: waitlistQueueCount, desc: "In waiting queue", icon: Users, colorClass: "bg-purple-50 text-purple-700" },
                   { title: "No-show Rate", value: `${noShowRate}%`, desc: "Of today's roster", icon: ShieldAlert, colorClass: "bg-amber-50 text-amber-700" },
@@ -763,36 +785,55 @@ export default function ClinicDashboard({
                               <td className="py-3 px-2">
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono ${
                                   apt.status === 'Confirmed' ? 'bg-emerald-50 text-emerald-700' :
+                                  apt.status === 'Completed' ? 'bg-indigo-50 text-indigo-700' :
                                   apt.status === 'Cancelled' ? 'bg-rose-50 text-rose-700' :
                                   apt.status === 'Waitlist' ? 'bg-purple-50 text-purple-700' :
                                   'bg-amber-50 text-amber-700'
                                 }`}>
                                   <span className={`w-1.5 h-1.5 rounded-full ${
                                     apt.status === 'Confirmed' ? 'bg-emerald-500' :
+                                    apt.status === 'Completed' ? 'bg-indigo-500' :
                                     apt.status === 'Cancelled' ? 'bg-rose-500' :
                                     apt.status === 'Waitlist' ? 'bg-purple-500' :
                                     'bg-amber-500'
                                   }`}></span>
                                   {apt.status}
                                 </span>
+                                {apt.status === 'Completed' && apt.completedAt && (
+                                  <span className="block text-[9px] text-slate-400 font-mono mt-1">
+                                    {new Date(apt.completedAt).toLocaleString()}
+                                  </span>
+                                )}
                               </td>
                               <td className="py-3 px-2 text-right space-x-1">
                                 {apt.status === 'Pending' && (
-                                  <button 
+                                  <button
                                     onClick={() => handleConfirmAppointment(apt.id, apt.patientName)}
                                     className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[9px] cursor-pointer"
                                   >
                                     Confirm
                                   </button>
                                 )}
-                                {apt.status !== 'Cancelled' && (
-                                  <button 
+                                {apt.status === 'Confirmed' && (
+                                  <button
+                                    onClick={() => handleCompleteAppointment(apt.id, apt.patientName)}
+                                    className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-[9px] cursor-pointer"
+                                    title="Mark consultation finished & send thank-you on WhatsApp"
+                                  >
+                                    Mark Completed
+                                  </button>
+                                )}
+                                {apt.status !== 'Cancelled' && apt.status !== 'Completed' && (
+                                  <button
                                     onClick={() => handleCancelAppointment(apt.id, apt.patientName)}
                                     className="px-2 py-1 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded font-bold text-[9px] cursor-pointer"
                                     title="Cancel slot & trigger waitlist"
                                   >
                                     Cancel Slot
                                   </button>
+                                )}
+                                {apt.status === 'Completed' && (
+                                  <span className="text-[9px] font-bold text-indigo-600 font-mono">✓ Done</span>
                                 )}
                               </td>
                             </tr>
@@ -940,6 +981,7 @@ export default function ClinicDashboard({
                           <div className="shrink-0 w-8 h-8 rounded-full bg-slate-50 text-base flex items-center justify-center">
                             {n.type === 'APPOINTMENT_BOOKED' ? '📩' :
                              n.type === 'APPOINTMENT_CONFIRMED' ? '✅' :
+                             n.type === 'APPOINTMENT_COMPLETED' ? '🎉' :
                              n.type === 'APPOINTMENT_CANCELLED' ? '⚡' : '🔁'}
                           </div>
                           <div>
@@ -969,7 +1011,7 @@ export default function ClinicDashboard({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {['All', 'Confirmed', 'Pending', 'Cancelled', 'Waitlist'].map((st) => (
+                  {['All', 'Confirmed', 'Pending', 'Cancelled', 'Completed', 'Waitlist'].map((st) => (
                     <button
                       key={st}
                       onClick={() => setStatusFilter(st)}
@@ -1024,19 +1066,31 @@ export default function ClinicDashboard({
                         <td className="py-4 px-3">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono ${
                             apt.status === 'Confirmed' ? 'bg-emerald-50 text-emerald-700' :
+                            apt.status === 'Completed' ? 'bg-indigo-50 text-indigo-700' :
                             apt.status === 'Cancelled' ? 'bg-rose-50 text-rose-700' :
                             apt.status === 'Waitlist' ? 'bg-purple-50 text-purple-700' :
                             'bg-amber-50 text-amber-700'
                           }`}>
                             {apt.status}
                           </span>
+                          {apt.status === 'Completed' && apt.completedAt && (
+                            <span className="block text-[9px] text-slate-400 font-mono mt-1">
+                              {new Date(apt.completedAt).toLocaleString()}
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-3 text-right space-x-1">
                           {apt.status === 'Pending' && (
                             <button onClick={() => handleConfirmAppointment(apt.id, apt.patientName)} className="px-2 py-1 bg-emerald-600 text-white font-bold rounded text-[9px] cursor-pointer">Approve</button>
                           )}
-                          {apt.status !== 'Cancelled' && (
+                          {apt.status === 'Confirmed' && (
+                            <button onClick={() => handleCompleteAppointment(apt.id, apt.patientName)} className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded text-[9px] cursor-pointer" title="Mark consultation finished & send thank-you on WhatsApp">Mark Completed</button>
+                          )}
+                          {apt.status !== 'Cancelled' && apt.status !== 'Completed' && (
                             <button onClick={() => handleCancelAppointment(apt.id, apt.patientName)} className="px-2 py-1 bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded font-bold text-[9px] cursor-pointer">Cancel Slot</button>
+                          )}
+                          {apt.status === 'Completed' && (
+                            <span className="text-[9px] font-bold text-indigo-600 font-mono">✓ Done</span>
                           )}
                         </td>
                       </tr>

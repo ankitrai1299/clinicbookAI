@@ -23,9 +23,19 @@ const getClinicId = (req: Request) => {
   return clinicId;
 };
 
-const applyStatusAction = async (clinicId: string, id: string, status?: string) => {
+const getUserId = (req: Request) => {
+  const userId = req.user?.userId;
+
+  if (!userId) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  return userId;
+};
+
+const applyStatusAction = async (clinicId: string, id: string, userId: string, status?: string) => {
   if (status === 'COMPLETED') {
-    return completeAppointment(clinicId, id);
+    return completeAppointment(clinicId, id, userId);
   }
 
   if (status === 'CANCELLED') {
@@ -71,12 +81,26 @@ export const getSingleAppointmentHandler = asyncHandler(async (req: Request, res
   });
 });
 
+export const completeAppointmentHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const userId = getUserId(req);
+  const { id } = req.params as AppointmentIdParams;
+  const appointment = await completeAppointment(clinicId, id, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Appointment marked completed',
+    data: appointment
+  });
+});
+
 export const patchAppointmentHandler = asyncHandler(async (req: Request, res: Response) => {
   const clinicId = getClinicId(req);
+  const userId = getUserId(req);
   const { id } = req.params as AppointmentIdParams;
   const input = req.body as UpdateAppointmentInput;
 
-  const statusResult = await applyStatusAction(clinicId, id, input.status);
+  const statusResult = await applyStatusAction(clinicId, id, userId, input.status);
 
   if (statusResult && Object.keys(input).length === 1) {
     res.status(200).json({

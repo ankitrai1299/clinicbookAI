@@ -30,8 +30,9 @@ export interface Appointment {
   doctorName: string;
   date: string;
   time: string;
-  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Waitlist';
+  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed' | 'Waitlist';
   language: string;
+  completedAt?: string | null;
 }
 
 export interface WaitlistPatient {

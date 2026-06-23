@@ -61,6 +61,38 @@ export const notifyBookingConfirmation = (p: BookingConfirmationParams): void =>
   }).catch((err) => console.error('[WhatsApp] Booking confirmation send failed:', err));
 };
 
+export interface AppointmentCompletedParams {
+  to: string;
+  clinicId: string;
+  patientName: string;
+  doctorName: string;
+  clinicName: string;
+}
+
+// Sent automatically when staff mark a consultation COMPLETED. A warm thank-you
+// that keeps the WhatsApp thread open for follow-ups. Free-form session message
+// (the patient just visited, so their 24h window is open); no-op if WhatsApp is
+// unconfigured and never blocks the request.
+export const notifyAppointmentCompleted = (p: AppointmentCompletedParams): void => {
+  if (!isWhatsAppConfigured()) {
+    return;
+  }
+
+  const body =
+    `Thank you for visiting ${p.clinicName} today, ${p.patientName}. 🙏\n\n` +
+    `We hope your consultation with ${formatDoctorName(p.doctorName)} was helpful.\n\n` +
+    `If you need another appointment or follow-up, simply send a message here anytime.\n\n` +
+    `Wishing you good health!\n` +
+    `— ${p.clinicName}`;
+
+  void sendWhatsAppTextMessage({
+    to: p.to.replace(/\D/g, ''),
+    body,
+    messageType: 'appointment_completed',
+    clinicId: p.clinicId
+  }).catch((err) => console.error('[WhatsApp] Completion message send failed:', err));
+};
+
 export interface AppointmentRejectedParams {
   to: string;
   clinicId: string;

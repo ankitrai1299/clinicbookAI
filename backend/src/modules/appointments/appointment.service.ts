@@ -9,6 +9,7 @@ import {
 import { recordNotification } from '../notifications/notification.service.js';
 import { autoOfferFreedSlot } from '../waitlist/waitlist.service.js';
 import { canonicalizeTime } from '../../services/scheduling.service.js';
+import { runPostVisitWorkflow } from './postVisit.service.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
 
 // Store every appointment time in the one canonical "HH:MM AM/PM" shape so slot
@@ -383,14 +384,66 @@ export const cancelAppointment = async (clinicId: string, id: string): Promise<A
   return appointment;
 };
 
-export const completeAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  await ensureAppointmentExists(clinicId, id);
-
-  return prisma.appointment.update({
-    where: { id },
-    data: { status: AppointmentStatus.COMPLETED },
-    include: appointmentInclude
+export const completeAppointment = async (
+  clinicId: string,
+  id: string,
+  completedBy: string
+): Promise<AppointmentRecord> => {
+  const current = await prisma.appointment.findFirst({
+    where: { id, clinicId },
+    select: { status: true }
   });
+  if (!current) {
+    throw new AppError('Appointment not found', 404);
+  }
+
+  // Idempotent: already completed → return as-is without a duplicate thank-you.
+  if (current.status === AppointmentStatus.COMPLETED) {
+    return getSingleAppointment(clinicId, id);
+  }
+
+  // Workflow guard: only a CONFIRMED appointment can be completed
+  // (PENDING → CONFIRMED → COMPLETED). Reject everything else.
+  if (current.status !== AppointmentStatus.CONFIRMED) {
+    throw new AppError('Only confirmed appointments can be marked completed', 409);
+  }
+
+  // Race guard: scope the update to the CONFIRMED status we just read so two
+  // concurrent "Mark Completed" clicks flip the row exactly once. Only the
+  // winner runs the post-visit workflow (the thank-you WhatsApp); the loser
+  // matches no row (P2025) and returns the current record with no duplicate.
+  let appointment: AppointmentRecord;
+  try {
+    appointment = await prisma.appointment.update({
+      where: { id, status: AppointmentStatus.CONFIRMED },
+      data: {
+        status: AppointmentStatus.COMPLETED,
+        completedAt: new Date(),
+        completedBy
+      },
+      include: appointmentInclude
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      return getSingleAppointment(clinicId, id);
+    }
+    throw err;
+  }
+
+  // Dashboard notification so staff see the completion in the feed.
+  recordNotification({
+    clinicId,
+    type: 'APPOINTMENT_COMPLETED',
+    title: 'Appointment completed',
+    body: `${appointment.patient?.name ?? 'A patient'}'s appointment with ${appointment.doctor?.name ?? 'the doctor'} on ${whenLabel(appointment)} was marked completed.`,
+    appointmentId: appointment.id
+  });
+
+  // Post-visit automation: thank-you WhatsApp now, plus any future feedback /
+  // rating / follow-up / prescription actions registered on the workflow.
+  runPostVisitWorkflow(appointment);
+
+  return appointment;
 };
 
 export const markNoShowAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
