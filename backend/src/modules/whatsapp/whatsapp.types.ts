@@ -33,6 +33,8 @@ export interface IncomingWhatsAppWebhook {
             button_reply?: { id?: string; title?: string };
             list_reply?: { id?: string; title?: string };
           };
+          // Present when type === 'audio' (a voice note has voice: true).
+          audio?: { id?: string; mime_type?: string; voice?: boolean };
         }>;
         statuses?: Array<{
           id?: string;

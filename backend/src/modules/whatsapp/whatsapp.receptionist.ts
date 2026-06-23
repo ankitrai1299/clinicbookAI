@@ -130,6 +130,9 @@ export const understand = async (params: {
   message: string;
   specialities: string[];
   doctorNames: string[];
+  // Force AI understanding for THIS message even when WA_AI_RECEPTIONIST is off.
+  // Set for voice notes (free-form speech that the keyword classifier can't read).
+  forceAi?: boolean;
 }): Promise<Understanding> => {
   // Deterministic mode: return EXACTLY what the legacy FSM saw — intent +
   // speciality only, no date/doctor/FAQ/handoff extras — so flag-off behaviour
@@ -149,7 +152,10 @@ export const understand = async (params: {
     };
   };
 
-  if (!aiReceptionistEnabled()) return deterministic();
+  // Voice notes force AI understanding (key permitting); typed text follows the
+  // global WA_AI_RECEPTIONIST flag.
+  const useAi = aiReceptionistEnabled() || (Boolean(params.forceAi) && Boolean(env.OPENAI_API_KEY));
+  if (!useAi) return deterministic();
 
   const ai = await understandPatientMessage(params.message, params.specialities, params.doctorNames);
   if (!ai) return deterministic();

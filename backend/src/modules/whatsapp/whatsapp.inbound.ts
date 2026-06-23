@@ -209,7 +209,8 @@ const processOne = async (
   from: string,
   text: string,
   inboundWamid?: string,
-  interactiveId?: string
+  interactiveId?: string,
+  fromVoice?: boolean
 ): Promise<void> => {
   const to = from.replace(/\D/g, '');
   let clinicId: string | null = null;
@@ -242,7 +243,8 @@ const processOne = async (
         phone: to,
         patientCode: patient.patientCode,
         message: text,
-        replyId: interactiveId
+        replyId: interactiveId,
+        fromVoice
       });
       // null = stay silent. A plain string is trimmed (empty → safe fallback);
       // an interactive reply is passed through untouched.
@@ -308,7 +310,8 @@ export const handleInboundText = (
   from: string,
   text: string,
   inboundWamid?: string,
-  interactiveId?: string
+  interactiveId?: string,
+  options?: { fromVoice?: boolean }
 ): Promise<void> => {
   if (!isWhatsAppConfigured()) {
     return Promise.resolve();
@@ -328,7 +331,7 @@ export const handleInboundText = (
   const prev = queues.get(key) ?? Promise.resolve();
   const next = prev
     .catch(() => undefined) // a failed prior turn must not block the next one
-    .then(() => processOne(from, text, inboundWamid, interactiveId))
+    .then(() => processOne(from, text, inboundWamid, interactiveId, options?.fromVoice))
     .catch((err) => console.error('[WhatsApp] Inbound processing failed:', err));
 
   queues.set(

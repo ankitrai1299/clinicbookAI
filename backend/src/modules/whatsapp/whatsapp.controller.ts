@@ -11,6 +11,7 @@ import {
   sendWhatsAppTextMessage
 } from './whatsapp.service.js';
 import { handleInboundText } from './whatsapp.inbound.js';
+import { isVoiceAiEnabledFor, transcribeWhatsAppVoice } from './whatsapp.voice.js';
 import { TemplateComponent, WhatsAppTemplateName } from './whatsapp.templates.js';
 import { SendWhatsAppTemplateInput } from './whatsapp.validation.js';
 import { IncomingWhatsAppWebhook, WhatsAppTextMessageInput } from './whatsapp.types.js';
@@ -54,6 +55,8 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
           // Set when the patient tapped an interactive button / list row.
           interactiveId: message.interactive?.button_reply?.id ?? message.interactive?.list_reply?.id,
           interactiveTitle: message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title,
+          // Set when the patient sent a voice note / audio (type === 'audio').
+          audioId: message.audio?.id,
           timestamp: message.timestamp
         })) ?? []
       ) ?? []
@@ -132,6 +135,31 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
       void handleInboundText(m.from, m.interactiveTitle ?? m.interactiveId, m.messageId, m.interactiveId).catch((err) =>
         console.error('[WhatsApp] Inbound interactive reply failed:', err)
       );
+    } else if (m.type === 'audio' && m.audioId) {
+      // Voice note: transcribe (Whisper), then run it through the inbound pipeline
+      // with AI understanding forced on. Gated to the WA_VOICE_TEST_NUMBERS
+      // allowlist — other numbers' voice notes are ignored (no behaviour change).
+      const from = m.from;
+      const audioId = m.audioId;
+      const messageId = m.messageId;
+      if (isVoiceAiEnabledFor(from)) {
+        void (async () => {
+          const transcript = await transcribeWhatsAppVoice(audioId);
+          if (transcript) {
+            await handleInboundText(from, transcript, messageId, undefined, { fromVoice: true });
+          } else {
+            // Couldn't understand the audio — ask the patient to type instead so
+            // they're never left without a reply.
+            await sendWhatsAppTextMessage({
+              to: from.replace(/\D/g, ''),
+              body: "Sorry, I couldn't understand that voice note. Please try again or type your message. 🙏",
+              messageType: 'auto_reply'
+            }).catch(() => undefined);
+          }
+        })().catch((err) => console.error('[WhatsApp] Inbound voice handling failed:', err));
+      } else {
+        console.info('[WhatsApp] Voice note ignored (number not in WA_VOICE_TEST_NUMBERS)', { from });
+      }
     }
   }
 

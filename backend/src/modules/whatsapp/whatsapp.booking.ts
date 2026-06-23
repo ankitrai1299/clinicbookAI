@@ -121,6 +121,9 @@ export interface BookingParams {
   // list row: the stable option id (e.g. "OPT_2", "CONF_YES"). Normalised back
   // into the canonical text the handlers expect before routing.
   replyId?: string;
+  // Set when this message originated from a transcribed voice note. Forces AI
+  // understanding for the turn (free speech the keyword classifier can't parse).
+  fromVoice?: boolean;
   // Internal (set by handlers, read by the central transition logger): a short
   // human-readable explanation of WHY the last transition happened. Last writer
   // wins, so the innermost/terminal action's reason is what gets logged.
@@ -1081,7 +1084,7 @@ const handleTopLevel = async (params: BookingParams, t: string): Promise<BotRepl
     distinctSpecialities(params.clinicId),
     doctorNamesForClinic(params.clinicId)
   ]);
-  const u = await understand({ message: t, specialities: specs, doctorNames });
+  const u = await understand({ message: t, specialities: specs, doctorNames, forceAi: params.fromVoice });
   params.understanding = u;
   console.info('[FSM] receptionist understanding', {
     patientMessage: t,

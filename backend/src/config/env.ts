@@ -64,7 +64,13 @@ const envSchema = z.object({
   //   clarify (or offers a human) instead of guessing an intent.
   WA_AI_RECEPTIONIST: envBool(false),
   WA_INTERACTIVE: envBool(false),
-  WA_AI_CONFIDENCE_MIN: z.coerce.number().min(0).max(1).default(0.6)
+  WA_AI_CONFIDENCE_MIN: z.coerce.number().min(0).max(1).default(0.6),
+  // Voice notes: patients can send a WhatsApp voice message; it is transcribed
+  // (OpenAI Whisper) and routed through AI understanding even when
+  // WA_AI_RECEPTIONIST is off for text. Comma-separated phone allowlist while
+  // testing (matched on the last 10 digits); use "*" to enable for everyone,
+  // or leave blank to disable the voice feature entirely. Needs OPENAI_API_KEY.
+  WA_VOICE_TEST_NUMBERS: z.string().default('')
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
