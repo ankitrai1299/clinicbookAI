@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Plus, Trash2, Clock, Mail, Phone, Loader2, Save, CalendarOff, CalendarDays, Stethoscope } from 'lucide-react';
+import { Plus, Trash2, Clock, Mail, Phone, Loader2, Save, CalendarOff, CalendarDays, Stethoscope, Pencil } from 'lucide-react';
 import {
   ApiDoctor,
   ApiLeave,
@@ -7,6 +7,7 @@ import {
   ScheduleEntryInput,
   getDoctors,
   createDoctor,
+  updateDoctor,
   deleteDoctor,
   getDoctorSchedule,
   setDoctorSchedule,
@@ -56,6 +57,11 @@ export default function DoctorWorkflow() {
   const [form, setForm] = useState({ name: '', speciality: '', experience: '', email: '', phone: '' });
   const [saving, setSaving] = useState(false);
 
+  // Edit-doctor form (admin edits an existing doctor's profile)
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', speciality: '', experience: '', email: '', phone: '' });
+  const [editSaving, setEditSaving] = useState(false);
+
   const [subTab, setSubTab] = useState<SubTab>('schedule');
 
   // Schedule
@@ -91,6 +97,7 @@ export default function DoctorWorkflow() {
   // Load the selected doctor's schedule + leaves + appointments.
   const loadDoctorDetail = useCallback(async (id: string) => {
     setScheduleMsg('');
+    setEditing(false);
     try {
       const [sched, lv, appts] = await Promise.all([
         getDoctorSchedule(id),
@@ -136,6 +143,41 @@ export default function DoctorWorkflow() {
       setError(e instanceof Error ? e.message : 'Failed to add doctor');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const startEdit = () => {
+    if (!selected) return;
+    setEditForm({
+      name: selected.name,
+      speciality: selected.speciality,
+      experience: selected.experienceYears != null ? String(selected.experienceYears) : '',
+      email: selected.email ?? '',
+      phone: selected.phone ?? ''
+    });
+    setError('');
+    setEditing(true);
+  };
+
+  const handleUpdateDoctor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selected || !editForm.name.trim() || !editForm.speciality.trim()) return;
+    setEditSaving(true);
+    setError('');
+    try {
+      await updateDoctor(selected.id, {
+        name: editForm.name.trim(),
+        speciality: editForm.speciality.trim(),
+        experienceYears: editForm.experience.trim() ? Number(editForm.experience) : null,
+        email: editForm.email.trim() || undefined,
+        phone: editForm.phone.trim() || undefined
+      });
+      setEditing(false);
+      await loadDoctors();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update doctor');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -287,20 +329,56 @@ export default function DoctorWorkflow() {
             <div className="py-16 text-center text-slate-400 italic text-xs border border-dashed border-slate-200 rounded-2xl">Select a doctor to manage their schedule, leaves and appointments.</div>
           ) : (
             <div className="space-y-5 text-left">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-display font-extrabold text-slate-900">{selected.name}</h3>
-                  <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 mt-1">
-                    <span className="bg-sky-50 text-sky-700 font-bold px-2 py-0.5 rounded-full">{selected.speciality}</span>
-                    {selected.experienceYears != null && <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full">{selected.experienceYears} yrs exp</span>}
-                    {selected.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{selected.email}</span>}
-                    {selected.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{selected.phone}</span>}
+              {editing ? (
+                <form onSubmit={handleUpdateDoctor} className="bg-sky-50/60 border border-sky-100 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fadeIn text-left">
+                  <div>
+                    <label className="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1">Name</label>
+                    <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required placeholder="Dr. Jane Doe" className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1">Speciality</label>
+                    <input value={editForm.speciality} onChange={(e) => setEditForm({ ...editForm, speciality: e.target.value })} required placeholder="Cardiologist" className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1">Experience (years, optional)</label>
+                    <input type="number" min={0} max={80} value={editForm.experience} onChange={(e) => setEditForm({ ...editForm, experience: e.target.value })} placeholder="e.g. 10" className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1">Email (optional)</label>
+                    <input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="dr.jane@clinic.com" className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-1">Phone (optional)</label>
+                    <input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="919876543210" className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:border-sky-500" />
+                  </div>
+                  <div className="sm:col-span-2 flex gap-2">
+                    <button type="submit" disabled={editSaving} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold rounded-xl text-xs flex items-center gap-1.5">
+                      {editSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save Changes
+                    </button>
+                    <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-display font-extrabold text-slate-900">{selected.name}</h3>
+                    <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 mt-1">
+                      <span className="bg-sky-50 text-sky-700 font-bold px-2 py-0.5 rounded-full">{selected.speciality}</span>
+                      {selected.experienceYears != null && <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full">{selected.experienceYears} yrs exp</span>}
+                      {selected.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{selected.email}</span>}
+                      {selected.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{selected.phone}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={startEdit} className="p-2 text-sky-600 hover:bg-sky-50 rounded-lg" title="Edit profile">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleDeleteDoctor(selected.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg" title="Remove doctor">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-                <button onClick={() => handleDeleteDoctor(selected.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg" title="Remove doctor">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              )}
 
               {/* Sub tabs */}
               <div className="flex gap-2 border-b border-slate-150">

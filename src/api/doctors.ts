@@ -13,7 +13,7 @@ export interface ApiDoctor {
 export interface DoctorInput {
   name: string;
   speciality: string;
-  experienceYears?: number;
+  experienceYears?: number | null;
   email?: string;
   phone?: string;
 }
