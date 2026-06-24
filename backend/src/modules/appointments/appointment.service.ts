@@ -107,8 +107,8 @@ const onStatusTransition = (prev: AppointmentStatus, appt: AppointmentRecord): v
     });
 
     // Automatic waitlist recovery: offer the freed slot to the next waiting patient.
-    void autoOfferFreedSlot(appt.clinicId, appt.doctorId, appt.appointmentDate, appt.appointmentTime).catch((err) =>
-      console.error('[Waitlist] Auto-offer on cancellation failed:', err)
+    void autoOfferFreedSlot(appt.clinicId, appt.doctorId, appt.appointmentDate, appt.appointmentTime).catch(
+      (err: unknown) => console.error('[Waitlist] Auto-offer on cancellation failed:', err)
     );
   }
 };

@@ -1,4 +1,4 @@
-import { WaitlistStatus } from '@prisma/client';
+import { Prisma, WaitlistStatus } from '@prisma/client';
 
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
@@ -11,6 +11,8 @@ const waitlistInclude = {
     select: { id: true, name: true, phone: true, language: true }
   }
 } as const;
+
+type WaitlistEntry = Prisma.WaitlistGetPayload<{ include: typeof waitlistInclude }>;
 
 const ensureEntry = async (clinicId: string, id: string) => {
   const entry = await prisma.waitlist.findFirst({
@@ -262,7 +264,7 @@ export const autoOfferFreedSlot = async (
   appointmentDate: Date,
   appointmentTime: string,
   now: Date = new Date()
-) => {
+): Promise<WaitlistEntry | null> => {
   // Candidates: anyone WAITING who wanted this doctor, or who didn't specify a
   // doctor. Prefer an exact doctor match, else the highest-priority general entry.
   const candidates = await prisma.waitlist.findMany({
@@ -294,13 +296,20 @@ export const autoOfferFreedSlot = async (
     prisma.clinic.findUnique({ where: { id: clinicId }, select: { name: true } })
   ]);
 
-  if (updated.patient?.phone) {
+  // Deliver the offer honouring the WhatsApp 24-hour session rule (session text
+  // inside the window, approved template outside — handled by notifyWaitlistSlotOffer
+  // → sendTemplatedOrSession). If it CAN'T be delivered (no phone, or a template/
+  // Graph failure), don't leave the slot held by an offer the patient will never
+  // see: drop this entry and roll the slot straight to the next waiting patient.
+  const phone = updated.patient?.phone;
+  let delivery: { delivered: boolean; channel: string } = { delivered: false, channel: 'none' };
+  if (phone) {
     // Park their FSM session FIRST so a fast "YES" reply is routed correctly.
-    await setWaSessionState(updated.patient.phone, clinicId, updated.patientId, WAITLIST_OFFER_STATE);
-    notifyWaitlistSlotOffer({
-      to: updated.patient.phone,
+    await setWaSessionState(phone, clinicId, updated.patientId, WAITLIST_OFFER_STATE);
+    delivery = await notifyWaitlistSlotOffer({
+      to: phone,
       clinicId,
-      patientName: updated.patient.name,
+      patientName: updated.patient!.name,
       doctorName: doctor?.name ?? 'our doctor',
       clinicName: clinic?.name ?? 'our clinic',
       appointmentDate,
@@ -308,7 +317,21 @@ export const autoOfferFreedSlot = async (
     });
   }
 
-  console.info(`[Waitlist] Auto-offered freed slot ${appointmentDate.toISOString().slice(0, 10)} ${appointmentTime} to ${updated.patient?.name} (entry ${updated.id}, holds 15m)`);
+  if (!delivery.delivered) {
+    console.warn(`[Waitlist] Offer to ${updated.patient?.name} NOT delivered (${delivery.channel}) → rolling to next patient`);
+    await prisma.waitlist.update({
+      where: { id: updated.id },
+      data: { status: WaitlistStatus.CANCELLED, offeredDoctorId: null, offeredDate: null, offeredTime: null, offeredExpiresAt: null }
+    });
+    if (phone) await setWaSessionState(phone, clinicId, updated.patientId, 'BOOKED');
+    // The just-cancelled entry is excluded from the next candidate query, so this
+    // recursion terminates (→ null when no deliverable patient remains).
+    return autoOfferFreedSlot(clinicId, doctorId, appointmentDate, appointmentTime, now);
+  }
+
+  console.info(
+    `[Waitlist] Auto-offered freed slot ${appointmentDate.toISOString().slice(0, 10)} ${appointmentTime} to ${updated.patient?.name} via ${delivery.channel} (entry ${updated.id}, holds 15m)`
+  );
   return updated;
 };
 

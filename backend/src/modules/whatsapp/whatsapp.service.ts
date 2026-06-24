@@ -26,6 +26,21 @@ const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const extractWaMessageId = (data: WhatsAppSendMessageResponse): string | undefined =>
   data.messages?.[0]?.id;
 
+// Test-only send seam (NEVER set in production). Lets hermetic tests exercise
+// the send paths without hitting the Graph API:
+//   WA_TEST_NO_SEND=1     → every send is a synthetic success (no network call)
+//   WA_TEST_NO_SEND=fail  → every send throws (simulate a delivery failure)
+// Read per-call so a test can toggle it between scenarios.
+const interceptSend = (label: string): AxiosResponse<WhatsAppSendMessageResponse> | null => {
+  const mode = process.env.WA_TEST_NO_SEND;
+  if (!mode) return null;
+  if (mode === 'fail') {
+    throw new Error(`[test] simulated WhatsApp ${label} delivery failure`);
+  }
+  console.info(`[WhatsApp][test] WA_TEST_NO_SEND — synthetic ${label} success (no Graph call)`);
+  return { data: { messages: [{ id: `TEST_${label}` }] } } as AxiosResponse<WhatsAppSendMessageResponse>;
+};
+
 const describeError = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
     return JSON.stringify(error.response?.data ?? { message: error.message });
@@ -64,6 +79,9 @@ const logOutbound = async (params: {
 export const sendWhatsAppTextMessage = async (
   input: WhatsAppTextMessageInput & { clinicId?: string | null }
 ): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
+  const intercepted = interceptSend('text');
+  if (intercepted) return intercepted;
+
   const phoneNumberId = getWhatsAppPhoneNumberId();
   const client = getWhatsAppApiClient();
   const messageType = input.messageType ?? 'session_text';
@@ -234,6 +252,9 @@ export const sendWhatsAppTemplateMessage = async (params: {
   bodyForLog: string;
   clinicId?: string | null;
 }): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
+  const intercepted = interceptSend('template');
+  if (intercepted) return intercepted;
+
   const phoneNumberId = getWhatsAppPhoneNumberId();
   const client = getWhatsAppApiClient();
   const messageType = `template:${params.templateName}`;

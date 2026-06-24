@@ -22,6 +22,9 @@ import dotenv from 'dotenv';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 process.env.WA_INTERACTIVE = 'true';
+// Hermetic: never hit the real Graph API. '1' = synthetic send success; the
+// delivery-failure section flips this to 'fail' and back.
+process.env.WA_TEST_NO_SEND = '1';
 
 const { PrismaClient } = await import('@prisma/client');
 const prisma = new PrismaClient({ log: [] });
@@ -40,14 +43,18 @@ const PHONES = { A: '910000005001', B: '910000005002', C: '910000005003' };
 
 // --- isolated test fixtures ------------------------------------------------
 const cleanup = async () => {
-  const phones = Object.values(PHONES);
-  const patients = await prisma.patient.findMany({ where: { clinicId, phone: { in: phones } }, select: { id: true } });
+  // Match by name prefix so it catches every test patient (incl. the no-phone one).
+  const patients = await prisma.patient.findMany({ where: { clinicId, name: { startsWith: 'TEST WL' } }, select: { id: true, phone: true } });
   const pids = patients.map((p) => p.id);
+  const phones = patients.map((p) => p.phone).filter(Boolean);
   if (pids.length) {
     await prisma.appointment.deleteMany({ where: { patientId: { in: pids } } });
     await prisma.waitlist.deleteMany({ where: { patientId: { in: pids } } });
   }
-  await prisma.whatsAppSession.deleteMany({ where: { phone: { in: phones } } });
+  if (phones.length) {
+    await prisma.whatsAppSession.deleteMany({ where: { phone: { in: phones } } });
+    await prisma.whatsAppConversation.deleteMany({ where: { phone: { in: phones } } });
+  }
   const doc = await prisma.doctor.findFirst({ where: { clinicId, speciality: SPEC }, select: { id: true } });
   if (doc) {
     await prisma.appointment.deleteMany({ where: { doctorId: doc.id } });
@@ -141,6 +148,46 @@ const run = async () => {
   ok(cAfter?.status === 'CANCELLED', 'C\'s lapsed offer was dropped (rolled on)');
   const stillPending = await pendingOfferFor(clinicId, C.id);
   ok(stillPending === null, 'No live offer remains for C after expiry');
+
+  // === 24h SESSION RULE: offer channel by lastInboundAt ====================
+  console.log('\n8) WhatsApp 24-hour rule — offer channel (req 1-4):');
+  const { recordInboundMessage } = await import('../src/modules/whatsapp/whatsapp.service.js');
+  const { notifyWaitlistSlotOffer } = await import('../src/modules/whatsapp/whatsapp.notifications.js');
+  const offerArgs = (phone: string, name: string) => ({ to: phone, clinicId, patientName: name, doctorName: doctor.name, clinicName: clinic?.name ?? 'Clinic', appointmentDate: target, appointmentTime: '09:00 AM' });
+
+  // Inside the window: B messaged us just now → free-form session message.
+  await recordInboundMessage(PHONES.B);
+  const inWin = await notifyWaitlistSlotOffer(offerArgs(PHONES.B, 'TEST WL B'));
+  ok(inWin.delivered && inWin.channel === 'session_message', `Inside 24h (lastInboundAt=now) → session_message (got ${inWin.channel})`);
+
+  // Outside the window: no recent inbound → approved template, no free-form.
+  await prisma.whatsAppConversation.deleteMany({ where: { phone: PHONES.C } });
+  const outWin = await notifyWaitlistSlotOffer(offerArgs(PHONES.C, 'TEST WL C'));
+  ok(outWin.delivered && outWin.channel === 'template_message', `Outside 24h (no inbound) → template_message (got ${outWin.channel})`);
+
+  // === DELIVERY FAILURE → never leave the slot blocked (req 5) ==============
+  console.log('\n9) Delivery failure → roll to next / never block the slot (req 5):');
+  await prisma.waitlist.deleteMany({ where: { patientId: { in: [A.id, B.id, C.id] } } });
+
+  // 9a: head candidate is undeliverable (no phone) → slot rolls to next patient.
+  const noPhone = await prisma.patient.create({ data: { clinicId, phone: '', name: 'TEST WL NoPhone', language: 'English', source: 'whatsapp' } });
+  const withPhone = await mkPatient('910000005010', 'TEST WL WithPhone');
+  await prisma.waitlist.create({ data: { clinicId, patientId: noPhone.id, status: 'WAITING', desiredDoctorId: doctor.id, priority: 0 } });
+  await prisma.waitlist.create({ data: { clinicId, patientId: withPhone.id, status: 'WAITING', desiredDoctorId: doctor.id, priority: 1 } });
+  await autoOfferFreedSlot(clinicId, doctor.id, target, '09:00 AM');
+  const np = await prisma.waitlist.findUnique({ where: { patientId: noPhone.id } });
+  const wp = await prisma.waitlist.findUnique({ where: { patientId: withPhone.id } });
+  ok(np?.status === 'CANCELLED' && wp?.status === 'OFFERED', 'Undeliverable head dropped → slot rolled to the next patient');
+
+  // 9b: every send fails (template rejected) → no one is left holding the slot.
+  await prisma.waitlist.update({ where: { patientId: withPhone.id }, data: { status: 'WAITING', offeredDoctorId: null, offeredDate: null, offeredTime: null, offeredExpiresAt: null } });
+  await prisma.whatsAppConversation.deleteMany({ where: { phone: '910000005010' } }); // force template path
+  process.env.WA_TEST_NO_SEND = 'fail';
+  const failRes = await autoOfferFreedSlot(clinicId, doctor.id, target, '09:00 AM');
+  process.env.WA_TEST_NO_SEND = '1';
+  ok(failRes === null, 'All sends failing → autoOffer returns null (gave up cleanly)');
+  const blocked = await prisma.waitlist.findFirst({ where: { clinicId, status: 'OFFERED', offeredDoctorId: doctor.id } });
+  ok(!blocked, 'Slot NOT left blocked — no lingering OFFERED entry after delivery failures');
 
   console.log(`\n${fail === 0 ? '✅ ALL PASS' : '❌ FAILED'} — ${pass} passed, ${fail} failed`);
 };

@@ -258,23 +258,49 @@ export interface WaitlistSlotOfferParams {
   appointmentTime: string;
 }
 
+// What channel a waitlist offer went out on (for logging + caller decisions).
+export type WaitlistOfferDelivery = { delivered: boolean; channel: 'session_message' | 'template_message' | 'none' };
+
 // Auto-sent when a cancellation frees a slot and it is offered to the next
 // waitlisted patient. Carries the EXACT slot so a "YES" reply can be booked
-// automatically (see waitlist claimWaitlistOffer). Free-form session message.
-export const notifyWaitlistSlotOffer = (p: WaitlistSlotOfferParams): void => {
+// automatically (see waitlist claimWaitlistOffer).
+//
+// Honours the WhatsApp 24-hour session rule: if the patient messaged us within
+// the last 24h we send a rich free-form message; otherwise we MUST use the
+// approved `waitlist_offer` template (free-form would be rejected by Meta,
+// err 131047). Returns whether delivery succeeded + which path was used so the
+// caller can roll the slot to the next patient when an offer can't be delivered.
+export const notifyWaitlistSlotOffer = async (p: WaitlistSlotOfferParams): Promise<WaitlistOfferDelivery> => {
   if (!isWhatsAppConfigured()) {
-    return;
+    return { delivered: false, channel: 'none' };
   }
 
   const dateLabel = formatDateLabel(p.appointmentDate);
-  const body =
+  const sessionBody =
     `Good news ${p.patientName}! A slot just opened with ${formatDoctorName(p.doctorName)} at ${p.clinicName} ` +
     `on ${dateLabel} at ${p.appointmentTime}.\n\nReply YES to claim it before someone else does.`;
 
-  void sendWhatsAppTextMessage({
-    to: p.to.replace(/\D/g, ''),
-    body,
-    messageType: 'waitlist_slot_offer',
-    clinicId: p.clinicId
-  }).catch((err) => console.error('[WhatsApp] Waitlist slot offer send failed:', err));
+  try {
+    const { channel } = await sendTemplatedOrSession({
+      to: p.to.replace(/\D/g, ''),
+      templateName: WhatsAppTemplate.WAITLIST_OFFER,
+      // Template body prints "Dr." itself, so pass the BARE doctor name.
+      components: waitlistOfferComponents({
+        patientName: p.patientName,
+        doctorName: normalizeDoctorName(p.doctorName),
+        clinicName: p.clinicName
+      }),
+      sessionBody,
+      clinicId: p.clinicId
+    });
+    const path = channel === 'session' ? 'session_message' : 'template_message';
+    console.info(`[WhatsApp] Waitlist offer to ${p.patientName} delivered via ${path}.`);
+    return { delivered: true, channel: path };
+  } catch (err) {
+    // Outside the 24h window the template may be unapproved/failing, or the Graph
+    // call errored. Report non-delivery so the slot isn't held by an offer the
+    // patient will never see.
+    console.error('[WhatsApp] Waitlist slot offer send failed:', err instanceof Error ? err.message : err);
+    return { delivered: false, channel: 'none' };
+  }
 };
