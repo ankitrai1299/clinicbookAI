@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { ensureSlotUniqueIndex } from './config/ensureIndexes.js';
 import { connectDatabase, disconnectDatabase } from './config/prisma.js';
 import { startReminderCron } from './cron/reminder.cron.js';
+import { startWaitlistCron } from './cron/waitlist.cron.js';
 import { logWhatsAppStartupInfo } from './modules/whatsapp/whatsapp.diagnostics.js';
 
 const app = createApp();
@@ -37,6 +38,7 @@ const startServer = async () => {
   });
 
   startReminderCron();
+  startWaitlistCron();
 
   process.on('SIGINT', () => {
     void shutdown('SIGINT');

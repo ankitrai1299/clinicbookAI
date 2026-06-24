@@ -227,11 +227,20 @@ model Waitlist {
   priority Int            @default(0)
   status   WaitlistStatus @default(WAITING)
 
+  // What the patient was trying to book when no slot was available. Used to match
+  // a freed slot to the right waiting patient (prefer same doctor / date).
+  desiredDoctorId   String?
+  desiredSpeciality String?
+  desiredDate       DateTime? @db.Date
+
   // When a freed slot is auto-offered to this entry (status OFFERED), the exact
   // slot is parked here so a patient's "YES" reply can be booked automatically.
   offeredDoctorId String?
   offeredDate     DateTime? @db.Date
   offeredTime     String?
+  // The 15-minute hold expiry for the current OFFER. A cron sweep moves an
+  // expired offer on to the next waiting patient.
+  offeredExpiresAt DateTime?
 
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)

@@ -36,6 +36,12 @@ import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
 import { createAppointment, cancelAppointment, updateAppointment } from '../appointments/appointment.service.js';
 import { getAvailableSlots, getDateAvailability, clinicNow } from '../../services/scheduling.service.js';
+import {
+  joinWaitlist,
+  pendingOfferFor,
+  claimWaitlistOffer,
+  declineWaitlistOffer
+} from '../waitlist/waitlist.service.js';
 import { recordWhatsAppAudit } from './whatsapp.service.js';
 import { understand, confidenceMin, type Understanding } from './whatsapp.receptionist.js';
 import {
@@ -62,7 +68,12 @@ const S = {
   CANCEL_SELECT: 'CANCEL_SELECTION',
   CANCEL_CONFIRM: 'CANCEL_CONFIRMATION',
   RESCHED_SELECT: 'RESCHEDULE_SELECTION',
-  HANDOFF: 'HUMAN_HANDOFF'
+  HANDOFF: 'HUMAN_HANDOFF',
+  // Offer to JOIN the waitlist (no slot available) — awaits YES/NO.
+  WAITLIST_CONFIRM: 'WAITLIST_CONFIRM',
+  // A freed slot has been OFFERED to this patient — awaits YES (claim) / NO (pass).
+  // Set out-of-band by autoOfferFreedSlot (waitlist.service.ts) on a cancellation.
+  WAITLIST_OFFER: 'WAITLIST_OFFER'
 } as const;
 
 const SLOTS_PER_PAGE = 5;
@@ -110,6 +121,9 @@ interface SessionData {
   // Dates last shown in the DATE_SELECTION step (one per offered working day),
   // with each day's open-slot count so a tap on a full day can be re-prompted.
   dateOptions?: { date: string; available: number }[];
+  // The date the patient was eyeing when offered the waitlist (WAITLIST_CONFIRM),
+  // stored as their desired date if they join.
+  waitlistDate?: string;
   selected?: SlotOption;
   apptOptions?: ApptOption[];
   cancelApptId?: string;
@@ -727,9 +741,13 @@ const handleDate = async (params: BookingParams, data: SessionData, t: string): 
   }
 
   const chosen = opts[n - 1];
-  // Tapped a fully-booked day → keep them on the picker (waitlist comes later).
+  // Tapped a fully-booked day. For a normal booking, offer the waitlist for that
+  // doctor+date. For a reschedule, just send them back to the date picker.
   if (chosen.available <= 0) {
-    why(params, `date ${chosen.date} is fully booked → re-show date picker`);
+    if ((data.mode ?? 'book') === 'book') {
+      return offerJoinWaitlist(params, doctor, chosen.date);
+    }
+    why(params, `date ${chosen.date} is fully booked (reschedule) → re-show date picker`);
     return prefixReply(
       `📅 ${dayLabel(chosen.date)} is fully booked. Please pick another date:\n\n`,
       await presentDates(params, doctor, { mode: data.mode ?? 'book', rescheduleApptId: data.rescheduleApptId })
@@ -738,6 +756,96 @@ const handleDate = async (params: BookingParams, data: SessionData, t: string): 
 
   // A concrete date is chosen → show that day's full set of times.
   return presentSlots(params, doctor, 0, data.mode ?? 'book', data.rescheduleApptId, chosen.date);
+};
+
+// --- WAITLIST -------------------------------------------------------------
+// Offer to join the waitlist when no slot is available. Parks the doctor + the
+// date they wanted on the session so a YES adds a targeted waitlist entry.
+const offerJoinWaitlist = async (
+  params: BookingParams,
+  doctor: DoctorOption,
+  dateStr?: string
+): Promise<BotReply> => {
+  await saveSession(params, S.WAITLIST_CONFIRM, {
+    doctorId: doctor.id,
+    doctorName: doctor.name,
+    doctorSpeciality: doctor.speciality,
+    waitlistDate: dateStr
+  });
+  why(params, `no slot for ${doctor.name}${dateStr ? ` on ${dateStr}` : ''} → offer Join Waitlist`);
+  const body =
+    `😔 No open slots${dateStr ? ` on ${dayLabel(dateStr)}` : ''} with ${formatDoctorName(doctor.name)} (${doctor.speciality}) right now.\n\n` +
+    `Want me to add you to the waitlist? I'll message you the moment a slot frees up.`;
+  if (!interactiveOn()) {
+    return `${body}\n\nReply YES to join the waitlist, or MENU to go back.`;
+  }
+  return buttons({
+    header: 'Join waitlist',
+    body,
+    buttons: [
+      { id: RID.CONF_YES, title: '🔔 Join waitlist' },
+      { id: RID.CONF_NO, title: '↩️ Back to menu' }
+    ]
+  });
+};
+
+// WAITLIST_CONFIRM: patient answered the "join the waitlist?" prompt.
+const handleWaitlistConfirm = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
+  if (!isYes(t)) {
+    why(params, 'declined to join waitlist → MENU');
+    return showMenu(params);
+  }
+  await joinWaitlist({
+    clinicId: params.clinicId,
+    patientId: params.patientId,
+    doctorId: data.doctorId ?? null,
+    speciality: data.doctorSpeciality ?? null,
+    date: data.waitlistDate ?? null
+  });
+  await resetSession(params, S.BOOKED);
+  params.action = 'waitlist_join';
+  why(params, 'patient joined the waitlist → BOOKED');
+  return (
+    `🔔 Done — you're on the waitlist${data.doctorName ? ` for ${formatDoctorName(data.doctorName)}` : ''}` +
+    `${data.waitlistDate ? ` (${dayLabel(data.waitlistDate)})` : ''}.\n\n` +
+    `The moment a slot opens I'll message you here — just reply YES then to grab it. Reply MENU anytime.`
+  );
+};
+
+// WAITLIST_OFFER: a freed slot was offered to this patient (session set by
+// autoOfferFreedSlot on a cancellation). YES claims it, NO passes it on.
+const handleWaitlistOffer = async (params: BookingParams, t: string): Promise<BotReply> => {
+  const offer = await pendingOfferFor(params.clinicId, params.patientId);
+  if (!offer) {
+    await resetSession(params, S.MENU);
+    why(params, 'no live waitlist offer (expired/none) → MENU');
+    return prefixReply(`That slot offer has expired. `, await showMenu(params));
+  }
+  if (isNo(t)) {
+    await declineWaitlistOffer(params.clinicId, params.patientId);
+    await resetSession(params, S.MENU);
+    why(params, 'patient passed on the slot offer → rolled to next in line');
+    return `No problem — I've offered it to the next person in line. Reply MENU anytime.`;
+  }
+  if (isYes(t)) {
+    const res = await claimWaitlistOffer(params.clinicId, params.patientId);
+    await resetSession(params, S.BOOKED);
+    if (res.success) {
+      params.action = 'waitlist_claim';
+      why(params, 'patient claimed the waitlist offer → appointment created');
+      return (
+        `✅ Booked! ${formatDoctorName(res.doctor ?? 'your doctor')} on ${dateLabel(res.date as string)} at ${res.time}.\n` +
+        `🟡 ${friendlyStatus('PENDING')}\n\n${params.clinicName} will confirm it shortly. Reply MENU for options.`
+      );
+    }
+    why(params, `waitlist claim failed: ${res.error}`);
+    return `😔 ${res.error}\n\nReply MENU to try booking again.`;
+  }
+  why(params, 'awaiting YES/NO on the live waitlist offer');
+  return (
+    `You have a slot offer waiting — ${dateLabel(offer.offeredDate ? offer.offeredDate.toISOString().slice(0, 10) : '')} at ${offer.offeredTime}.\n\n` +
+    `Reply YES to claim it or NO to pass.`
+  );
 };
 
 // --- Shared: slots (used by both book and reschedule) ---------------------
@@ -756,10 +864,15 @@ const presentSlots = async (
   const page = all.slice(offset, offset + SLOTS_PER_PAGE);
 
   if (page.length === 0) {
+    // Genuine dead-end on a fresh booking → offer the waitlist instead of a dead
+    // "no slots" message. (Paging past the end, or a reschedule, just resets.)
+    if (offset === 0 && mode === 'book') {
+      return offerJoinWaitlist(params, doctor, preferredDate);
+    }
     await resetSession(params);
     why(params, `no open slots for ${doctor.name} (offset ${offset}) → reset to IDLE`);
     return offset === 0
-      ? `Sorry, ${doctor.name} has no open slots in the next ${SLOT_SCAN_DAYS} days. Reply MENU to start over.`
+      ? `Sorry, ${formatDoctorName(doctor.name)} has no open slots right now. Reply MENU to start over.`
       : `No more slots available. Reply MENU to start over.`;
   }
 
@@ -1163,6 +1276,12 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotR
           break;
         case S.RESCHED_SELECT:
           reply = await handleRescheduleSelect(params, data, t);
+          break;
+        case S.WAITLIST_CONFIRM:
+          reply = await handleWaitlistConfirm(params, data, t);
+          break;
+        case S.WAITLIST_OFFER:
+          reply = await handleWaitlistOffer(params, t);
           break;
         case S.HANDOFF:
           // After a handoff stay quiet until a greeting/menu re-engages (handled
