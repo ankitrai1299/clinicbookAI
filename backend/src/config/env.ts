@@ -67,9 +67,9 @@ const envSchema = z.object({
   WA_AI_CONFIDENCE_MIN: z.coerce.number().min(0).max(1).default(0.6),
   // Voice notes: patients can send a WhatsApp voice message; it is transcribed
   // (OpenAI Whisper) and routed through AI understanding even when
-  // WA_AI_RECEPTIONIST is off for text. Comma-separated phone allowlist while
-  // testing (matched on the last 10 digits); use "*" to enable for everyone,
-  // or leave blank to disable the voice feature entirely. Needs OPENAI_API_KEY.
+  // WA_AI_RECEPTIONIST is off for text. Needs OPENAI_API_KEY. Values: blank or
+  // "*"/"all" → everyone (default ON); comma-separated numbers (last-10 match)
+  // → only those; "off" → disabled.
   WA_VOICE_TEST_NUMBERS: z.string().default('')
 });
 

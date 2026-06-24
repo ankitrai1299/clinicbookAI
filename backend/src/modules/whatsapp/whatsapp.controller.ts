@@ -137,8 +137,8 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
       );
     } else if (m.type === 'audio' && m.audioId) {
       // Voice note: transcribe (Whisper), then run it through the inbound pipeline
-      // with AI understanding forced on. Gated to the WA_VOICE_TEST_NUMBERS
-      // allowlist — other numbers' voice notes are ignored (no behaviour change).
+      // with AI understanding forced on. Enabled for everyone by default; set
+      // WA_VOICE_TEST_NUMBERS to a number list to restrict, or "off" to disable.
       const from = m.from;
       const audioId = m.audioId;
       const messageId = m.messageId;
@@ -158,7 +158,7 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
           }
         })().catch((err) => console.error('[WhatsApp] Inbound voice handling failed:', err));
       } else {
-        console.info('[WhatsApp] Voice note ignored (number not in WA_VOICE_TEST_NUMBERS)', { from });
+        console.info('[WhatsApp] Voice note ignored (voice AI disabled or number not allowed)', { from });
       }
     }
   }

@@ -21,25 +21,33 @@ const nationalKey = (s: string): string => {
   return d.length > 10 ? d.slice(-10) : d;
 };
 
-let allowlistCache: { raw: string; set: Set<string>; wildcard: boolean } | null = null;
+const SPECIAL = ['*', 'all', 'off', 'none', 'disabled'];
+let allowlistCache: { raw: string; set: Set<string>; wildcard: boolean; disabled: boolean } | null = null;
 const parsedAllowlist = () => {
   const raw = env.WA_VOICE_TEST_NUMBERS ?? '';
   if (!allowlistCache || allowlistCache.raw !== raw) {
-    const entries = raw.split(',').map((s) => s.trim()).filter(Boolean);
+    const entries = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const disabled = entries.some((e) => e === 'off' || e === 'none' || e === 'disabled');
+    // Default (blank) and "*"/"all" → enabled for EVERYONE. Specific numbers →
+    // restrict to those. "off"/"none"/"disabled" → turn the feature off.
+    const wildcard = !disabled && (entries.length === 0 || entries.includes('*') || entries.includes('all'));
     allowlistCache = {
       raw,
-      wildcard: entries.includes('*'),
-      set: new Set(entries.filter((e) => e !== '*').map(nationalKey))
+      disabled,
+      wildcard,
+      set: new Set(entries.filter((e) => !SPECIAL.includes(e)).map(nationalKey))
     };
   }
   return allowlistCache;
 };
 
-// True when voice transcription should run for this sender. Needs an OpenAI key
-// AND the number on the allowlist (or "*"). Empty allowlist → feature off.
+// True when voice transcription should run for this sender. Enabled for everyone
+// by default (and for "*"/"all"); restrict by listing numbers; disable with
+// "off". The OpenAI key requirement is enforced in transcribeWhatsAppVoice (a
+// missing key yields a "please type" fallback rather than silent dropping).
 export const isVoiceAiEnabledFor = (phone: string): boolean => {
-  if (!env.OPENAI_API_KEY) return false;
-  const { set, wildcard } = parsedAllowlist();
+  const { set, wildcard, disabled } = parsedAllowlist();
+  if (disabled) return false;
   if (wildcard) return true;
   return set.has(nationalKey(phone));
 };
