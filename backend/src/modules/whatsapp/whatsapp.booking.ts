@@ -35,7 +35,7 @@ import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
 import { createAppointment, cancelAppointment, updateAppointment } from '../appointments/appointment.service.js';
-import { getAvailableSlots } from '../../services/scheduling.service.js';
+import { getAvailableSlots, getDateAvailability } from '../../services/scheduling.service.js';
 import { recordWhatsAppAudit } from './whatsapp.service.js';
 import { understand, confidenceMin, type Understanding } from './whatsapp.receptionist.js';
 import {
@@ -55,6 +55,7 @@ const S = {
   MENU: 'MENU',
   SPECIALITY: 'SPECIALITY_SELECTION',
   DOCTOR: 'DOCTOR_SELECTION',
+  DATE: 'DATE_SELECTION',
   SLOT: 'SLOT_SELECTION',
   CONFIRM: 'CONFIRMATION',
   BOOKED: 'BOOKED',
@@ -66,6 +67,8 @@ const S = {
 
 const SLOTS_PER_PAGE = 5;
 const SLOT_SCAN_DAYS = 21;
+// Date picker: how many upcoming calendar days to offer (Practo/Zocdoc-style).
+const DATE_PICKER_DAYS = 7;
 // When the patient hasn't asked for a specific date, cap how many times we show
 // per day so the first list spans SEVERAL upcoming days (today + tomorrow + …)
 // instead of being filled entirely by today's many open slots. When a date IS
@@ -104,6 +107,9 @@ interface SessionData {
   doctorSpeciality?: string;
   slotOptions?: SlotOption[];
   slotOffset?: number;
+  // Dates last shown in the DATE_SELECTION step (one per offered working day),
+  // with each day's open-slot count so a tap on a full day can be re-prompted.
+  dateOptions?: { date: string; available: number }[];
   selected?: SlotOption;
   apptOptions?: ApptOption[];
   cancelApptId?: string;
@@ -207,6 +213,18 @@ const dateLabel = (date: string): string => {
   return `${WD[d.getUTCDay()]}, ${d.getUTCDate()} ${MO[d.getUTCMonth()]}`;
 };
 const slotLabel = (s: SlotOption): string => `${dateLabel(s.date)} at ${s.time}`;
+
+// Friendly day label for the date picker: "Today" / "Tomorrow" / "Wed, 25 Jun".
+const dayLabel = (dateStr: string): string => {
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const diff = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  return dateLabel(dateStr);
+};
 
 // --- DB helpers -----------------------------------------------------------
 const distinctSpecialities = async (clinicId: string): Promise<string[]> => {
@@ -508,8 +526,8 @@ const startBooking = async (
   if (doctorName) {
     const doc = await findDoctorByName(params.clinicId, doctorName);
     if (doc) {
-      why(params, `doctor named "${doctorName}" → present slots for ${doc.name}`);
-      return presentSlots(params, doc, 0, 'book', undefined, preferredDate ?? undefined);
+      why(params, `doctor named "${doctorName}" → ${preferredDate ? 'present slots' : 'present dates'} for ${doc.name}`);
+      return proceedAfterDoctor(params, doc, { mode: 'book', preferredDate });
     }
   }
 
@@ -572,8 +590,8 @@ const presentDoctors = async (
 
   // Single doctor → skip the pointless one-option prompt and present slots.
   if (docs.length === 1) {
-    why(params, `speciality "${speciality}" has a single doctor (${docs[0].name}) → auto-select, present slots`);
-    return presentSlots(params, docs[0], 0, 'book', undefined, preferredDate);
+    why(params, `speciality "${speciality}" has a single doctor (${docs[0].name}) → auto-select, present dates`);
+    return proceedAfterDoctor(params, docs[0], { mode: 'book', preferredDate });
   }
 
   // Multiple doctors → present the list and wait for an explicit choice.
@@ -601,7 +619,102 @@ const handleDoctor = async (params: BookingParams, data: SessionData, t: string)
     why(params, `input "${t}" is not a valid doctor number → re-prompt DOCTOR (no advance)`);
     return `Please choose a doctor by number:\n\n${numbered(opts.map((d) => formatDoctorName(d.name)))}`;
   }
-  return presentSlots(params, opts[n - 1], 0, data.mode ?? 'book', undefined, data.preferredDate);
+  return proceedAfterDoctor(params, opts[n - 1], { mode: data.mode ?? 'book', preferredDate: data.preferredDate });
+};
+
+// --- BOOK/RESCHEDULE: date picker -----------------------------------------
+// After a doctor is chosen, offer a date BEFORE times (Practo/Zocdoc-style). If
+// the patient already named a date (voice/AI extracted it), we skip the picker
+// and jump straight to that day's times. `mode`/`rescheduleApptId` are threaded
+// through so reschedule reuses the exact same date → slot → confirm path.
+const proceedAfterDoctor = async (
+  params: BookingParams,
+  doctor: DoctorOption,
+  opts: { mode: 'book' | 'reschedule'; rescheduleApptId?: string; preferredDate?: string | null }
+): Promise<BotReply> => {
+  if (opts.preferredDate) {
+    return presentSlots(params, doctor, 0, opts.mode, opts.rescheduleApptId, opts.preferredDate);
+  }
+  return presentDates(params, doctor, opts);
+};
+
+const presentDates = async (
+  params: BookingParams,
+  doctor: DoctorOption,
+  opts: { mode: 'book' | 'reschedule'; rescheduleApptId?: string }
+): Promise<BotReply> => {
+  // Build the next N calendar days and ask the DB how many slots each has open.
+  const now = new Date();
+  const days: { date: string; available: number }[] = [];
+  for (let i = 0; i < DATE_PICKER_DAYS; i += 1) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + i));
+    const dateStr = d.toISOString().slice(0, 10);
+    const { working, available } = await getDateAvailability(params.clinicId, doctor.id, dateStr);
+    // Skip days the doctor doesn't work (no schedule / on leave). A WORKING day
+    // is shown even when full — labelled "Fully booked" — per the spec.
+    if (working) days.push({ date: dateStr, available });
+  }
+
+  // No working days in the window → don't dead-end; fall back to the rolling
+  // next-available scan (which looks further out than the 7-day picker).
+  if (days.length === 0) {
+    why(params, `no working days for ${doctor.name} in next ${DATE_PICKER_DAYS} days → next-available scan`);
+    return presentSlots(params, doctor, 0, opts.mode, opts.rescheduleApptId);
+  }
+
+  await saveSession(params, S.DATE, {
+    mode: opts.mode,
+    speciality: doctor.speciality,
+    doctorId: doctor.id,
+    doctorName: doctor.name,
+    doctorSpeciality: doctor.speciality,
+    rescheduleApptId: opts.rescheduleApptId,
+    dateOptions: days
+  });
+  why(params, `doctor "${doctor.name}" → present ${days.length} date(s), await choice`);
+
+  if (!interactiveOn()) {
+    const lines = days.map((d) => `${dayLabel(d.date)} — ${d.available > 0 ? `${d.available} slots` : 'Fully booked'}`);
+    return `Choose a date for ${formatDoctorName(doctor.name)} (${doctor.speciality}):\n\n${numbered(lines)}\n\nReply with a number.`;
+  }
+  return list({
+    header: formatDoctorName(doctor.name),
+    body: `Choose a date (${doctor.speciality}):`,
+    button: 'Choose date',
+    rows: days.slice(0, 10).map((d, i) => ({
+      id: optionId(i + 1),
+      title: dayLabel(d.date),
+      description: d.available > 0 ? `${d.available} slot${d.available === 1 ? '' : 's'} available` : 'Fully booked'
+    }))
+  });
+};
+
+const handleDate = async (params: BookingParams, data: SessionData, t: string): Promise<BotReply> => {
+  const opts = data.dateOptions ?? [];
+  const doctor: DoctorOption = {
+    id: data.doctorId ?? '',
+    name: data.doctorName ?? 'the doctor',
+    speciality: data.doctorSpeciality ?? ''
+  };
+  const n = parseChoice(t);
+  if (!n || !opts[n - 1]) {
+    why(params, `input "${t}" is not a valid date number → re-prompt DATE (no advance)`);
+    const lines = opts.map((d) => `${dayLabel(d.date)} — ${d.available > 0 ? `${d.available} slots` : 'Fully booked'}`);
+    return `Please choose a date by number:\n\n${numbered(lines)}`;
+  }
+
+  const chosen = opts[n - 1];
+  // Tapped a fully-booked day → keep them on the picker (waitlist comes later).
+  if (chosen.available <= 0) {
+    why(params, `date ${chosen.date} is fully booked → re-show date picker`);
+    return prefixReply(
+      `📅 ${dayLabel(chosen.date)} is fully booked. Please pick another date:\n\n`,
+      await presentDates(params, doctor, { mode: data.mode ?? 'book', rescheduleApptId: data.rescheduleApptId })
+    );
+  }
+
+  // A concrete date is chosen → show that day's full set of times.
+  return presentSlots(params, doctor, 0, data.mode ?? 'book', data.rescheduleApptId, chosen.date);
 };
 
 // --- Shared: slots (used by both book and reschedule) ---------------------
@@ -944,13 +1057,11 @@ const handleRescheduleSelect = async (params: BookingParams, data: SessionData, 
     return `Please choose by number which appointment to reschedule:\n\n${numbered(opts.map((a) => a.label))}`;
   }
   const chosen = opts[n - 1];
-  // Reuse the slot-selection flow for the SAME doctor.
-  return presentSlots(
+  // Reuse the date → slot flow for the SAME doctor (no preset date → date picker).
+  return proceedAfterDoctor(
     params,
     { id: chosen.doctorId, name: chosen.doctorName, speciality: chosen.doctorSpeciality },
-    0,
-    'reschedule',
-    chosen.id
+    { mode: 'reschedule', rescheduleApptId: chosen.id }
   );
 };
 
@@ -998,7 +1109,7 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotR
     } else if (isReset(t)) {
       why(params, `input "${t}" matched reset/greeting → MENU`);
       reply = await showMenu(params);
-    } else if (isAbort(t) && (state === S.SPECIALITY || state === S.DOCTOR || state === S.SLOT)) {
+    } else if (isAbort(t) && (state === S.SPECIALITY || state === S.DOCTOR || state === S.DATE || state === S.SLOT)) {
       // Mid-booking "cancel / stop / nahi karna" → abandon this flow, show menu.
       // (At the top level "cancel" instead means the cancel-an-appointment flow,
       // and at CONFIRM/selection steps the handlers' own NO already abandons.)
@@ -1010,6 +1121,9 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotR
           break;
         case S.DOCTOR:
           reply = await handleDoctor(params, data, t);
+          break;
+        case S.DATE:
+          reply = await handleDate(params, data, t);
           break;
         case S.SLOT:
           reply = await handleSlot(params, data, t);

@@ -95,6 +95,37 @@ export const getAvailableSlots = async (
   return slots;
 };
 
+/**
+ * One day's availability summary for a doctor — used by the date picker.
+ *   working   = the doctor has an active schedule that weekday AND isn't on leave
+ *   available = number of still-open slots (0 when fully booked)
+ * A non-working day (no schedule / on leave) is distinct from a fully-booked
+ * working day, so the UI can SKIP the former and label the latter "Fully booked".
+ */
+export const getDateAvailability = async (
+  clinicId: string,
+  doctorId: string,
+  dateStr: string
+): Promise<{ working: boolean; available: number }> => {
+  const date = parseDateUTC(dateStr);
+  if (Number.isNaN(date.getTime())) return { working: false, available: 0 };
+
+  const schedule = await prisma.doctorSchedule.findFirst({
+    where: { clinicId, doctorId, dayOfWeek: date.getUTCDay(), isActive: true },
+    select: { id: true }
+  });
+  if (!schedule) return { working: false, available: 0 };
+
+  const onLeave = await prisma.doctorLeave.findFirst({
+    where: { doctorId, startDate: { lte: date }, endDate: { gte: date } },
+    select: { id: true }
+  });
+  if (onLeave) return { working: false, available: 0 };
+
+  const available = (await getAvailableSlots(clinicId, doctorId, dateStr)).length;
+  return { working: true, available };
+};
+
 /** Whether a specific time string is currently bookable for that doctor/date. */
 export const isSlotAvailable = async (
   clinicId: string,
