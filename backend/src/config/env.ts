@@ -70,7 +70,12 @@ const envSchema = z.object({
   // WA_AI_RECEPTIONIST is off for text. Needs OPENAI_API_KEY. Values: blank or
   // "*"/"all" → everyone (default ON); comma-separated numbers (last-10 match)
   // → only those; "off" → disabled.
-  WA_VOICE_TEST_NUMBERS: z.string().default('')
+  WA_VOICE_TEST_NUMBERS: z.string().default(''),
+  // Whisper language hint for voice notes (ISO-639-1, e.g. "hi", "en"). Voice
+  // auto-detection often mis-fires on short Hindi/Hinglish clips (it picks Urdu
+  // and garbles "doctor" → "cardiologist"), so we pin a language by default.
+  // Set blank to let Whisper auto-detect (best for genuinely multilingual use).
+  WA_VOICE_LANGUAGE: z.string().default('hi')
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

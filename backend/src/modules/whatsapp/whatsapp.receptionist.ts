@@ -76,10 +76,12 @@ export const parsePreferredDate = (text: string): string | null => {
     if (!Number.isNaN(d.getTime()) && d >= base) return toISO(d);
   }
 
-  if (/\b(today|aaj|abhi)\b/.test(t)) return toISO(base);
-  if (/\b(day after tomorrow|parso|parson)\b/.test(t)) return toISO(addDays(base, 2));
+  // Latin + Devanagari variants — Whisper may transcribe Hindi voice notes in
+  // either script, so both must resolve (आज=today, परसों=day-after, कल=tomorrow).
+  if (/\b(today|aaj|abhi)\b/.test(t) || /(आज|अभी)/.test(t)) return toISO(base);
+  if (/\b(day after tomorrow|parso|parson)\b/.test(t) || /(परसों|परसो)/.test(t)) return toISO(addDays(base, 2));
   // "kal" (Hindi) colloquially = tomorrow in a booking context.
-  if (/\b(tomorrow|tmrw|tmrrw|kal)\b/.test(t)) return toISO(addDays(base, 1));
+  if (/\b(tomorrow|tmrw|tmrrw|kal)\b/.test(t) || /(कल)/.test(t)) return toISO(addDays(base, 1));
 
   // Weekday name → the next occurrence on/after today.
   for (let i = 0; i < 7; i += 1) {

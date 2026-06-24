@@ -81,7 +81,19 @@ export const transcribeWhatsAppVoice = async (mediaId: string): Promise<string |
     const ext = mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3' : mimeType.includes('wav') ? 'wav' : 'ogg';
     const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     const file = await toFile(buffer, `voice.${ext}`, { type: mimeType.split(';')[0] });
-    const result = await openai.audio.transcriptions.create({ file, model: 'whisper-1' });
+    // language: short Hindi/Hinglish clips auto-detect badly (Whisper picks Urdu
+    // and mis-hears words like "doctor" → "cardiologist"), so we pin a language
+    // (WA_VOICE_LANGUAGE, default "hi"); blank = auto-detect. The prompt primes
+    // the booking domain WITHOUT naming any speciality/doctor — naming them would
+    // bias Whisper into "hearing" those words when the patient never said them.
+    const language = (env.WA_VOICE_LANGUAGE ?? '').trim() || undefined;
+    const result = await openai.audio.transcriptions.create({
+      file,
+      model: 'whisper-1',
+      ...(language ? { language } : {}),
+      temperature: 0,
+      prompt: 'Patient booking a doctor appointment at an Indian clinic, speaking Hindi and English.'
+    });
 
     const text = (result.text ?? '').trim();
     console.info('[WhatsApp][voice] transcribed', { mediaId, chars: text.length, preview: text.slice(0, 80) });
