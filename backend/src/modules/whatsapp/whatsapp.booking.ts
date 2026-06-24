@@ -66,6 +66,11 @@ const S = {
 
 const SLOTS_PER_PAGE = 5;
 const SLOT_SCAN_DAYS = 21;
+// When the patient hasn't asked for a specific date, cap how many times we show
+// per day so the first list spans SEVERAL upcoming days (today + tomorrow + …)
+// instead of being filled entirely by today's many open slots. When a date IS
+// requested we don't cap — that day's full set of times is shown.
+const SLOTS_MAX_PER_DAY = 2;
 
 // Modernisation toggles. When BOTH are off the flow is the legacy deterministic
 // menu bot (no AI, no personalisation, plain numbered text).
@@ -258,7 +263,10 @@ const collectUpcomingSlots = async (
   clinicId: string,
   doctorId: string,
   needed: number,
-  fromDate?: string
+  fromDate?: string,
+  // Optional cap on slots taken from any single day, so the list spreads across
+  // multiple upcoming days instead of clumping on the first day with openings.
+  maxPerDay?: number
 ): Promise<SlotOption[]> => {
   const out: SlotOption[] = [];
   const now = new Date();
@@ -274,7 +282,8 @@ const collectUpcomingSlots = async (
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + i));
     const dateStr = d.toISOString().slice(0, 10);
     const times = await getAvailableSlots(clinicId, doctorId, dateStr);
-    for (const time of times) {
+    const dayTimes = maxPerDay && maxPerDay > 0 ? times.slice(0, maxPerDay) : times;
+    for (const time of dayTimes) {
       out.push({ date: dateStr, time });
       if (out.length >= needed) break;
     }
@@ -604,7 +613,10 @@ const presentSlots = async (
   rescheduleApptId?: string,
   preferredDate?: string
 ): Promise<BotReply> => {
-  const all = await collectUpcomingSlots(params.clinicId, doctor.id, offset + SLOTS_PER_PAGE + 1, preferredDate);
+  // No specific date requested → spread a few times across several upcoming days
+  // so the list isn't filled by today alone. A requested date shows its full times.
+  const maxPerDay = preferredDate ? undefined : SLOTS_MAX_PER_DAY;
+  const all = await collectUpcomingSlots(params.clinicId, doctor.id, offset + SLOTS_PER_PAGE + 1, preferredDate, maxPerDay);
   const page = all.slice(offset, offset + SLOTS_PER_PAGE);
 
   if (page.length === 0) {
