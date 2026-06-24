@@ -5,16 +5,16 @@ import { processReminders } from '../services/reminder.service.js';
 // Runs every 10 minutes — window size in reminder.service.ts matches this interval
 const CRON_EXPRESSION = '*/10 * * * *';
 
-// Reminders are OFF by default. The reminder time math treats the stored
-// "HH:MM AM/PM" as UTC, but appointment times are clinic-local (IST), so
-// reminders fire ~5.5h off and patients got a wrong "your appointment is in
-// 1 hour" message. Until appointment times are timezone-aware, keep this
-// disabled. Re-enable by setting REMINDERS_ENABLED=true once that is fixed.
-const remindersEnabled = process.env.REMINDERS_ENABLED === 'true';
+// Reminders are ON by default now that appointment times are timezone-aware:
+// reminder timing uses clinicLocalInstant() (IST → true UTC instant), so the
+// earlier ~5.5h drift is fixed. Set REMINDERS_ENABLED=false to turn them off.
+// Only the 1-hour reminder fires by default; the 24h one is opt-in via
+// REMINDER_24H_ENABLED=true (see reminder.service.ts).
+const remindersEnabled = process.env.REMINDERS_ENABLED !== 'false';
 
 export const startReminderCron = (): void => {
   if (!remindersEnabled) {
-    console.info('[ReminderCron] DISABLED (set REMINDERS_ENABLED=true to enable once times are timezone-aware).');
+    console.info('[ReminderCron] DISABLED (REMINDERS_ENABLED=false).');
     return;
   }
 

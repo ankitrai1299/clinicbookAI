@@ -72,6 +72,22 @@ export const labelToMinutes = (label: string): number | null => {
   return h * 60 + parseInt(m[2], 10);
 };
 
+// Asia/Kolkata is a FIXED offset (UTC+5:30, no DST) — kept in sync with
+// CLINIC_TIMEZONE above. Used to turn a stored appointment (UTC-midnight date +
+// clinic-local "HH:MM AM/PM") into its true UTC instant, so reminder timing math
+// compares against Date.now() correctly (the old code treated the local time as
+// UTC and fired reminders ~5.5h off).
+const CLINIC_UTC_OFFSET_MIN = 330;
+
+// Real UTC instant of an appointment. `date` is the UTC-midnight calendar day;
+// `timeLabel` is the clinic-local time. instant = local wall-clock − offset.
+export const clinicLocalInstant = (date: Date, timeLabel: string): Date => {
+  const local = labelToMinutes(timeLabel) ?? 0;
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, local - CLINIC_UTC_OFFSET_MIN, 0, 0)
+  );
+};
+
 // Defense-in-depth guard used by the booking write path: true when (dateStr,
 // timeLabel) is at or before the current clinic-local moment. Unparseable times
 // return false (other validation handles those) so we never block a valid book.

@@ -3,34 +3,17 @@ import { AppointmentStatus, Prisma, ReminderType } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { formatDoctorName, normalizeDoctorName } from '../utils/doctorName.js';
 import { sendTemplatedOrSession } from '../modules/whatsapp/whatsapp.service.js';
+import { clinicLocalInstant } from './scheduling.service.js';
 import {
   AppointmentTemplateData,
   WhatsAppTemplate,
   appointmentReminderComponents
 } from '../modules/whatsapp/whatsapp.templates.js';
 
-// Appointment datetime = appointmentDate (UTC midnight) + appointmentTime. Times
-// are stored in the canonical "HH:MM AM/PM" shape (e.g. "02:30 PM"); this parser
-// also tolerates 24h "HH:MM". The previous version split on ":" and treated
-// "02:30 PM" as 24h, yielding NaN minutes / a wrong hour — so reminders never
-// fired correctly. This is the fix.
-const getAppointmentDateTime = (date: Date, timeStr: string): Date => {
-  const dt = new Date(date);
-  const m = timeStr.trim().toUpperCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
-  if (!m) {
-    dt.setUTCHours(0, 0, 0, 0);
-    return dt;
-  }
-
-  let hours = parseInt(m[1], 10);
-  const minutes = m[2] ? parseInt(m[2], 10) : 0;
-  const ampm = m[3];
-  if (ampm === 'PM' && hours !== 12) hours += 12;
-  if (ampm === 'AM' && hours === 12) hours = 0;
-
-  dt.setUTCHours(hours, minutes, 0, 0);
-  return dt;
-};
+// The 24-hour reminder is opt-in (set REMINDER_24H_ENABLED=true). The 1-hour
+// reminder always runs when the cron is enabled — that's the one clinics asked
+// for ("ek ghanta pehle").
+const reminder24hEnabled = process.env.REMINDER_24H_ENABLED === 'true';
 
 const CRON_WINDOW_MS = 10 * 60 * 1000; // match cron interval — prevents double-sends
 
@@ -137,7 +120,7 @@ export const processReminders = async (): Promise<void> => {
 
   for (const appt of appointments) {
     try {
-      const apptDateTime = getAppointmentDateTime(appt.appointmentDate, appt.appointmentTime);
+      const apptDateTime = clinicLocalInstant(appt.appointmentDate, appt.appointmentTime);
       const dateLabel = appt.appointmentDate.toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
@@ -160,8 +143,8 @@ export const processReminders = async (): Promise<void> => {
         clinicName
       };
 
-      // 24-hour reminder
-      if (isInReminderWindow(apptDateTime, 24 * 60 * 60 * 1000)) {
+      // 24-hour reminder (opt-in via REMINDER_24H_ENABLED)
+      if (reminder24hEnabled && isInReminderWindow(apptDateTime, 24 * 60 * 60 * 1000)) {
         const existing = appt.reminders.find(r => r.type === ReminderType.REMINDER_24H);
         if (!existing?.sent) {
           const message = build24hMessage(patientName, doctorName, clinicName, dateLabel, appt.appointmentTime);
