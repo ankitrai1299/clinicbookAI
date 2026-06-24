@@ -8,7 +8,7 @@ import {
 } from '../whatsapp/whatsapp.notifications.js';
 import { recordNotification } from '../notifications/notification.service.js';
 import { autoOfferFreedSlot } from '../waitlist/waitlist.service.js';
-import { canonicalizeTime } from '../../services/scheduling.service.js';
+import { canonicalizeTime, isPastSlot } from '../../services/scheduling.service.js';
 import { runPostVisitWorkflow } from './postVisit.service.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
 
@@ -186,6 +186,14 @@ export const createAppointment = async (
   const appointmentDate = normalizeDate(input.appointmentDate);
   const appointmentTime = normalizeTime(input.appointmentTime);
 
+  // P0 guard (defense-in-depth): refuse any slot at/before the current clinic
+  // moment. Every booking path — WhatsApp FSM, staff dashboard, and waitlist
+  // promotion (claim/convert) — funnels through here, so a past slot can never
+  // be persisted even if an upstream UI ever offered one.
+  if (isPastSlot(appointmentDate.toISOString().slice(0, 10), appointmentTime)) {
+    throw new AppError('That appointment time is in the past. Please pick a future slot.', 400);
+  }
+
   // Atomic slot lock. Re-check inside a transaction that no active (non-cancelled)
   // appointment already holds this doctor/date/time, then create. The partial
   // unique index "Appointment_active_slot_key" is the final backstop against a
@@ -294,6 +302,17 @@ export const updateAppointment = async (
       input.doctorId ?? current.doctorId,
       input.patientId ?? current.patientId
     );
+  }
+
+  // P0 guard: a reschedule (date and/or time change) must land in the future.
+  // A status-only change (e.g. confirm/complete) is exempt — it doesn't move the
+  // slot — so we only check when a new date or time is supplied.
+  if (input.appointmentDate !== undefined || input.appointmentTime !== undefined) {
+    const newDate = input.appointmentDate !== undefined ? normalizeDate(input.appointmentDate) : current.appointmentDate;
+    const newTime = input.appointmentTime !== undefined ? normalizeTime(input.appointmentTime) : current.appointmentTime;
+    if (isPastSlot(newDate.toISOString().slice(0, 10), newTime)) {
+      throw new AppError('That appointment time is in the past. Please pick a future slot.', 400);
+    }
   }
 
   // Race guard for status changes (e.g. a double-clicked "Confirm" on the

@@ -20,6 +20,7 @@
 import { env } from '../../config/env.js';
 import { classifyIntent } from './whatsapp.intent.js';
 import { understandPatientMessage } from '../ai/ai.service.js';
+import { clinicNow } from '../../services/scheduling.service.js';
 
 export type ReceptionistIntent =
   | 'book'
@@ -52,9 +53,12 @@ const WEEKDAY_ABBR = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 const toISO = (d: Date): string => d.toISOString().slice(0, 10);
+// "Today" in the CLINIC's timezone (Asia/Kolkata), so "today"/"kal"/"friday"
+// resolve to the same calendar day the slot engine uses — not the UTC day, which
+// is off by one for ~5.5h every night in IST.
 const todayUTC = (): Date => {
-  const n = new Date();
-  return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
+  const [y, m, d] = clinicNow().dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
 };
 const addDays = (d: Date, n: number): Date => {
   const x = new Date(d);

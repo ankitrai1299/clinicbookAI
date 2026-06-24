@@ -35,7 +35,7 @@ import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
 import { createAppointment, cancelAppointment, updateAppointment } from '../appointments/appointment.service.js';
-import { getAvailableSlots, getDateAvailability } from '../../services/scheduling.service.js';
+import { getAvailableSlots, getDateAvailability, clinicNow } from '../../services/scheduling.service.js';
 import { recordWhatsAppAudit } from './whatsapp.service.js';
 import { understand, confidenceMin, type Understanding } from './whatsapp.receptionist.js';
 import {
@@ -214,10 +214,16 @@ const dateLabel = (date: string): string => {
 };
 const slotLabel = (s: SlotOption): string => `${dateLabel(s.date)} at ${s.time}`;
 
+// Clinic-local "today" as a UTC-midnight Date, so all day math (pickers, labels)
+// agrees with the IST-based slot availability instead of drifting near UTC midnight.
+const clinicTodayBase = (): Date => {
+  const [y, m, d] = clinicNow().dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+};
+
 // Friendly day label for the date picker: "Today" / "Tomorrow" / "Wed, 25 Jun".
 const dayLabel = (dateStr: string): string => {
-  const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const today = clinicTodayBase();
   const d = new Date(`${dateStr}T00:00:00.000Z`);
   if (Number.isNaN(d.getTime())) return dateStr;
   const diff = Math.round((d.getTime() - today.getTime()) / 86_400_000);
@@ -287,8 +293,7 @@ const collectUpcomingSlots = async (
   maxPerDay?: number
 ): Promise<SlotOption[]> => {
   const out: SlotOption[] = [];
-  const now = new Date();
-  const today0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const today0 = clinicTodayBase();
   let startOffset = 0;
   if (fromDate) {
     const from = new Date(`${fromDate}T00:00:00.000Z`);
@@ -297,7 +302,7 @@ const collectUpcomingSlots = async (
     }
   }
   for (let i = startOffset; i < startOffset + SLOT_SCAN_DAYS && out.length < needed; i += 1) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + i));
+    const d = new Date(today0.getTime() + i * 86_400_000);
     const dateStr = d.toISOString().slice(0, 10);
     const times = await getAvailableSlots(clinicId, doctorId, dateStr);
     const dayTimes = maxPerDay && maxPerDay > 0 ? times.slice(0, maxPerDay) : times;
@@ -644,15 +649,22 @@ const presentDates = async (
   opts: { mode: 'book' | 'reschedule'; rescheduleApptId?: string }
 ): Promise<BotReply> => {
   // Build the next N calendar days and ask the DB how many slots each has open.
-  const now = new Date();
+  // getDateAvailability counts only FUTURE slots (clinic-local), so "today" once
+  // its last slot has passed reports available:0.
+  const today0 = clinicTodayBase();
+  const todayStr = clinicNow().dateStr;
   const days: { date: string; available: number }[] = [];
   for (let i = 0; i < DATE_PICKER_DAYS; i += 1) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + i));
+    const d = new Date(today0.getTime() + i * 86_400_000);
     const dateStr = d.toISOString().slice(0, 10);
     const { working, available } = await getDateAvailability(params.clinicId, doctor.id, dateStr);
-    // Skip days the doctor doesn't work (no schedule / on leave). A WORKING day
-    // is shown even when full — labelled "Fully booked" — per the spec.
-    if (working) days.push({ date: dateStr, available });
+    // Skip days the doctor doesn't work (no schedule / on leave). Also HIDE today
+    // once all of today's slots are over (available:0) — there is nothing left to
+    // book today. A FUTURE working day that is full is still shown, labelled
+    // "Fully booked".
+    if (!working) continue;
+    if (dateStr === todayStr && available === 0) continue;
+    days.push({ date: dateStr, available });
   }
 
   // No working days in the window → don't dead-end; fall back to the rolling
