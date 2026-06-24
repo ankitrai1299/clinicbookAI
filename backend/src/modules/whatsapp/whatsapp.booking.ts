@@ -507,8 +507,8 @@ const handleHandoff = async (params: BookingParams, reason: string): Promise<Bot
 const startBookAgain = async (params: BookingParams): Promise<BotReply> => {
   const lastDoc = await lastDoctorForPatient(params.clinicId, params.patientId);
   if (!lastDoc) return startBooking(params);
-  why(params, `book-again → last doctor ${lastDoc.name}, present slots`);
-  return presentSlots(params, lastDoc, 0, 'book');
+  why(params, `book-again → last doctor ${lastDoc.name}, present dates`);
+  return proceedAfterDoctor(params, lastDoc, { mode: 'book' });
 };
 
 // --- BOOK: speciality -----------------------------------------------------
