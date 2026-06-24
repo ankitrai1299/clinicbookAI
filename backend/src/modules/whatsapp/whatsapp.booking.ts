@@ -221,6 +221,17 @@ const clinicTodayBase = (): Date => {
   return new Date(Date.UTC(y, m - 1, d));
 };
 
+// Patient-facing status wording. The patient must NEVER see raw DB enums
+// (PENDING/CONFIRMED/…) — always map to friendly text before it goes out.
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Awaiting Clinic Confirmation',
+  CONFIRMED: 'Confirmed',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+  NO_SHOW: 'Missed'
+};
+export const friendlyStatus = (status: string): string => STATUS_LABEL[status] ?? 'Awaiting Clinic Confirmation';
+
 // Friendly day label for the date picker: "Today" / "Tomorrow" / "Wed, 25 Jun".
 const dayLabel = (dateStr: string): string => {
   const today = clinicTodayBase();
@@ -888,8 +899,8 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
       );
       return (
         `⚠️ You already have an appointment with ${formatDoctorName(conflict.doctor?.name)} ` +
-        `on ${slotLabel({ date: selected.date, time: conflict.appointmentTime })} [${conflict.status}].\n\n` +
-        `I didn't book a duplicate. Reply 2 to view your appointments, or 4 to reschedule.`
+        `on ${slotLabel({ date: selected.date, time: conflict.appointmentTime })} (${friendlyStatus(conflict.status)}).\n\n` +
+        `I didn't book a duplicate. Reply MENU to view or reschedule it.`
       );
     }
 
@@ -909,8 +920,9 @@ const handleConfirm = async (params: BookingParams, data: SessionData, t: string
     return (
       `✅ Appointment request received!\n\n` +
       `👨‍⚕️ ${formatDoctorName(data.doctorName)} (${data.doctorSpeciality})\n` +
-      `📅 ${slotLabel(selected)}\n\n` +
-      `Status: PENDING — ${params.clinicName} will confirm shortly and you'll get a confirmation message. ` +
+      `📅 ${slotLabel(selected)}\n` +
+      `🟡 ${friendlyStatus('PENDING')}\n\n` +
+      `${params.clinicName} will confirm it shortly and you'll get a confirmation message here. ` +
       `Reply MENU for more options.`
     );
   } catch (err) {
@@ -934,12 +946,12 @@ const doCheck = async (params: BookingParams): Promise<BotReply> => {
   await resetSession(params, S.MENU);
   why(params, `menu option 2 → listed ${appts.length} appointment(s), back to MENU`);
   if (appts.length === 0) {
-    return `You have no upcoming appointments. Reply 1 to book one.`;
+    return `You have no upcoming appointments. Reply MENU to book one.`;
   }
   const lines = appts.map(
     (a) =>
       `${formatDoctorName(a.doctor?.name)} (${a.doctor?.speciality ?? ''}) — ` +
-      `${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime} [${a.status}]`
+      `${dateLabel(a.appointmentDate.toISOString().slice(0, 10))} at ${a.appointmentTime} (${friendlyStatus(a.status)})`
   );
   return `Your upcoming appointments:\n\n${numbered(lines)}\n\nReply MENU for options.`;
 };
@@ -1040,7 +1052,7 @@ const handleCancelConfirm = async (params: BookingParams, data: SessionData, t: 
   await resetSession(params, S.BOOKED);
   params.action = 'cancel';
   why(params, 'patient replied YES → appointment CANCELLED, terminal state BOOKED');
-  return `Your appointment has been cancelled. Reply 1 to book a new one, or MENU for options.`;
+  return `Your appointment has been cancelled. Reply MENU to book a new one.`;
 };
 
 // --- RESCHEDULE -----------------------------------------------------------
@@ -1049,7 +1061,7 @@ const startReschedule = async (params: BookingParams): Promise<BotReply> => {
   if (appts.length === 0) {
     await resetSession(params, S.MENU);
     why(params, 'menu option 4 but no appointments to reschedule → MENU');
-    return `You have no upcoming appointments to reschedule. Reply 1 to book one.`;
+    return `You have no upcoming appointments to reschedule. Reply MENU to book one.`;
   }
   const apptOptions = apptOptionsFrom(appts);
   await saveSession(params, S.RESCHED_SELECT, { mode: 'reschedule', apptOptions });

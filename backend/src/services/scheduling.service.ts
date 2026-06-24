@@ -49,10 +49,17 @@ export const clinicNow = (at: Date = new Date()): { dateStr: string; minutes: nu
   return { dateStr: `${get('year')}-${get('month')}-${get('day')}`, minutes: hh * 60 + parseInt(get('minute'), 10) };
 };
 
-// PURE: is a slot (its minutes-from-midnight, on slotDateStr) still in the
-// future relative to `now`? A past calendar day → false; a future day → true;
-// today → only times strictly later than now. This is the single source of
-// truth for "never show/book a past slot" and is exercised directly by tests.
+// Minimum lead time before a slot can be offered/booked. A patient can't book a
+// slot that starts in the next 30 minutes (no walk-up bookings; gives reception
+// + the patient travel time). e.g. at 15:23 the 15:30 slot is hidden, 16:00 is
+// the first bookable one.
+export const BOOKING_BUFFER_MIN = 30;
+
+// PURE: is a slot (its minutes-from-midnight, on slotDateStr) bookable relative
+// to `now`, honouring the booking buffer? A past calendar day → false; a future
+// day → true; today → only times at least BOOKING_BUFFER_MIN ahead of now. This
+// is the single source of truth for "never show/book a past or near-past slot"
+// and is exercised directly by tests.
 export const slotIsFuture = (
   slotMinutes: number,
   slotDateStr: string,
@@ -60,7 +67,7 @@ export const slotIsFuture = (
 ): boolean => {
   if (slotDateStr < now.dateStr) return false;
   if (slotDateStr > now.dateStr) return true;
-  return slotMinutes > now.minutes;
+  return slotMinutes >= now.minutes + BOOKING_BUFFER_MIN;
 };
 
 // Parse a stored slot label ("HH:MM AM/PM") back to minutes-from-midnight.

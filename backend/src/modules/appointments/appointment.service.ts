@@ -20,6 +20,40 @@ const normalizeTime = (time: string): string => canonicalizeTime(time) ?? time.t
 const whenLabel = (appt: AppointmentRecord): string =>
   `${appt.appointmentDate.toISOString().slice(0, 10)} at ${appt.appointmentTime}`;
 
+// ---------------------------------------------------------------------------
+// Appointment lifecycle guard. The ONLY legal transitions are:
+//   PENDING   → CONFIRMED | CANCELLED | NO_SHOW
+//   CONFIRMED → COMPLETED | CANCELLED | NO_SHOW
+//   CANCELLED → (terminal)   COMPLETED → (terminal)   NO_SHOW → (terminal)
+// Terminal states have NO outgoing transitions, so a completed or cancelled
+// appointment can never be reopened/reactivated. isValidTransition is pure
+// (unit-tested); assertTransition is the throwing guard used by write paths.
+// ---------------------------------------------------------------------------
+const ALLOWED_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
+  [AppointmentStatus.PENDING]: [AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
+  [AppointmentStatus.CONFIRMED]: [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
+  [AppointmentStatus.CANCELLED]: [],
+  [AppointmentStatus.COMPLETED]: [],
+  [AppointmentStatus.NO_SHOW]: []
+};
+
+export const isValidTransition = (from: AppointmentStatus, to: AppointmentStatus): boolean =>
+  from === to || ALLOWED_TRANSITIONS[from].includes(to);
+
+const FRIENDLY = {
+  PENDING: 'awaiting confirmation',
+  CONFIRMED: 'confirmed',
+  CANCELLED: 'cancelled',
+  COMPLETED: 'completed',
+  NO_SHOW: 'missed'
+} as const;
+
+const assertTransition = (from: AppointmentStatus, to: AppointmentStatus): void => {
+  if (!isValidTransition(from, to)) {
+    throw new AppError(`Cannot move a ${FRIENDLY[from]} appointment to ${FRIENDLY[to]}.`, 409);
+  }
+};
+
 // Central place for everything that must happen when an appointment's status
 // transitions. Keeps the WhatsApp + dashboard-notification side-effects in ONE
 // spot so every path (dashboard approve/reject, AI cancel, PATCH) behaves the
@@ -323,6 +357,12 @@ export const updateAppointment = async (
   // with no duplicate WhatsApp confirmation.
   const statusChanging = input.status !== undefined && input.status !== current.status;
 
+  // Lifecycle guard: reject illegal status jumps (e.g. reopening a completed or
+  // cancelled appointment, or completing one that was never confirmed).
+  if (statusChanging) {
+    assertTransition(current.status, input.status as AppointmentStatus);
+  }
+
   let appointment: AppointmentRecord;
   try {
     appointment = await prisma.appointment.update({
@@ -392,6 +432,13 @@ export const cancelAppointment = async (clinicId: string, id: string): Promise<A
   if (!prev) {
     throw new AppError('Appointment not found', 404);
   }
+
+  // Already cancelled → idempotent no-op (no duplicate side-effects).
+  if (prev.status === AppointmentStatus.CANCELLED) {
+    return getSingleAppointment(clinicId, id);
+  }
+  // Can't cancel a completed (or no-show) appointment.
+  assertTransition(prev.status, AppointmentStatus.CANCELLED);
 
   const appointment = await prisma.appointment.update({
     where: { id },
@@ -466,7 +513,19 @@ export const completeAppointment = async (
 };
 
 export const markNoShowAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  await ensureAppointmentExists(clinicId, id);
+  const current = await prisma.appointment.findFirst({
+    where: { id, clinicId },
+    select: { status: true }
+  });
+  if (!current) {
+    throw new AppError('Appointment not found', 404);
+  }
+  if (current.status === AppointmentStatus.NO_SHOW) {
+    return getSingleAppointment(clinicId, id);
+  }
+  // Only a pending/confirmed appointment can be marked no-show — never a
+  // completed or cancelled one.
+  assertTransition(current.status, AppointmentStatus.NO_SHOW);
 
   return prisma.appointment.update({
     where: { id },

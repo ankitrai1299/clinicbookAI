@@ -19,7 +19,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const prisma = new PrismaClient({ log: [] });
 
-const { slotIsFuture, isPastSlot, clinicNow, labelToMinutes, getAvailableSlots } = await import(
+const { slotIsFuture, isPastSlot, clinicNow, labelToMinutes, getAvailableSlots, BOOKING_BUFFER_MIN } = await import(
   '../src/services/scheduling.service.js'
 );
 
@@ -58,6 +58,13 @@ const run = async () => {
   const futureToday = daySlots.filter((s) => slotIsFuture(m(s), '2026-06-24', clinicNow(new Date('2026-06-24T17:30:00.000Z')))); // now = 23:00 IST
   ok(futureToday.length === 0, 'Test 3: at 23:00 IST every 09:00–15:00 slot is gone → today UNAVAILABLE');
 
+  // --- 30-minute booking buffer (P1-1) -----------------------------------
+  console.log(`\n30-minute booking buffer (BOOKING_BUFFER_MIN=${BOOKING_BUFFER_MIN}) — now = 3:23 PM:`);
+  ok(slotIsFuture(m('03:30 PM'), '2026-06-24', now) === false, 'Buffer: 3:30 PM HIDDEN (only 7 min ahead, < 30)');
+  ok(isPastSlot('2026-06-24', '03:30 PM', AT_1523_IST) === true, 'Buffer: cannot BOOK 3:30 PM at 3:23 PM');
+  ok(slotIsFuture(m('03:53 PM'), '2026-06-24', now) === true, 'Buffer: exactly +30 min (3:53 PM) is the first bookable');
+  ok(slotIsFuture(m('04:00 PM'), '2026-06-24', now) === true, 'Buffer: 4:00 PM shown (matches the spec example)');
+
   // --- Boundary + future/past day behaviour ------------------------------
   console.log('\nBoundary & date behaviour:');
   ok(slotIsFuture(now.minutes, '2026-06-24', now) === false, 'A slot exactly == now is NOT offered');
@@ -80,9 +87,9 @@ const run = async () => {
       const at = new Date(`${dateStr}T07:30:00.000Z`); // 13:00 IST on that date
       const slots = await getAvailableSlots(clinicId, doctor.id, dateStr, at);
       if (slots.length === 0) continue; // non-working / fully past → try next day
-      const cutoff = clinicNow(at).minutes;
-      const anyPast = slots.some((s) => (labelToMinutes(s) ?? 0) <= cutoff);
-      ok(!anyPast, `${doctor.name} ${dateStr} @13:00 IST → ${slots.length} slots, earliest ${slots[0]}, none ≤ 13:00`);
+      const cutoff = clinicNow(at).minutes + BOOKING_BUFFER_MIN; // 13:00 + 30 = 13:30
+      const anyTooSoon = slots.some((s) => (labelToMinutes(s) ?? 0) < cutoff);
+      ok(!anyTooSoon, `${doctor.name} ${dateStr} @13:00 IST → ${slots.length} slots, earliest ${slots[0]}, none before 13:30 (buffer)`);
       tested = true;
     }
     if (!tested) console.log('  (skipped — no working day with slots found in 14 days)');
