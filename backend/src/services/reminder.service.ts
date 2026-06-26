@@ -53,6 +53,10 @@ const dispatchReminder = async (params: {
   // (sent:false); the @@unique([appointmentId, type]) index makes a concurrent
   // run's insert fail with P2002, so only one cron run proceeds to actually
   // send — preventing duplicate reminders even if two runs overlap.
+  // Reminder has NO clinicId column — it is owned via appointmentId (itself
+  // clinic-scoped), so the tenant engine does not apply here and these use the
+  // raw client by design. Tenant safety comes from the appointmentId, which was
+  // produced by the clinic-scoped appointment scan in processReminders.
   let reminderId = params.existingReminderId;
   if (!reminderId) {
     try {
@@ -99,6 +103,11 @@ export const processReminders = async (): Promise<void> => {
   const dayAfterTomorrowUtcMidnight = new Date(todayUtcMidnight);
   dayAfterTomorrowUtcMidnight.setUTCDate(dayAfterTomorrowUtcMidnight.getUTCDate() + 2);
 
+  // DELIBERATE cross-tenant scan: the reminder cron sweeps CONFIRMED
+  // appointments across ALL clinics, so it uses the raw client. Every row carries
+  // its own clinicId (appt.clinicId), which is threaded into the per-clinic
+  // WhatsApp send below — so a clinic's reminder always uses that clinic's
+  // context and no cross-tenant leak is possible.
   const appointments = await prisma.appointment.findMany({
     where: {
       // Only CONFIRMED appointments get reminders. PENDING (awaiting clinic

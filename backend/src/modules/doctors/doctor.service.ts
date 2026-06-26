@@ -1,12 +1,20 @@
-import { prisma } from '../../config/prisma.js';
+import { forClinic, type TenantClient } from '../../config/tenantPrisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { CreateDoctorInput, CreateLeaveInput, SetScheduleInput, UpdateDoctorInput } from './doctor.schemas.js';
 
-export const getDoctors = (clinicId: string) =>
-  prisma.doctor.findMany({ where: { clinicId }, orderBy: { name: 'asc' } });
+// Every query in this module goes through a clinic-scoped client (forClinic).
+// The clinicId is injected into every where/data automatically, so cross-clinic
+// access is impossible even if a where clause forgets it. The explicit clinicId
+// filters below are kept as defence-in-depth (and to document intent).
+
+export const getDoctors = (clinicId: string) => {
+  const db = forClinic(clinicId);
+  return db.doctor.findMany({ where: { clinicId }, orderBy: { name: 'asc' } });
+};
 
 export const createDoctor = async (clinicId: string, input: CreateDoctorInput) => {
-  const existing = await prisma.doctor.findFirst({
+  const db = forClinic(clinicId);
+  const existing = await db.doctor.findFirst({
     where: { clinicId, name: input.name.trim() },
     select: { id: true },
   });
@@ -15,7 +23,7 @@ export const createDoctor = async (clinicId: string, input: CreateDoctorInput) =
     throw new AppError('A doctor with this name already exists in this clinic', 409);
   }
 
-  return prisma.doctor.create({
+  return db.doctor.create({
     data: {
       clinicId,
       name: input.name.trim(),
@@ -27,24 +35,25 @@ export const createDoctor = async (clinicId: string, input: CreateDoctorInput) =
   });
 };
 
-const ensureDoctor = async (clinicId: string, id: string) => {
-  const doctor = await prisma.doctor.findFirst({ where: { id, clinicId }, select: { id: true } });
+const ensureDoctor = async (db: TenantClient, id: string) => {
+  const doctor = await db.doctor.findFirst({ where: { id }, select: { id: true } });
   if (!doctor) throw new AppError('Doctor not found', 404);
 };
 
 export const updateDoctor = async (clinicId: string, id: string, input: UpdateDoctorInput) => {
-  await ensureDoctor(clinicId, id);
+  const db = forClinic(clinicId);
+  await ensureDoctor(db, id);
 
   if (input.name !== undefined) {
-    const conflict = await prisma.doctor.findFirst({
+    const conflict = await db.doctor.findFirst({
       where: { clinicId, name: input.name.trim(), NOT: { id } },
       select: { id: true },
     });
     if (conflict) throw new AppError('A doctor with this name already exists in this clinic', 409);
   }
 
-  return prisma.doctor.update({
-    where: { id },
+  return db.doctor.update({
+    where: { id, clinicId },
     data: {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.speciality !== undefined ? { speciality: input.speciality.trim() } : {}),
@@ -56,15 +65,17 @@ export const updateDoctor = async (clinicId: string, id: string, input: UpdateDo
 };
 
 export const deleteDoctor = async (clinicId: string, id: string) => {
-  await ensureDoctor(clinicId, id);
-  await prisma.doctor.delete({ where: { id } });
+  const db = forClinic(clinicId);
+  await ensureDoctor(db, id);
+  await db.doctor.delete({ where: { id, clinicId } });
 };
 
 // --- Weekly schedule -------------------------------------------------------
 
 export const getDoctorSchedule = async (clinicId: string, id: string) => {
-  await ensureDoctor(clinicId, id);
-  return prisma.doctorSchedule.findMany({
+  const db = forClinic(clinicId);
+  await ensureDoctor(db, id);
+  return db.doctorSchedule.findMany({
     where: { clinicId, doctorId: id },
     orderBy: { dayOfWeek: 'asc' },
   });
@@ -72,16 +83,17 @@ export const getDoctorSchedule = async (clinicId: string, id: string) => {
 
 // Replace the whole weekly schedule in one transaction (idempotent "set").
 export const setDoctorSchedule = async (clinicId: string, id: string, input: SetScheduleInput) => {
-  await ensureDoctor(clinicId, id);
+  const db = forClinic(clinicId);
+  await ensureDoctor(db, id);
 
   const days = input.entries.map((e) => e.dayOfWeek);
   if (new Set(days).size !== days.length) {
     throw new AppError('Duplicate weekday in schedule', 400);
   }
 
-  await prisma.$transaction([
-    prisma.doctorSchedule.deleteMany({ where: { doctorId: id } }),
-    prisma.doctorSchedule.createMany({
+  await db.$transaction([
+    db.doctorSchedule.deleteMany({ where: { doctorId: id, clinicId } }),
+    db.doctorSchedule.createMany({
       data: input.entries.map((e) => ({
         clinicId,
         doctorId: id,
@@ -94,7 +106,7 @@ export const setDoctorSchedule = async (clinicId: string, id: string, input: Set
     }),
   ]);
 
-  return prisma.doctorSchedule.findMany({
+  return db.doctorSchedule.findMany({
     where: { clinicId, doctorId: id },
     orderBy: { dayOfWeek: 'asc' },
   });
@@ -103,16 +115,18 @@ export const setDoctorSchedule = async (clinicId: string, id: string, input: Set
 // --- Leaves ----------------------------------------------------------------
 
 export const getDoctorLeaves = async (clinicId: string, id: string) => {
-  await ensureDoctor(clinicId, id);
-  return prisma.doctorLeave.findMany({
+  const db = forClinic(clinicId);
+  await ensureDoctor(db, id);
+  return db.doctorLeave.findMany({
     where: { clinicId, doctorId: id },
     orderBy: { startDate: 'asc' },
   });
 };
 
 export const addDoctorLeave = async (clinicId: string, id: string, input: CreateLeaveInput) => {
-  await ensureDoctor(clinicId, id);
-  return prisma.doctorLeave.create({
+  const db = forClinic(clinicId);
+  await ensureDoctor(db, id);
+  return db.doctorLeave.create({
     data: {
       clinicId,
       doctorId: id,
@@ -124,20 +138,22 @@ export const addDoctorLeave = async (clinicId: string, id: string, input: Create
 };
 
 export const deleteDoctorLeave = async (clinicId: string, id: string, leaveId: string) => {
-  await ensureDoctor(clinicId, id);
-  const leave = await prisma.doctorLeave.findFirst({
+  const db = forClinic(clinicId);
+  await ensureDoctor(db, id);
+  const leave = await db.doctorLeave.findFirst({
     where: { id: leaveId, doctorId: id, clinicId },
     select: { id: true },
   });
   if (!leave) throw new AppError('Leave not found', 404);
-  await prisma.doctorLeave.delete({ where: { id: leaveId } });
+  await db.doctorLeave.delete({ where: { id: leaveId, clinicId } });
 };
 
 // --- Appointments for a doctor ---------------------------------------------
 
 export const getDoctorAppointments = async (clinicId: string, id: string) => {
-  await ensureDoctor(clinicId, id);
-  return prisma.appointment.findMany({
+  const db = forClinic(clinicId);
+  await ensureDoctor(db, id);
+  return db.appointment.findMany({
     where: { clinicId, doctorId: id },
     include: { patient: { select: { id: true, name: true, phone: true } } },
     orderBy: [{ appointmentDate: 'asc' }, { appointmentTime: 'asc' }],

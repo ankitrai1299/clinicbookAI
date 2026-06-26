@@ -1,4 +1,4 @@
-import { prisma } from '../config/prisma.js';
+import { forClinic } from '../config/tenantPrisma.js';
 
 // Availability is derived from the DB (DoctorSchedule + DoctorLeave + booked
 // Appointments) — never hardcoded. Times use the same "HH:MM AM/PM" format the
@@ -143,13 +143,17 @@ export const getAvailableSlots = async (
   const date = parseDateUTC(dateStr);
   if (Number.isNaN(date.getTime())) return [];
 
-  const schedule = await prisma.doctorSchedule.findFirst({
+  const db = forClinic(clinicId);
+  const schedule = await db.doctorSchedule.findFirst({
     where: { clinicId, doctorId, dayOfWeek: date.getUTCDay(), isActive: true }
   });
   if (!schedule) return [];
 
   // Doctor on leave covering this date → no availability.
-  const onLeave = await prisma.doctorLeave.findFirst({
+  // clinicId is injected by the scoped client, so a doctor's leave at another
+  // clinic can never affect this clinic's availability (closes the prior
+  // clinicId-less DoctorLeave lookup).
+  const onLeave = await db.doctorLeave.findFirst({
     where: { doctorId, startDate: { lte: date }, endDate: { gte: date } },
     select: { id: true }
   });
@@ -157,7 +161,7 @@ export const getAvailableSlots = async (
 
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + 1);
-  const booked = await prisma.appointment.findMany({
+  const booked = await db.appointment.findMany({
     where: { clinicId, doctorId, appointmentDate: { gte: date, lt: next }, status: { not: 'CANCELLED' } },
     select: { appointmentTime: true }
   });
@@ -194,13 +198,17 @@ export const getDateAvailability = async (
   const date = parseDateUTC(dateStr);
   if (Number.isNaN(date.getTime())) return { working: false, available: 0 };
 
-  const schedule = await prisma.doctorSchedule.findFirst({
+  const db = forClinic(clinicId);
+  const schedule = await db.doctorSchedule.findFirst({
     where: { clinicId, doctorId, dayOfWeek: date.getUTCDay(), isActive: true },
     select: { id: true }
   });
   if (!schedule) return { working: false, available: 0 };
 
-  const onLeave = await prisma.doctorLeave.findFirst({
+  // clinicId is injected by the scoped client, so a doctor's leave at another
+  // clinic can never affect this clinic's availability (closes the prior
+  // clinicId-less DoctorLeave lookup).
+  const onLeave = await db.doctorLeave.findFirst({
     where: { doctorId, startDate: { lte: date }, endDate: { gte: date } },
     select: { id: true }
   });

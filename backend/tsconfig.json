@@ -16,5 +16,5 @@
     "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": ["dist", "node_modules", "prisma"]
+  "exclude": ["dist", "node_modules", "prisma", "src/**/*.test.ts"]
 }

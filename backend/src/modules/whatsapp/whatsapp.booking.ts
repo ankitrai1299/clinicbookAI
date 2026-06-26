@@ -31,6 +31,7 @@
 // ===========================================================================
 
 import { prisma } from '../../config/prisma.js';
+import { forClinic } from '../../config/tenantPrisma.js';
 import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
@@ -259,12 +260,14 @@ const dayLabel = (dateStr: string): string => {
 
 // --- DB helpers -----------------------------------------------------------
 const distinctSpecialities = async (clinicId: string): Promise<string[]> => {
-  const docs = await prisma.doctor.findMany({ where: { clinicId }, select: { speciality: true } });
+  const db = forClinic(clinicId);
+  const docs = await db.doctor.findMany({ where: { clinicId }, select: { speciality: true } });
   return [...new Set(docs.map((d) => d.speciality.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 };
 
 const doctorsForSpeciality = async (clinicId: string, speciality: string): Promise<DoctorOption[]> => {
-  const docs = await prisma.doctor.findMany({
+  const db = forClinic(clinicId);
+  const docs = await db.doctor.findMany({
     where: { clinicId, speciality: { equals: speciality, mode: 'insensitive' } },
     orderBy: { name: 'asc' },
     select: { id: true, name: true, speciality: true }
@@ -273,13 +276,15 @@ const doctorsForSpeciality = async (clinicId: string, speciality: string): Promi
 };
 
 const doctorNamesForClinic = async (clinicId: string): Promise<string[]> => {
-  const docs = await prisma.doctor.findMany({ where: { clinicId }, select: { name: true } });
+  const db = forClinic(clinicId);
+  const docs = await db.doctor.findMany({ where: { clinicId }, select: { name: true } });
   return docs.map((d) => d.name);
 };
 
 // Resolve a free-text doctor mention ("Dr Ruchi", "ruchi") to a real doctor.
 const findDoctorByName = async (clinicId: string, name: string): Promise<DoctorOption | null> => {
-  const docs = await prisma.doctor.findMany({
+  const db = forClinic(clinicId);
+  const docs = await db.doctor.findMany({
     where: { clinicId },
     select: { id: true, name: true, speciality: true }
   });
@@ -296,7 +301,8 @@ const findDoctorByName = async (clinicId: string, name: string): Promise<DoctorO
 // Returning-patient memory: the doctor from this patient's most recent
 // appointment (any status). Used to personalise the menu and offer "book again".
 const lastDoctorForPatient = async (clinicId: string, patientId: string): Promise<DoctorOption | null> => {
-  const appt = await prisma.appointment.findFirst({
+  const db = forClinic(clinicId);
+  const appt = await db.appointment.findFirst({
     where: { clinicId, patientId },
     orderBy: [{ appointmentDate: 'desc' }],
     include: { doctor: { select: { id: true, name: true, speciality: true } } }
@@ -340,9 +346,10 @@ const collectUpcomingSlots = async (
 };
 
 const activeAppointments = async (clinicId: string, patientId: string) => {
+  const db = forClinic(clinicId);
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-  return prisma.appointment.findMany({
+  return db.appointment.findMany({
     where: {
       clinicId,
       patientId,
@@ -366,8 +373,9 @@ const findConflictingActiveAppointment = async (
   date: string,
   time: string
 ) => {
+  const db = forClinic(clinicId);
   const target = new Date(`${date}T00:00:00.000Z`);
-  return prisma.appointment.findFirst({
+  return db.appointment.findFirst({
     where: {
       clinicId,
       patientId,
@@ -508,7 +516,8 @@ const handleHandoff = async (params: BookingParams, reason: string): Promise<Bot
   params.action = 'handoff';
   why(params, `human handoff: ${reason} → HANDOFF`);
   try {
-    await prisma.notification.create({
+    const db = forClinic(params.clinicId);
+    await db.notification.create({
       data: {
         clinicId: params.clinicId,
         type: 'SYSTEM_ALERT',

@@ -6,6 +6,11 @@ import { signAccessToken } from '../../config/jwt.js';
 import { AppError } from '../../utils/AppError.js';
 import { LoginInput, SignupInput } from './auth.schemas.js';
 
+// NOTE: raw prisma by design. Authentication runs BEFORE/ACROSS tenancy — login
+// and getAuthenticatedUser resolve identity by globally-unique email / userId
+// (there is no clinic context yet), and signup checks global email uniqueness.
+// The User.create sets clinicId explicitly for the caller's clinic.
+
 const publicUserSelect = {
   id: true,
   clinicId: true,

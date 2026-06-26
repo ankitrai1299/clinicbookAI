@@ -3,6 +3,7 @@ import { randomInt } from 'crypto';
 import { Patient, Prisma } from '@prisma/client';
 
 import { prisma } from '../../config/prisma.js';
+import { forClinic, type TenantClient } from '../../config/tenantPrisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { createAppointment } from '../appointments/appointment.service.js';
 import { isSlotAvailable } from '../../services/scheduling.service.js';
@@ -13,6 +14,12 @@ import {
   PublicRegisterPatientInput,
   UpdatePatientInput
 } from './patient.schemas.js';
+
+// Tenant data (Patient, Doctor) is read/written through a clinic-scoped client
+// (forClinic / db.*). The ONLY raw-prisma use here is `prisma.clinic` — the
+// Clinic row is NOT a tenant child (its tenant key is its own id), and the public
+// endpoints legitimately resolve "which clinic" from the URL before any scoping
+// exists. Those lookups are read-only existence/name checks.
 
 export interface AuthenticatedClinicContext {
   clinicId: string;
@@ -52,13 +59,15 @@ const generatePatientCode = (): string => {
 // Creates a patient with a guaranteed-unique patientCode. The DB unique
 // constraint is the source of truth: on the rare collision (P2002 on
 // patientCode) we regenerate and retry. Any other unique violation
-// (e.g. duplicate clinic+phone) propagates unchanged.
+// (e.g. duplicate clinic+phone) propagates unchanged. `db` is a clinic-scoped
+// client, so clinicId is enforced on the create regardless of `data`.
 const createPatientWithUniqueCode = async (
+  db: TenantClient,
   data: Omit<Prisma.PatientUncheckedCreateInput, 'patientCode'>
 ): Promise<PatientRecord> => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
-      return await prisma.patient.create({
+      return await db.patient.create({
         data: { ...data, patientCode: generatePatientCode() },
         include: patientInclude
       });
@@ -77,7 +86,8 @@ const createPatientWithUniqueCode = async (
 };
 
 export const createPatient = async (clinicId: string, input: CreatePatientInput): Promise<PatientRecord> => {
-  const patient = await createPatientWithUniqueCode({
+  const db = forClinic(clinicId);
+  const patient = await createPatientWithUniqueCode(db, {
     clinicId,
     name: input.name.trim(),
     phone: normalizePhone(input.phone),
@@ -106,6 +116,8 @@ export interface PublicClinicInfo {
 
 // Minimal, public-safe clinic lookup for the self-registration page. Exposes
 // only the clinic name so the page can greet visitors; never auth-gated data.
+// Raw prisma: Clinic is not a tenant child and there is no scope yet (the
+// clinicId IS what we are resolving from the URL).
 export const getPublicClinicInfo = async (clinicId: string): Promise<PublicClinicInfo> => {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
@@ -135,6 +147,7 @@ export const createPublicPatient = async (
     throw new AppError('Clinic not found', 404);
   }
 
+  const db = forClinic(clinicId);
   const phone = normalizePhone(input.phone);
   const fields = {
     name: input.name.trim(),
@@ -146,18 +159,18 @@ export const createPublicPatient = async (
   // Explicit find-then-create/update (not upsert) so a brand-new registration
   // mints a unique patientCode, while a repeat submission updates the existing
   // record and preserves its original ID.
-  const existing = await prisma.patient.findUnique({
+  const existing = await db.patient.findUnique({
     where: { clinicId_phone: { clinicId, phone } },
     select: { id: true }
   });
 
   const patient = existing
-    ? await prisma.patient.update({
-        where: { id: existing.id },
+    ? await db.patient.update({
+        where: { id: existing.id, clinicId },
         data: fields,
         include: patientInclude
       })
-    : await createPatientWithUniqueCode({
+    : await createPatientWithUniqueCode(db, {
         clinicId,
         phone,
         language: 'English',
@@ -188,14 +201,15 @@ export const ensurePatient = async (
   clinicId: string,
   input: { name: string; phone: string; language?: string }
 ): Promise<PatientRecord> => {
+  const db = forClinic(clinicId);
   const phone = normalizePhone(input.phone);
-  const existing = await prisma.patient.findUnique({
+  const existing = await db.patient.findUnique({
     where: { clinicId_phone: { clinicId, phone } },
     include: patientInclude
   });
   if (existing) return existing;
 
-  return createPatientWithUniqueCode({
+  return createPatientWithUniqueCode(db, {
     clinicId,
     phone,
     name: input.name.trim(),
@@ -209,7 +223,8 @@ export const getPublicDoctors = async (clinicId: string) => {
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true } });
   if (!clinic) throw new AppError('Clinic not found', 404);
 
-  return prisma.doctor.findMany({
+  const db = forClinic(clinicId);
+  return db.doctor.findMany({
     where: { clinicId },
     orderBy: { name: 'asc' },
     select: { id: true, name: true, speciality: true }
@@ -223,7 +238,8 @@ export const createPublicBooking = async (clinicId: string, input: PublicBooking
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true, name: true } });
   if (!clinic) throw new AppError('Clinic not found', 404);
 
-  const doctor = await prisma.doctor.findFirst({
+  const db = forClinic(clinicId);
+  const doctor = await db.doctor.findFirst({
     where: { id: input.doctorId, clinicId },
     select: { id: true, name: true }
   });
@@ -261,7 +277,8 @@ export const createPublicBooking = async (clinicId: string, input: PublicBooking
 };
 
 export const getPatients = async (clinicId: string): Promise<PatientRecord[]> => {
-  return prisma.patient.findMany({
+  const db = forClinic(clinicId);
+  return db.patient.findMany({
     where: { clinicId },
     orderBy: { name: 'asc' },
     include: patientInclude
@@ -269,7 +286,8 @@ export const getPatients = async (clinicId: string): Promise<PatientRecord[]> =>
 };
 
 export const getSinglePatient = async (clinicId: string, id: string): Promise<PatientRecord> => {
-  const patient = await prisma.patient.findFirst({
+  const db = forClinic(clinicId);
+  const patient = await db.patient.findFirst({
     where: { id, clinicId },
     include: patientInclude
   });
@@ -286,7 +304,8 @@ export const updatePatient = async (
   id: string,
   input: UpdatePatientInput
 ): Promise<PatientRecord> => {
-  const existingPatient = await prisma.patient.findFirst({
+  const db = forClinic(clinicId);
+  const existingPatient = await db.patient.findFirst({
     where: { id, clinicId }
   });
 
@@ -294,8 +313,8 @@ export const updatePatient = async (
     throw new AppError('Patient not found', 404);
   }
 
-  const patient = await prisma.patient.update({
-    where: { id },
+  const patient = await db.patient.update({
+    where: { id, clinicId },
     data: {
       ...(input.name !== undefined ? { name: input.name.trim() } : {}),
       ...(input.phone !== undefined ? { phone: normalizePhone(input.phone) } : {}),
@@ -308,7 +327,8 @@ export const updatePatient = async (
 };
 
 export const deletePatient = async (clinicId: string, id: string): Promise<void> => {
-  const existingPatient = await prisma.patient.findFirst({
+  const db = forClinic(clinicId);
+  const existingPatient = await db.patient.findFirst({
     where: { id, clinicId },
     select: { id: true }
   });
@@ -317,7 +337,7 @@ export const deletePatient = async (clinicId: string, id: string): Promise<void>
     throw new AppError('Patient not found', 404);
   }
 
-  await prisma.patient.delete({
-    where: { id }
+  await db.patient.delete({
+    where: { id, clinicId }
   });
 };

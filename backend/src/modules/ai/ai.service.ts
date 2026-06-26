@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 
 import { env } from '../../config/env.js';
 import { prisma } from '../../config/prisma.js';
+import { forClinic } from '../../config/tenantPrisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { cancelAppointment, createAppointment, getAppointments, updateAppointment } from '../appointments/appointment.service.js';
@@ -219,10 +220,11 @@ const executeTool = async (
   args: Record<string, unknown>,
   clinicId: string
 ): Promise<unknown> => {
+  const db = forClinic(clinicId);
   switch (name) {
     case 'search_patients': {
       const q = args.query as string;
-      return prisma.patient.findMany({
+      return db.patient.findMany({
         where: {
           clinicId,
           OR: [
@@ -237,7 +239,7 @@ const executeTool = async (
 
     case 'search_doctors': {
       const q = args.query as string;
-      return prisma.doctor.findMany({
+      return db.doctor.findMany({
         where: {
           clinicId,
           OR: [
@@ -255,7 +257,7 @@ const executeTool = async (
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      return prisma.appointment.findMany({
+      return db.appointment.findMany({
         where: { clinicId, appointmentDate: { gte: today, lt: tomorrow } },
         include: {
           doctor: { select: { id: true, name: true, speciality: true } },
@@ -324,7 +326,7 @@ const executeTool = async (
         return { success: false, error: 'WhatsApp is not configured on this server (WHATSAPP_TOKEN / PHONE_NUMBER_ID / VERIFY_TOKEN).' };
       }
 
-      const patient = await prisma.patient.findFirst({
+      const patient = await db.patient.findFirst({
         where: { id: args.patientId as string, clinicId },
         select: { id: true, name: true, phone: true }
       });
@@ -370,14 +372,15 @@ const executeTool = async (
 };
 
 const getOrCreateConversation = async (clinicId: string, userId: string, conversationId?: string) => {
+  const db = forClinic(clinicId);
   if (conversationId) {
-    const existing = await prisma.aiConversation.findFirst({
+    const existing = await db.aiConversation.findFirst({
       where: { id: conversationId, clinicId, userId },
       select: { id: true }
     });
     if (existing) return existing;
   }
-  return prisma.aiConversation.create({ data: { clinicId, userId } });
+  return db.aiConversation.create({ data: { clinicId, userId } });
 };
 
 const SYSTEM_PROMPT = `You are an AI admin assistant for ClinicBook AI, a clinic management system. Help clinic staff manage doctors, patients, appointments, and waitlists.
@@ -404,6 +407,7 @@ export const chat = async (
   conversationId?: string
 ) => {
   const client = getClient();
+  const db = forClinic(clinicId);
   const conversation = await getOrCreateConversation(clinicId, userId, conversationId);
 
   const history = await prisma.aiMessage.findMany({
@@ -450,7 +454,7 @@ export const chat = async (
       await prisma.aiMessage.create({
         data: { conversationId: conversation.id, role: 'ASSISTANT', content: assistantText }
       });
-      await prisma.aiConversation.update({
+      await db.aiConversation.update({
         where: { id: conversation.id },
         data: { updatedAt: new Date() }
       });
@@ -489,7 +493,7 @@ export const chat = async (
   await prisma.aiMessage.create({
     data: { conversationId: conversation.id, role: 'ASSISTANT', content: fallback }
   });
-  await prisma.aiConversation.update({
+  await db.aiConversation.update({
     where: { id: conversation.id },
     data: { updatedAt: new Date() }
   });
@@ -497,7 +501,8 @@ export const chat = async (
 };
 
 export const getHistory = async (clinicId: string, userId: string, conversationId: string) => {
-  const conv = await prisma.aiConversation.findFirst({
+  const db = forClinic(clinicId);
+  const conv = await db.aiConversation.findFirst({
     where: { id: conversationId, clinicId, userId },
     select: { id: true }
   });
@@ -922,7 +927,8 @@ interface PatientToolContext {
 }
 
 const listAvailableSlots = async (clinicId: string, dateStr: string, filter?: string) => {
-  const doctors = await prisma.doctor.findMany({ where: { clinicId } });
+  const db = forClinic(clinicId);
+  const doctors = await db.doctor.findMany({ where: { clinicId } });
   if (doctors.length === 0) {
     return { date: dateStr, doctors: [], note: 'No doctors are configured for this clinic yet.' };
   }
@@ -948,10 +954,11 @@ const executePatientTool = async (
   args: Record<string, unknown>,
   ctx: PatientToolContext
 ): Promise<unknown> => {
+  const db = forClinic(ctx.clinicId);
   switch (name) {
     case 'get_clinic_info': {
       const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { name: true } });
-      const doctors = await prisma.doctor.findMany({
+      const doctors = await db.doctor.findMany({
         where: { clinicId: ctx.clinicId },
         select: { name: true, speciality: true }
       });
@@ -967,7 +974,7 @@ const executePatientTool = async (
 
     case 'book_appointment': {
       const filter = String(args.doctorName ?? '').toLowerCase();
-      const doctors = await prisma.doctor.findMany({ where: { clinicId: ctx.clinicId } });
+      const doctors = await db.doctor.findMany({ where: { clinicId: ctx.clinicId } });
       const doctor =
         doctors.find((d) => d.name.toLowerCase().includes(filter) || d.speciality.toLowerCase().includes(filter)) ??
         (doctors.length === 1 ? doctors[0] : undefined);
@@ -1021,7 +1028,7 @@ const executePatientTool = async (
     }
 
     case 'get_my_appointments': {
-      const appts = await prisma.appointment.findMany({
+      const appts = await db.appointment.findMany({
         where: { clinicId: ctx.clinicId, patientId: ctx.patientId },
         include: { doctor: { select: { name: true, speciality: true } } },
         orderBy: [{ appointmentDate: 'asc' }, { appointmentTime: 'asc' }]
@@ -1037,7 +1044,7 @@ const executePatientTool = async (
     }
 
     case 'get_my_details': {
-      const pt = await prisma.patient.findFirst({
+      const pt = await db.patient.findFirst({
         where: { id: ctx.patientId, clinicId: ctx.clinicId },
         select: { name: true, phone: true, age: true, gender: true, patientCode: true, language: true }
       });
@@ -1049,7 +1056,7 @@ const executePatientTool = async (
       if (newName.length < 2) {
         return { success: false, error: 'Please provide a valid name.' };
       }
-      const updated = await prisma.patient.update({
+      const updated = await db.patient.update({
         where: { id: ctx.patientId },
         data: { name: newName },
         select: { name: true }
@@ -1062,7 +1069,7 @@ const executePatientTool = async (
 
     case 'cancel_appointment': {
       const id = String(args.appointmentId ?? '');
-      const own = await prisma.appointment.findFirst({
+      const own = await db.appointment.findFirst({
         where: { id, clinicId: ctx.clinicId, patientId: ctx.patientId },
         select: { id: true, status: true }
       });
@@ -1076,7 +1083,7 @@ const executePatientTool = async (
       const id = String(args.appointmentId ?? '');
       const date = String(args.date ?? '');
       const time = String(args.time ?? '');
-      const own = await prisma.appointment.findFirst({
+      const own = await db.appointment.findFirst({
         where: { id, clinicId: ctx.clinicId, patientId: ctx.patientId },
         select: { id: true, doctorId: true }
       });
@@ -1102,13 +1109,14 @@ const executePatientTool = async (
 };
 
 const getOrCreatePatientConversation = async (clinicId: string, patientId: string) => {
-  const existing = await prisma.aiConversation.findFirst({
+  const db = forClinic(clinicId);
+  const existing = await db.aiConversation.findFirst({
     where: { clinicId, patientId, channel: 'whatsapp' },
     orderBy: { createdAt: 'desc' },
     select: { id: true }
   });
   if (existing) return existing;
-  return prisma.aiConversation.create({ data: { clinicId, patientId, channel: 'whatsapp' } });
+  return db.aiConversation.create({ data: { clinicId, patientId, channel: 'whatsapp' } });
 };
 
 export interface PatientAgentParams {
@@ -1162,6 +1170,7 @@ export const patientAgentReply = async (params: PatientAgentParams): Promise<Pat
 
   const client = getClient();
   const conversation = await getOrCreatePatientConversation(params.clinicId, params.patientId);
+  const db = forClinic(params.clinicId);
 
   const history = await prisma.aiMessage.findMany({
     where: { conversationId: conversation.id },
@@ -1181,7 +1190,7 @@ export const patientAgentReply = async (params: PatientAgentParams): Promise<Pat
     await prisma.aiMessage.create({
       data: { conversationId: conversation.id, role: 'ASSISTANT', content: menu }
     });
-    await prisma.aiConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
+    await db.aiConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
     return { reply: menu, openaiResponseIds, toolsUsed };
   }
 
@@ -1189,13 +1198,13 @@ export const patientAgentReply = async (params: PatientAgentParams): Promise<Pat
   const namePlaceholder = /^WhatsApp Patient/i.test(params.patientName);
 
   // Surface any pending waitlist slot offer so the agent can auto-book on "yes".
-  const pendingOffer = await prisma.waitlist.findFirst({
+  const pendingOffer = await db.waitlist.findFirst({
     where: { clinicId: params.clinicId, patientId: params.patientId, status: 'OFFERED', offeredDoctorId: { not: null } },
     select: { offeredDoctorId: true, offeredDate: true, offeredTime: true }
   });
   let offerLine = '';
   if (pendingOffer?.offeredDoctorId && pendingOffer.offeredDate && pendingOffer.offeredTime) {
-    const offerDoc = await prisma.doctor.findUnique({ where: { id: pendingOffer.offeredDoctorId }, select: { name: true } });
+    const offerDoc = await db.doctor.findUnique({ where: { id: pendingOffer.offeredDoctorId }, select: { name: true } });
     offerLine =
       `\n\nPENDING WAITLIST OFFER: this patient was offered a freed slot with Dr. ${offerDoc?.name ?? 'the doctor'} on ` +
       `${pendingOffer.offeredDate.toISOString().slice(0, 10)} at ${pendingOffer.offeredTime}. ` +
@@ -1277,7 +1286,7 @@ export const patientAgentReply = async (params: PatientAgentParams): Promise<Pat
         await prisma.aiMessage.create({
           data: { conversationId: conversation.id, role: 'ASSISTANT', content: reply }
         });
-        await prisma.aiConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
+        await db.aiConversation.update({ where: { id: conversation.id }, data: { updatedAt: new Date() } });
         return { reply, openaiResponseIds, toolsUsed };
       }
 

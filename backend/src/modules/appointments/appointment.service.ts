@@ -1,6 +1,6 @@
 import { Appointment, AppointmentStatus, Prisma } from '@prisma/client';
 
-import { prisma } from '../../config/prisma.js';
+import { forClinic } from '../../config/tenantPrisma.js';
 import { AppError } from '../../utils/AppError.js';
 import {
   notifyBookingConfirmation,
@@ -180,9 +180,10 @@ const normalizeDate = (appointmentDate: string) => {
 };
 
 const ensureClinicDoctorPatient = async (clinicId: string, doctorId: string, patientId: string) => {
+  const db = forClinic(clinicId);
   const [doctor, patient] = await Promise.all([
-    prisma.doctor.findFirst({ where: { id: doctorId, clinicId }, select: { id: true } }),
-    prisma.patient.findFirst({ where: { id: patientId, clinicId }, select: { id: true } })
+    db.doctor.findFirst({ where: { id: doctorId, clinicId }, select: { id: true } }),
+    db.patient.findFirst({ where: { id: patientId, clinicId }, select: { id: true } })
   ]);
 
   if (!doctor) {
@@ -195,7 +196,8 @@ const ensureClinicDoctorPatient = async (clinicId: string, doctorId: string, pat
 };
 
 const ensureAppointmentExists = async (clinicId: string, id: string) => {
-  const appointment = await prisma.appointment.findFirst({
+  const db = forClinic(clinicId);
+  const appointment = await db.appointment.findFirst({
     where: { id, clinicId },
     select: { id: true }
   });
@@ -214,6 +216,7 @@ export const createAppointment = async (
   // notify:false because the conversational agent sends its own single reply —
   // a second auto-confirmation would be a duplicate message to the patient.
   const notify = options.notify ?? true;
+  const db = forClinic(clinicId);
 
   await ensureClinicDoctorPatient(clinicId, input.doctorId, input.patientId);
 
@@ -235,7 +238,7 @@ export const createAppointment = async (
   // as a P2002, which we translate to a clean 409.
   let appointment: AppointmentRecord;
   try {
-    appointment = await prisma.$transaction(async (tx) => {
+    appointment = await db.$transaction(async (tx) => {
       const clash = await tx.appointment.findFirst({
         where: {
           clinicId,
@@ -296,7 +299,8 @@ export const createAppointment = async (
 };
 
 export const getAppointments = async (clinicId: string): Promise<AppointmentRecord[]> => {
-  return prisma.appointment.findMany({
+  const db = forClinic(clinicId);
+  return db.appointment.findMany({
     where: { clinicId },
     orderBy: [{ appointmentDate: 'asc' }, { appointmentTime: 'asc' }],
     include: appointmentInclude
@@ -304,7 +308,8 @@ export const getAppointments = async (clinicId: string): Promise<AppointmentReco
 };
 
 export const getSingleAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  const appointment = await prisma.appointment.findFirst({
+  const db = forClinic(clinicId);
+  const appointment = await db.appointment.findFirst({
     where: { id, clinicId },
     include: appointmentInclude
   });
@@ -321,7 +326,8 @@ export const updateAppointment = async (
   id: string,
   input: UpdateAppointmentInput
 ): Promise<AppointmentRecord> => {
-  const current = await prisma.appointment.findFirst({
+  const db = forClinic(clinicId);
+  const current = await db.appointment.findFirst({
     where: { id, clinicId },
     select: { status: true, doctorId: true, patientId: true, appointmentDate: true, appointmentTime: true }
   });
@@ -365,8 +371,10 @@ export const updateAppointment = async (
 
   let appointment: AppointmentRecord;
   try {
-    appointment = await prisma.appointment.update({
-      where: statusChanging ? { id, status: current.status } : { id },
+    appointment = await db.appointment.update({
+      // clinicId in the where makes the mutation itself tenant-scoped (an id from
+      // another clinic matches no row), not just the findFirst above.
+      where: statusChanging ? { id, clinicId, status: current.status } : { id, clinicId },
       data: {
         ...(input.doctorId !== undefined ? { doctorId: input.doctorId } : {}),
         ...(input.patientId !== undefined ? { patientId: input.patientId } : {}),
@@ -425,7 +433,8 @@ export const updateAppointment = async (
 };
 
 export const cancelAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  const prev = await prisma.appointment.findFirst({
+  const db = forClinic(clinicId);
+  const prev = await db.appointment.findFirst({
     where: { id, clinicId },
     select: { status: true }
   });
@@ -440,8 +449,8 @@ export const cancelAppointment = async (clinicId: string, id: string): Promise<A
   // Can't cancel a completed (or no-show) appointment.
   assertTransition(prev.status, AppointmentStatus.CANCELLED);
 
-  const appointment = await prisma.appointment.update({
-    where: { id },
+  const appointment = await db.appointment.update({
+    where: { id, clinicId },
     data: { status: AppointmentStatus.CANCELLED },
     include: appointmentInclude
   });
@@ -455,7 +464,8 @@ export const completeAppointment = async (
   id: string,
   completedBy: string
 ): Promise<AppointmentRecord> => {
-  const current = await prisma.appointment.findFirst({
+  const db = forClinic(clinicId);
+  const current = await db.appointment.findFirst({
     where: { id, clinicId },
     select: { status: true }
   });
@@ -480,8 +490,8 @@ export const completeAppointment = async (
   // matches no row (P2025) and returns the current record with no duplicate.
   let appointment: AppointmentRecord;
   try {
-    appointment = await prisma.appointment.update({
-      where: { id, status: AppointmentStatus.CONFIRMED },
+    appointment = await db.appointment.update({
+      where: { id, clinicId, status: AppointmentStatus.CONFIRMED },
       data: {
         status: AppointmentStatus.COMPLETED,
         completedAt: new Date(),
@@ -513,7 +523,8 @@ export const completeAppointment = async (
 };
 
 export const markNoShowAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  const current = await prisma.appointment.findFirst({
+  const db = forClinic(clinicId);
+  const current = await db.appointment.findFirst({
     where: { id, clinicId },
     select: { status: true }
   });
@@ -527,8 +538,8 @@ export const markNoShowAppointment = async (clinicId: string, id: string): Promi
   // completed or cancelled one.
   assertTransition(current.status, AppointmentStatus.NO_SHOW);
 
-  return prisma.appointment.update({
-    where: { id },
+  return db.appointment.update({
+    where: { id, clinicId },
     data: { status: AppointmentStatus.NO_SHOW },
     include: appointmentInclude
   });

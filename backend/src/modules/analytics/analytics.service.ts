@@ -1,6 +1,6 @@
 import { AppointmentStatus } from '@prisma/client';
 
-import { prisma } from '../../config/prisma.js';
+import type { TenantClient } from '../../config/tenantPrisma.js';
 
 export interface LanguageStat {
   language: string;
@@ -16,7 +16,10 @@ export interface DashboardStats {
   languageBreakdown: LanguageStat[];
 }
 
-export const getDashboardStats = async (clinicId: string): Promise<DashboardStats> => {
+// `db` is a clinic-scoped Prisma client (from forClinic / req.db). Every query
+// below is automatically constrained to the caller's clinic — no manual
+// `where: { clinicId }` needed, and impossible to forget.
+export const getDashboardStats = async (db: TenantClient): Promise<DashboardStats> => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
   thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
@@ -24,21 +27,17 @@ export const getDashboardStats = async (clinicId: string): Promise<DashboardStat
   const [totalAppointments, statusCounts, activePatients, totalPatients, languageGroups] =
     await Promise.all([
       // Total appointments ever booked for this clinic
-      prisma.appointment.count({
-        where: { clinicId }
-      }),
+      db.appointment.count(),
 
       // Per-status counts — drives no-show rate + slot utilization
-      prisma.appointment.groupBy({
+      db.appointment.groupBy({
         by: ['status'],
-        where: { clinicId },
         _count: { status: true }
       }),
 
       // Patients with at least one appointment in the last 30 days
-      prisma.patient.count({
+      db.patient.count({
         where: {
-          clinicId,
           appointments: {
             some: { appointmentDate: { gte: thirtyDaysAgo } }
           }
@@ -46,14 +45,11 @@ export const getDashboardStats = async (clinicId: string): Promise<DashboardStat
       }),
 
       // Total patients — denominator for language percentages
-      prisma.patient.count({
-        where: { clinicId }
-      }),
+      db.patient.count(),
 
       // Patient language distribution
-      prisma.patient.groupBy({
+      db.patient.groupBy({
         by: ['language'],
-        where: { clinicId },
         _count: { language: true },
         orderBy: { _count: { language: 'desc' } }
       })

@@ -5,6 +5,11 @@ import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { RegisterClinicInput, UpdateClinicInput } from './clinic.schemas.js';
 
+// NOTE: this module intentionally uses the RAW prisma client. It manages the
+// `Clinic` ROW itself (whose tenant key is its own id, so the tenant engine does
+// not scope it) and clinic registration, which runs BEFORE any tenant exists.
+// Every authenticated query here is still scoped by `where: { id: clinicId }`.
+
 export const getMyClinic = async (clinicId: string) => {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },

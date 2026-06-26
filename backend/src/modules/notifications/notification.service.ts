@@ -1,12 +1,15 @@
 import { NotificationType } from '@prisma/client';
 
-import { prisma } from '../../config/prisma.js';
+import { forClinic } from '../../config/tenantPrisma.js';
 import { publishClinicEvent } from './notification.realtime.js';
 
 // Dashboard notification feed (the bell / notification center). The automation
 // engine writes here whenever something happens that staff should see —
 // especially events that originate from the WhatsApp bot rather than a staff
 // click (a patient self-booking, an approval/rejection going out, etc.).
+//
+// Every query runs through a clinic-scoped client (forClinic), so a notification
+// can never be created for, listed from, or marked read across clinics.
 
 export interface CreateNotificationInput {
   clinicId: string;
@@ -17,7 +20,8 @@ export interface CreateNotificationInput {
 }
 
 export const createNotification = async (input: CreateNotificationInput) => {
-  const notification = await prisma.notification.create({
+  const db = forClinic(input.clinicId);
+  const notification = await db.notification.create({
     data: {
       clinicId: input.clinicId,
       type: input.type,
@@ -49,17 +53,17 @@ export const recordNotification = (input: CreateNotificationInput): void => {
 };
 
 export const listNotifications = (clinicId: string, limit = 50) =>
-  prisma.notification.findMany({
+  forClinic(clinicId).notification.findMany({
     where: { clinicId },
     orderBy: { createdAt: 'desc' },
     take: limit
   });
 
 export const countUnread = (clinicId: string) =>
-  prisma.notification.count({ where: { clinicId, read: false } });
+  forClinic(clinicId).notification.count({ where: { clinicId, read: false } });
 
 export const markNotificationRead = (clinicId: string, id: string) =>
-  prisma.notification.updateMany({ where: { id, clinicId }, data: { read: true } });
+  forClinic(clinicId).notification.updateMany({ where: { id, clinicId }, data: { read: true } });
 
 export const markAllNotificationsRead = (clinicId: string) =>
-  prisma.notification.updateMany({ where: { clinicId, read: false }, data: { read: true } });
+  forClinic(clinicId).notification.updateMany({ where: { clinicId, read: false }, data: { read: true } });

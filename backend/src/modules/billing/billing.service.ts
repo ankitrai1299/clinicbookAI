@@ -5,6 +5,12 @@ import { prisma } from '../../config/prisma.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
 
+// NOTE: raw prisma by design. Billing manages the `Clinic` ROW (whose tenant key
+// is its own id, so the tenant engine does not scope it) and the Stripe webhook
+// (signature-verified, with NO JWT/tenant context). Authenticated paths are
+// scoped by `where: { id: clinicId }`; the webhook resolves the clinic by the
+// UNIQUE `stripeCustomerId`, so it can only ever match a single clinic.
+
 const getStripe = (): Stripe => {
   if (!env.STRIPE_SECRET_KEY) throw new AppError('Stripe is not configured', 503);
   return new Stripe(env.STRIPE_SECRET_KEY);

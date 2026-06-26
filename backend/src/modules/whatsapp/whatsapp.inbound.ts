@@ -18,6 +18,7 @@
 // DB row lock) keyed on the same ids.
 
 import { prisma } from '../../config/prisma.js';
+import { forClinic } from '../../config/tenantPrisma.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { handleWhatsAppMessage } from './whatsapp.booking.js';
@@ -138,6 +139,7 @@ const resolveInboundClinicId = async (): Promise<string | null> => {
 // First inbound from an unknown number auto-creates a patient (a real, bookable
 // resource) so the booking agent can act immediately — no /register step, no loop.
 const findOrCreatePatient = async (clinicId: string, phone: string) => {
+  const db = forClinic(clinicId);
   const national = nationalKey(phone);
   const include = { clinic: { select: { id: true, name: true } } } as const;
 
@@ -145,7 +147,7 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
 
   if (national) {
     // Fast path: substring match on the contiguous national digits.
-    const candidates = await prisma.patient.findMany({
+    const candidates = await db.patient.findMany({
       where: { clinicId, phone: { contains: national } },
       orderBy: { createdAt: 'desc' },
       include
@@ -159,7 +161,7 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
     // national keys. This is what makes resolution work for EVERY number format,
     // not just clean digit strings.
     if (!found) {
-      const all = await prisma.patient.findMany({ where: { clinicId }, orderBy: { createdAt: 'desc' }, include });
+      const all = await db.patient.findMany({ where: { clinicId }, orderBy: { createdAt: 'desc' }, include });
       found = all.find((p) => nationalKey(p.phone) === national);
       if (found) {
         console.info('[WhatsApp][resolve] matched via normalized fallback (formatted stored number)', {
@@ -181,7 +183,7 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
   }
 
   const digits = digitsOnly(phone);
-  const created = await prisma.patient.create({
+  const created = await db.patient.create({
     data: {
       clinicId,
       name: `WhatsApp Patient ${digits.slice(-4)}`,
