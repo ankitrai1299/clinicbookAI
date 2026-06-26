@@ -30,7 +30,6 @@
 // deterministically.
 // ===========================================================================
 
-import { prisma } from '../../config/prisma.js';
 import { forClinic } from '../../config/tenantPrisma.js';
 import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
@@ -388,8 +387,11 @@ const findConflictingActiveAppointment = async (
 };
 
 // --- Session persistence --------------------------------------------------
-const loadSession = async (phone: string): Promise<{ state: string; data: SessionData }> => {
-  const row = await prisma.whatsAppSession.findUnique({ where: { phone } });
+const loadSession = async (clinicId: string, phone: string): Promise<{ state: string; data: SessionData }> => {
+  const db = forClinic(clinicId);
+  // Session is keyed per (clinicId, phone): the same patient phone has an
+  // independent booking flow at each clinic. clinic A can't read clinic B's row.
+  const row = await db.whatsAppSession.findUnique({ where: { clinicId_phone: { clinicId, phone } } });
   if (!row) return { state: S.IDLE, data: {} };
   let data: SessionData = {};
   try {
@@ -402,8 +404,9 @@ const loadSession = async (phone: string): Promise<{ state: string; data: Sessio
 
 const saveSession = async (params: BookingParams, state: string, data: SessionData): Promise<void> => {
   const serialized = JSON.stringify(data);
-  await prisma.whatsAppSession.upsert({
-    where: { phone: params.phone },
+  const db = forClinic(params.clinicId);
+  await db.whatsAppSession.upsert({
+    where: { clinicId_phone: { clinicId: params.clinicId, phone: params.phone } },
     create: { phone: params.phone, clinicId: params.clinicId, patientId: params.patientId, state, data: serialized },
     update: { clinicId: params.clinicId, patientId: params.patientId, state, data: serialized }
   });
@@ -1218,7 +1221,7 @@ const handleRescheduleSelect = async (params: BookingParams, data: SessionData, 
 // ===========================================================================
 export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotReply | null> => {
   let t = params.message.trim();
-  const { state, data } = await loadSession(params.phone);
+  const { state, data } = await loadSession(params.clinicId, params.phone);
 
   // A tapped interactive option is normalised to the canonical text the handlers
   // already accept (or a special out-of-band action).
@@ -1312,7 +1315,7 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotR
   }
 
   // Re-read the persisted state so the log reflects what was ACTUALLY saved.
-  const { state: nextState } = await loadSession(params.phone);
+  const { state: nextState } = await loadSession(params.clinicId, params.phone);
   const u = params.understanding;
   console.info('[FSM] ◀ transition', {
     phone: params.phone,

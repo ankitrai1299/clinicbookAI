@@ -54,16 +54,45 @@ model Clinic {
   stripeCustomerId String?       @unique
   createdAt        DateTime      @default(now())
 
-  users           User[]
-  patients        Patient[]
-  doctors         Doctor[]
-  appointments    Appointment[]
-  waitlists       Waitlist[]
-  aiConversations AiConversation[]
-  whatsAppLogs    WhatsAppLog[]
-  notifications   Notification[]
+  users            User[]
+  patients         Patient[]
+  doctors          Doctor[]
+  appointments     Appointment[]
+  waitlists        Waitlist[]
+  aiConversations  AiConversation[]
+  whatsAppLogs     WhatsAppLog[]
+  notifications    Notification[]
+  whatsAppChannels WhatsAppChannel[]
 
   @@index([plan])
+}
+
+// One WhatsApp Cloud API number per clinic. The `phoneNumberId` is the routing
+// key Meta sends in every inbound webhook (`value.metadata.phone_number_id`), so
+// an inbound message is bound to a clinic by looking it up here — NOT by env.
+// Outbound sends for a clinic use THIS row's token + phoneNumberId, so each
+// clinic messages from its own number. Tokens are stored encrypted-at-rest when
+// WA_CHANNEL_ENC_KEY is set (AES-256-GCM), else as plaintext (dev/back-compat).
+model WhatsAppChannel {
+  id                 String   @id @default(cuid())
+  clinicId           String
+  // Meta Cloud API identifiers. phoneNumberId is the inbound routing key.
+  phoneNumberId      String   @unique
+  wabaId             String?
+  displayPhoneNumber String?
+  // Long-lived access token (encrypted when WA_CHANNEL_ENC_KEY is configured).
+  accessToken        String   @db.Text
+  // Per-channel webhook verification + HMAC secret (optional; falls back to env).
+  appSecret          String?
+  verifyToken        String?
+  status             String   @default("ACTIVE") // ACTIVE | DISABLED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([phoneNumberId])
 }
 
 model User {
@@ -350,13 +379,18 @@ model WhatsAppAudit {
 
 // Tracks the recipient's last inbound message so we know whether the 24h
 // WhatsApp customer-service (session) window is open for free-form replies.
+// Re-keyed on (clinicId, phone): the SAME patient phone messaging two clinics is
+// two independent windows — one clinic's inbound can never open another clinic's
+// send window. clinicId is a scalar (no relation) to match WhatsAppSession.
 model WhatsAppConversation {
   id            String   @id @default(cuid())
-  phone         String   @unique
+  clinicId      String
+  phone         String
   lastInboundAt DateTime
   updatedAt     DateTime @updatedAt
 
-  @@index([phone])
+  @@unique([clinicId, phone])
+  @@index([clinicId, phone])
 }
 
 // Deterministic booking state machine state, one row per patient phone. The
@@ -367,9 +401,12 @@ model WhatsAppConversation {
 // CONFIRMATION, …) and `data` is a JSON blob (stored as text to avoid Prisma
 // Json default quirks) holding the chosen speciality/doctor, the exact numbered
 // options last presented, slot pagination offset and the selected slot.
+// Deterministic booking FSM state, one row per (clinic, patient phone). Re-keyed
+// on (clinicId, phone) so the SAME patient phone has an INDEPENDENT booking flow
+// per clinic — clinic A's session can never be read or overwritten by clinic B.
 model WhatsAppSession {
   id        String   @id @default(cuid())
-  phone     String   @unique
+  phone     String
   clinicId  String
   patientId String?
   state     String   @default("IDLE")
@@ -377,6 +414,7 @@ model WhatsAppSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([clinicId, phone])
   @@index([phone])
   @@index([clinicId])
 }

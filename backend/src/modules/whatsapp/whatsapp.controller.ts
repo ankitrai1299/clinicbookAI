@@ -5,7 +5,6 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getWhatsAppWebhookVerifyToken, isWhatsAppConfigured } from '../../config/whatsapp.js';
 import {
   exampleSendMessageFunction,
-  recordInboundMessage,
   recordStatusUpdate,
   sendWhatsAppTemplateMessage,
   sendWhatsAppTextMessage
@@ -49,6 +48,8 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
       entry.changes?.flatMap((change) =>
         change.value?.messages?.map((message) => ({
           from: message.from,
+          // The routing key: which clinic's WhatsApp number this arrived on.
+          phoneNumberId: change.value?.metadata?.phone_number_id,
           messageId: message.id,
           type: message.type,
           text: message.text?.body,
@@ -102,14 +103,9 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
   // non-200 — Meta retries on any non-200 and would replay the whole batch.
   let statusesPersisted = 0;
   try {
-    // Inbound messages (re)open the 24h session window for that number.
-    await Promise.all(
-      incomingMessages
-        .filter((m) => m.from)
-        .map((m) => recordInboundMessage(m.from as string, m.timestamp))
-    );
-
-    // Delivery receipts advance the matching outbound log's status.
+    // Delivery receipts advance the matching outbound log's status. (The 24h
+    // session window is recorded per-clinic inside the inbound pipeline, once the
+    // clinic has been resolved from phone_number_id.)
     const counts = await Promise.all(
       incomingStatuses
         .filter((s) => s.id && s.status)
@@ -126,15 +122,15 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
   for (const m of incomingMessages) {
     if (!m.from) continue;
     if (m.type === 'text' && m.text) {
-      void handleInboundText(m.from, m.text, m.messageId).catch((err) =>
+      void handleInboundText(m.from, m.text, m.messageId, undefined, { phoneNumberId: m.phoneNumberId }).catch((err) =>
         console.error('[WhatsApp] Inbound auto-reply failed:', err)
       );
     } else if (m.type === 'interactive' && m.interactiveId) {
       // Pass the tapped row/button title as the human-readable text (for logs /
       // audit) and the stable id as the routing key.
-      void handleInboundText(m.from, m.interactiveTitle ?? m.interactiveId, m.messageId, m.interactiveId).catch((err) =>
-        console.error('[WhatsApp] Inbound interactive reply failed:', err)
-      );
+      void handleInboundText(m.from, m.interactiveTitle ?? m.interactiveId, m.messageId, m.interactiveId, {
+        phoneNumberId: m.phoneNumberId
+      }).catch((err) => console.error('[WhatsApp] Inbound interactive reply failed:', err));
     } else if (m.type === 'audio' && m.audioId) {
       // Voice note: transcribe (Whisper), then run it through the inbound pipeline
       // with AI understanding forced on. Enabled for everyone by default; set
@@ -142,11 +138,12 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
       const from = m.from;
       const audioId = m.audioId;
       const messageId = m.messageId;
+      const phoneNumberId = m.phoneNumberId;
       if (isVoiceAiEnabledFor(from)) {
         void (async () => {
-          const transcript = await transcribeWhatsAppVoice(audioId);
+          const transcript = await transcribeWhatsAppVoice(audioId, phoneNumberId);
           if (transcript) {
-            await handleInboundText(from, transcript, messageId, undefined, { fromVoice: true });
+            await handleInboundText(from, transcript, messageId, undefined, { fromVoice: true, phoneNumberId });
           } else {
             // Couldn't understand the audio — ask the patient to type instead so
             // they're never left without a reply.

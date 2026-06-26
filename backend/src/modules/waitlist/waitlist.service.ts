@@ -211,9 +211,10 @@ const setWaSessionState = async (
 ): Promise<void> => {
   const p = digits(phone);
   if (!p) return;
-  await prisma.whatsAppSession
-    .upsert({
-      where: { phone: p },
+  // Session is keyed per (clinicId, phone) — write only this clinic's row.
+  await forClinic(clinicId)
+    .whatsAppSession.upsert({
+      where: { clinicId_phone: { clinicId, phone: p } },
       create: { phone: p, clinicId, patientId, state, data: '{}' },
       update: { clinicId, patientId, state, data: '{}' }
     })

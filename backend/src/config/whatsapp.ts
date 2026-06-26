@@ -8,17 +8,23 @@ const ensureWhatsAppConfig = () => {
   }
 };
 
-export const getWhatsAppApiClient = (): AxiosInstance => {
-  ensureWhatsAppConfig();
-
-  return axios.create({
+// Build a Graph API client for an ARBITRARY access token. Used by the per-clinic
+// channel layer so each clinic sends from its own WhatsApp number/token.
+export const buildWhatsAppClient = (accessToken: string): AxiosInstance =>
+  axios.create({
     baseURL: 'https://graph.facebook.com/v20.0',
     timeout: 15000,
     headers: {
-      Authorization: `Bearer ${env.WHATSAPP_TOKEN}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     }
   });
+
+// The env "default channel" client (the original single-clinic number). Retained
+// as the fallback when a clinic has no WhatsAppChannel row.
+export const getWhatsAppApiClient = (): AxiosInstance => {
+  ensureWhatsAppConfig();
+  return buildWhatsAppClient(env.WHATSAPP_TOKEN as string);
 };
 
 export const getWhatsAppWebhookVerifyToken = () => env.VERIFY_TOKEN ?? '';

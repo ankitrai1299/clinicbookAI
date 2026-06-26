@@ -13,7 +13,8 @@ import axios from 'axios';
 import OpenAI, { toFile } from 'openai';
 
 import { env } from '../../config/env.js';
-import { getWhatsAppApiClient } from '../../config/whatsapp.js';
+import { buildWhatsAppClient, getWhatsAppApiClient } from '../../config/whatsapp.js';
+import { getChannelCreds, resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
 
 // National key = last 10 digits, so "917903884686" and "7903884686" match.
 const nationalKey = (s: string): string => {
@@ -55,12 +56,23 @@ export const isVoiceAiEnabledFor = (phone: string): boolean => {
 // Download a WhatsApp media object by id and transcribe it. Returns the trimmed
 // transcript, or null if anything fails (the caller stays silent / logs). Whisper
 // auto-detects the spoken language, so Hindi / English / Hinglish all work.
-export const transcribeWhatsAppVoice = async (mediaId: string): Promise<string | null> => {
+export const transcribeWhatsAppVoice = async (
+  mediaId: string,
+  phoneNumberId?: string | null
+): Promise<string | null> => {
   if (!env.OPENAI_API_KEY) return null;
 
   try {
+    // Resolve THIS clinic's WhatsApp token from the number the note arrived on, so
+    // media on a secondary clinic's number downloads with the right bearer — the
+    // env token only authorises the env default channel. Falls back to the env
+    // client/token when no per-clinic channel applies.
+    const clinicId = await resolveClinicIdByPhoneNumberId(phoneNumberId);
+    const creds = await getChannelCreds(clinicId);
+    const client = creds ? buildWhatsAppClient(creds.accessToken) : getWhatsAppApiClient();
+    const bearer = creds?.accessToken ?? env.WHATSAPP_TOKEN;
+
     // 1. Resolve the short-lived media download URL from the Graph API.
-    const client = getWhatsAppApiClient();
     const meta = await client.get(`/${mediaId}`);
     const mediaUrl: string | undefined = meta.data?.url;
     const mimeType: string = meta.data?.mime_type ?? 'audio/ogg';
@@ -73,7 +85,7 @@ export const transcribeWhatsAppVoice = async (mediaId: string): Promise<string |
     const audio = await axios.get<ArrayBuffer>(mediaUrl, {
       responseType: 'arraybuffer',
       timeout: 20000,
-      headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` }
+      headers: { Authorization: `Bearer ${bearer}` }
     });
     const buffer = Buffer.from(audio.data);
 

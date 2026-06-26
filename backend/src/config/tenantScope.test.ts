@@ -129,10 +129,9 @@ describe('scopeArgs — tenant isolation rule', () => {
       expect(out.where).toEqual({ conversationId: 'c1' });
     });
 
-    it('WhatsAppSession is excluded until the Phase-2 (clinicId, phone) re-key', () => {
-      expect(TENANT_MODELS.has('WhatsAppSession')).toBe(false);
-      const out = scopeArgs('WhatsAppSession', 'upsert', { where: { phone: '9990001111' }, create: {}, update: {} }, CLINIC_A);
-      expect(out.where).toEqual({ phone: '9990001111' });
+    it('WhatsAppAudit (no clinicId column) is not scoped', () => {
+      const out = scopeArgs('WhatsAppAudit', 'create', { data: { phone: '9990001111' } }, CLINIC_A);
+      expect(out.data).toEqual({ phone: '9990001111' });
     });
   });
 
@@ -143,8 +142,13 @@ describe('scopeArgs — tenant isolation rule', () => {
       }
     });
 
-    it('excludes non-tenant tables', () => {
-      for (const m of ['Clinic', 'Reminder', 'AiMessage', 'WhatsAppConversation', 'WhatsAppAudit', 'WhatsAppSession']) {
+    it('includes the Phase-2 re-keyed WhatsApp session tables', () => {
+      expect(TENANT_MODELS.has('WhatsAppSession')).toBe(true);
+      expect(TENANT_MODELS.has('WhatsAppConversation')).toBe(true);
+    });
+
+    it('excludes non-tenant tables (Clinic-like, no-clinicId, and the channel routing table)', () => {
+      for (const m of ['Clinic', 'Reminder', 'AiMessage', 'WhatsAppAudit', 'WhatsAppChannel']) {
         expect(TENANT_MODELS.has(m)).toBe(false);
       }
     });

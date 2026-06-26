@@ -1,7 +1,8 @@
 import axios, { AxiosResponse } from 'axios';
 
 import { prisma } from '../../config/prisma.js';
-import { getWhatsAppApiClient, getWhatsAppPhoneNumberId } from '../../config/whatsapp.js';
+import { forClinic } from '../../config/tenantPrisma.js';
+import { resolveSendContext } from './whatsapp.channel.js';
 import { noteSendFailure, noteSendSuccess } from './whatsapp.alerts.js';
 import { isTokenExpiredError, withRetry } from './whatsapp.retry.js';
 import {
@@ -82,8 +83,9 @@ export const sendWhatsAppTextMessage = async (
   const intercepted = interceptSend('text');
   if (intercepted) return intercepted;
 
-  const phoneNumberId = getWhatsAppPhoneNumberId();
-  const client = getWhatsAppApiClient();
+  // Use THIS clinic's WhatsApp number + token (falls back to the env default
+  // channel when the clinic has no WhatsAppChannel row).
+  const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
   const messageType = input.messageType ?? 'session_text';
 
   try {
@@ -190,8 +192,7 @@ export const sendWhatsAppInteractive = async (input: {
   messageType?: string;
   clinicId?: string | null;
 }): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
-  const phoneNumberId = getWhatsAppPhoneNumberId();
-  const client = getWhatsAppApiClient();
+  const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
   const messageType = input.messageType ?? 'interactive';
   const bodyForLog = botReplyText(input.reply);
 
@@ -255,8 +256,7 @@ export const sendWhatsAppTemplateMessage = async (params: {
   const intercepted = interceptSend('template');
   if (intercepted) return intercepted;
 
-  const phoneNumberId = getWhatsAppPhoneNumberId();
-  const client = getWhatsAppApiClient();
+  const { client, phoneNumberId } = await resolveSendContext(params.clinicId);
   const messageType = `template:${params.templateName}`;
 
   try {
@@ -374,10 +374,18 @@ export const recordWhatsAppAudit = async (a: {
   }
 };
 
-// True when the recipient messaged us within the last 24h (session window open).
-export const isConversationWindowOpen = async (phone: string): Promise<boolean> => {
-  const convo = await prisma.whatsAppConversation.findUnique({
-    where: { phone },
+// True when the recipient messaged THIS clinic within the last 24h (session
+// window open). The window is per (clinicId, phone): one clinic's inbound can
+// never open another clinic's send window. No clinic context → treated as closed
+// (forces the approved-template path), which is the safe default.
+export const isConversationWindowOpen = async (
+  clinicId: string | null | undefined,
+  phone: string
+): Promise<boolean> => {
+  if (!clinicId) return false;
+  const db = forClinic(clinicId);
+  const convo = await db.whatsAppConversation.findUnique({
+    where: { clinicId_phone: { clinicId, phone } },
     select: { lastInboundAt: true }
   });
 
@@ -388,14 +396,20 @@ export const isConversationWindowOpen = async (phone: string): Promise<boolean> 
   return Date.now() - convo.lastInboundAt.getTime() < SESSION_WINDOW_MS;
 };
 
-// Called from the inbound webhook to (re)open the 24h session window.
-export const recordInboundMessage = async (phone: string, timestampSeconds?: string): Promise<void> => {
+// Called from the inbound pipeline (after the clinic is resolved) to (re)open the
+// 24h session window for (clinicId, phone).
+export const recordInboundMessage = async (
+  clinicId: string,
+  phone: string,
+  timestampSeconds?: string
+): Promise<void> => {
   const parsed = timestampSeconds ? new Date(Number(timestampSeconds) * 1000) : new Date();
   const when = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 
-  await prisma.whatsAppConversation.upsert({
-    where: { phone },
-    create: { phone, lastInboundAt: when },
+  const db = forClinic(clinicId);
+  await db.whatsAppConversation.upsert({
+    where: { clinicId_phone: { clinicId, phone } },
+    create: { clinicId, phone, lastInboundAt: when },
     update: { lastInboundAt: when }
   });
 };
@@ -424,7 +438,7 @@ export const sendTemplatedOrSession = async (params: {
   sessionBody: string;
   clinicId?: string | null;
 }): Promise<{ channel: 'session' | 'template'; waMessageId?: string }> => {
-  if (await isConversationWindowOpen(params.to)) {
+  if (await isConversationWindowOpen(params.clinicId, params.to)) {
     const res = await sendWhatsAppTextMessage({
       to: params.to,
       body: params.sessionBody,

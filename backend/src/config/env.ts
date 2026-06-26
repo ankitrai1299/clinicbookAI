@@ -38,11 +38,16 @@ const envSchema = z.object({
   // Trimmed: a stray trailing newline/space (common when pasting into a host's
   // dashboard) would otherwise break HMAC signature comparison.
   WHATSAPP_APP_SECRET: z.string().trim().optional(),
-  // The clinic that owns the configured WhatsApp number. All inbound patient
-  // messages are bound to this clinic (booking, onboarding, dashboard). When a
-  // clinic later gets its own number, map metadata.phone_number_id → clinic here.
+  // The clinic that owns the env-configured WhatsApp number — the "default
+  // channel". Inbound on PHONE_NUMBER_ID binds here, and this clinic's outbound
+  // uses the env token. Additional clinics get their own WhatsAppChannel rows
+  // (routed by metadata.phone_number_id) and do NOT need this.
   // Trimmed: a trailing newline/space would make the clinic lookup-by-id miss.
   WHATSAPP_CLINIC_ID: z.string().trim().optional(),
+  // Optional symmetric key used to encrypt per-clinic WhatsApp tokens at rest in
+  // WhatsAppChannel.accessToken (AES-256-GCM; the key is SHA-256-derived from
+  // this value). When unset, tokens are stored as plaintext (dev/back-compat).
+  WA_CHANNEL_ENC_KEY: z.string().trim().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID: z.string().optional(),

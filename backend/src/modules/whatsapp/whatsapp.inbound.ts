@@ -22,6 +22,7 @@ import { forClinic } from '../../config/tenantPrisma.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { handleWhatsAppMessage } from './whatsapp.booking.js';
+import { resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
 import {
   logInboundMessage,
   recordInboundMessage,
@@ -93,46 +94,33 @@ export const decideClinicBinding = (params: {
   return params.isProduction ? 'refuse' : 'fallback';
 };
 
-let cachedClinicId: string | null = null;
-const resolveInboundClinicId = async (): Promise<string | null> => {
-  if (cachedClinicId) return cachedClinicId;
+// Resolve the clinic that owns the inbound WhatsApp number. PRIMARY path: map the
+// webhook's metadata.phone_number_id → clinic via WhatsAppChannel (with the env
+// default channel as a fallback for the original number). This is what makes the
+// platform multi-tenant: a message to clinic A's number can only ever bind to
+// clinic A. Production refuses to guess; only dev/demo falls back to the most
+// set-up clinic so local works without channel configuration.
+let cachedFallbackClinicId: string | null = null;
+const resolveInboundClinicId = async (phoneNumberId?: string | null): Promise<string | null> => {
+  const byChannel = await resolveClinicIdByPhoneNumberId(phoneNumberId);
+  if (byChannel) return byChannel;
 
-  const hasConfiguredId = Boolean(env.WHATSAPP_CLINIC_ID);
-  const configured = hasConfiguredId
-    ? await prisma.clinic.findUnique({ where: { id: env.WHATSAPP_CLINIC_ID }, select: { id: true } })
-    : null;
-
-  const decision = decideClinicBinding({
-    hasConfiguredId,
-    configuredResolves: Boolean(configured),
-    isProduction: env.NODE_ENV === 'production'
-  });
-
-  if (decision === 'use-configured' && configured) {
-    cachedClinicId = configured.id;
-    return configured.id;
-  }
-
-  if (decision === 'refuse') {
-    // Not cached, so it re-checks on the next message (config can be fixed
-    // without a restart). The caller sends a safe "being set up" message.
+  if (env.NODE_ENV === 'production') {
     console.error(
-      hasConfiguredId
-        ? `[WhatsApp] WHATSAPP_CLINIC_ID set but no matching clinic: ${env.WHATSAPP_CLINIC_ID}`
-        : '[WhatsApp] WHATSAPP_CLINIC_ID is not set — refusing to bind inbound to a guessed clinic in production.'
+      '[WhatsApp] No clinic for inbound phone_number_id — create a WhatsAppChannel for this number (or set WHATSAPP_CLINIC_ID for the env default).',
+      { phoneNumberId: phoneNumberId ?? null }
     );
     return null;
   }
 
-  // Non-production fallback only: the clinic with the most doctors (excluding the
-  // hidden platform clinic). Keeps inbound working in dev/demo without config.
+  if (cachedFallbackClinicId) return cachedFallbackClinicId;
   const clinic = await prisma.clinic.findFirst({
     where: { email: { not: PLATFORM_CLINIC_EMAIL } },
     orderBy: { doctors: { _count: 'desc' } },
     select: { id: true }
   });
-  cachedClinicId = clinic?.id ?? null;
-  return cachedClinicId;
+  cachedFallbackClinicId = clinic?.id ?? null;
+  return cachedFallbackClinicId;
 };
 
 // Find the patient for this number WITHIN the bound clinic, or onboard them.
@@ -212,7 +200,8 @@ const processOne = async (
   text: string,
   inboundWamid?: string,
   interactiveId?: string,
-  fromVoice?: boolean
+  fromVoice?: boolean,
+  phoneNumberId?: string | null
 ): Promise<void> => {
   const to = from.replace(/\D/g, '');
   let clinicId: string | null = null;
@@ -222,13 +211,13 @@ const processOne = async (
   let patientCode: string | null = null;
 
   try {
-    clinicId = await resolveInboundClinicId();
+    clinicId = await resolveInboundClinicId(phoneNumberId);
     await logInboundMessage({ from: to, body: text, waMessageId: inboundWamid, clinicId }).catch(() => undefined);
-    // Refresh the 24h WhatsApp session window on EVERY processed inbound, keyed on
-    // the same digits-only number the send path checks. Uses server time (now) so
-    // it can never be left stale by a missing/old Meta webhook timestamp — this is
-    // the single funnel every inbound passes through (webhook or re-injection).
-    await recordInboundMessage(to).catch(() => undefined);
+    // Refresh the 24h WhatsApp session window (per clinic) on every processed
+    // inbound, keyed on the same digits-only number the send path checks. Uses
+    // server time so it can't be left stale by a missing/old Meta timestamp. Only
+    // once the clinic is known — the window is per (clinicId, phone).
+    if (clinicId) await recordInboundMessage(clinicId, to).catch(() => undefined);
 
     if (clinicId) {
       const patient = await findOrCreatePatient(clinicId, from);
@@ -313,7 +302,7 @@ export const handleInboundText = (
   text: string,
   inboundWamid?: string,
   interactiveId?: string,
-  options?: { fromVoice?: boolean }
+  options?: { fromVoice?: boolean; phoneNumberId?: string | null }
 ): Promise<void> => {
   if (!isWhatsAppConfigured()) {
     return Promise.resolve();
@@ -333,7 +322,7 @@ export const handleInboundText = (
   const prev = queues.get(key) ?? Promise.resolve();
   const next = prev
     .catch(() => undefined) // a failed prior turn must not block the next one
-    .then(() => processOne(from, text, inboundWamid, interactiveId, options?.fromVoice))
+    .then(() => processOne(from, text, inboundWamid, interactiveId, options?.fromVoice, options?.phoneNumberId))
     .catch((err) => console.error('[WhatsApp] Inbound processing failed:', err));
 
   queues.set(

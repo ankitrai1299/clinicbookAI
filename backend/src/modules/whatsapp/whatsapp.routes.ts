@@ -10,8 +10,13 @@ import {
   verifyWebhook,
   webhookDebugHandler
 } from './whatsapp.controller.js';
+import { getChannelHandler, onboardChannelHandler } from './whatsapp.onboarding.controller.js';
 import { verifyWhatsAppSignature } from './whatsapp.signature.js';
-import { sendWhatsAppTemplateSchema, sendWhatsAppTextSchema } from './whatsapp.validation.js';
+import {
+  onboardWhatsAppChannelSchema,
+  sendWhatsAppTemplateSchema,
+  sendWhatsAppTextSchema
+} from './whatsapp.validation.js';
 
 const whatsappRouter = Router();
 
@@ -19,6 +24,12 @@ const whatsappRouter = Router();
 // POST = inbound messages, HMAC-verified against the Meta app secret.
 whatsappRouter.get('/webhook', verifyWebhook);
 whatsappRouter.post('/webhook', verifyWhatsAppSignature, handleIncomingWebhook);
+
+// Per-clinic channel onboarding — STAFF-only. POST validates the clinic's own
+// WhatsApp Cloud API creds + webhook with Meta, encrypts the token, and binds a
+// WhatsAppChannel to the authenticated clinic. GET returns its status (no token).
+whatsappRouter.post('/channel', requireAuth, validate(onboardWhatsAppChannelSchema), onboardChannelHandler);
+whatsappRouter.get('/channel', requireAuth, getChannelHandler);
 
 // Diagnostics — STAFF-only (exposes last inbound phone/message = patient PII).
 whatsappRouter.get('/debug', requireAuth, webhookDebugHandler);

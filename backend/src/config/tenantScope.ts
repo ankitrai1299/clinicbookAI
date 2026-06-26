@@ -5,14 +5,16 @@
 
 // Every model that carries a `clinicId` column and must therefore be tenant-
 // scoped. Keep in sync with schema.prisma. Models without a clinicId (Reminder,
-// AiMessage, WhatsAppConversation, WhatsAppAudit) are reached only via a scoped
-// parent and are deliberately absent.
+// AiMessage, WhatsAppAudit) are reached only via a scoped parent and are absent.
 //
-// `WhatsAppSession` is intentionally EXCLUDED until Phase 2 re-keys it to
-// @@unique(clinicId, phone). It is currently @@unique(phone) only, so injecting
-// clinicId into an upsert's where would break the upsert (a row for that phone
-// under a different clinic would fail the conflict match). Session ops stay on
-// the raw client until the re-key lands.
+// WhatsAppSession + WhatsAppConversation joined this set in Phase 2 once they were
+// re-keyed to @@unique(clinicId, phone): the SAME patient phone is now a distinct
+// session/24h-window per clinic, and the scoped client injects clinicId so one
+// clinic can never read or overwrite another's session/window.
+//
+// WhatsAppChannel is NOT here: it is the routing table looked up by phoneNumberId
+// BEFORE a clinic is known (resolving WHICH clinic), so it uses the raw client —
+// like Clinic itself.
 export const TENANT_MODELS = new Set<string>([
   'User',
   'Patient',
@@ -23,7 +25,9 @@ export const TENANT_MODELS = new Set<string>([
   'Notification',
   'Waitlist',
   'AiConversation',
-  'WhatsAppLog'
+  'WhatsAppLog',
+  'WhatsAppSession',
+  'WhatsAppConversation'
 ]);
 
 // Operations whose `where` we constrain with clinicId.
