@@ -15,5 +15,17 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(128)
 });
 
+// Email verification (signup OTP gate).
+export const verifyOtpSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code')
+});
+
+export const resendOtpSchema = z.object({
+  email: z.string().trim().toLowerCase().email()
+});
+
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
+export type ResendOtpInput = z.infer<typeof resendOtpSchema>;

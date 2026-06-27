@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
 
-import { signAccessToken } from '../../config/jwt.js';
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
+import { issueOtp } from '../auth/otp.service.js';
 import { RegisterClinicInput, UpdateClinicInput } from './clinic.schemas.js';
 
 // NOTE: this module intentionally uses the RAW prisma client. It manages the
@@ -62,27 +62,18 @@ export const registerClinic = async (input: RegisterClinicInput) => {
         name: input.ownerName.trim(),
         email,
         passwordHash,
+        // Self-service signups must verify their email before getting a token.
+        emailVerified: false,
       },
-      select: {
-        id: true,
-        clinicId: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: { id: true, email: true },
     });
 
     return { clinic, user };
   });
 
-  const accessToken = signAccessToken({
-    userId: result.user.id,
-    clinicId: result.clinic.id,
-    email: result.user.email,
-    role: result.user.role,
-  });
+  // Hard gate: issue + email a verification OTP and return NO access token. The
+  // owner verifies the code (POST /api/auth/verify-otp) to receive their token.
+  await issueOtp(result.user.id, result.user.email);
 
-  return { user: result.user, accessToken };
+  return { needsVerification: true as const, email: result.user.email };
 };

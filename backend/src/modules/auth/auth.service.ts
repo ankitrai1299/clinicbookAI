@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { signAccessToken } from '../../config/jwt.js';
 import { AppError } from '../../utils/AppError.js';
+import { issueOtp, verifyOtp } from './otp.service.js';
 import { LoginInput, SignupInput } from './auth.schemas.js';
 
 // NOTE: raw prisma by design. Authentication runs BEFORE/ACROSS tenancy — login
@@ -77,7 +78,8 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
     where: { email },
     select: {
       ...publicUserSelect,
-      passwordHash: true
+      passwordHash: true,
+      emailVerified: true
     }
   });
 
@@ -91,9 +93,49 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
     throw new AppError('Invalid email or password', 401);
   }
 
-  const { passwordHash: _passwordHash, ...user } = userRecord;
+  // Hard gate: an unverified account cannot log in. Re-issue an OTP (cooldown-
+  // guarded, swallow the cooldown error) and signal the front-end to show the
+  // verification screen via a stable code in the message.
+  if (!userRecord.emailVerified) {
+    await issueOtp(userRecord.id, userRecord.email).catch(() => undefined);
+    throw new AppError('EMAIL_NOT_VERIFIED', 403);
+  }
+
+  const { passwordHash: _passwordHash, emailVerified: _emailVerified, ...user } = userRecord;
 
   return buildAuthResult(user);
+};
+
+// Verify the signup OTP → mark the user verified and issue their access token.
+export const verifyEmailOtp = async (emailInput: string, code: string): Promise<AuthResult> => {
+  const email = normalizeEmail(emailInput);
+  const record = await prisma.user.findUnique({ where: { email }, select: { id: true, emailVerified: true } });
+  if (!record) {
+    throw new AppError('Invalid email or password', 401);
+  }
+  if (record.emailVerified) {
+    // Already verified — just return a fresh token (idempotent for retries).
+    const user = await getAuthenticatedUser(record.id);
+    return buildAuthResult(user);
+  }
+
+  await verifyOtp(record.id, code); // throws on bad/expired/too-many
+
+  const user = await prisma.user.update({
+    where: { id: record.id },
+    data: { emailVerified: true, emailVerifiedAt: new Date() },
+    select: publicUserSelect
+  });
+  return buildAuthResult(user);
+};
+
+// Re-send the signup OTP (cooldown enforced in otp.service).
+export const resendEmailOtp = async (emailInput: string): Promise<void> => {
+  const email = normalizeEmail(emailInput);
+  const record = await prisma.user.findUnique({ where: { email }, select: { id: true, email: true, emailVerified: true } });
+  // Do not reveal whether the email exists; silently succeed when unknown/verified.
+  if (!record || record.emailVerified) return;
+  await issueOtp(record.id, record.email);
 };
 
 export const getAuthenticatedUser = async (userId: string): Promise<PublicUser> => {

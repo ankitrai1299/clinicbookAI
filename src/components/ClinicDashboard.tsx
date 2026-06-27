@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import AiAssistant from './AiAssistant';
 import DoctorWorkflow from './DoctorWorkflow';
+import ConnectWhatsApp from './ConnectWhatsApp';
+import { getChannelStatus as getChannelStatusApi } from '../api/whatsapp';
 import { Appointment, Doctor, Patient, ReminderLog, WaitlistPatient, ClinicConfig, DashboardTab } from '../types';
 import {
   getAppointments as getAppointmentsApi,
@@ -148,6 +150,14 @@ export default function ClinicDashboard({
   // Real dashboard notifications (bell + activity feed), polled for near-real-time updates.
   const [notifications, setNotifications] = useState<ApiNotification[]>([]);
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // Live WhatsApp connection status (drives the sidebar badge + Settings card).
+  const [waConnected, setWaConnected] = useState<boolean | null>(null);
+  useEffect(() => {
+    getChannelStatusApi()
+      .then((s) => setWaConnected(Boolean(s.channel && s.channel.status === 'ACTIVE' && s.healthy !== false)))
+      .catch(() => setWaConnected(false));
+  }, []);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -486,10 +496,17 @@ export default function ClinicDashboard({
             <h4 className="font-display font-bold text-slate-800 text-sm tracking-tight truncate">
               {clinicConfig.name}
             </h4>
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full text-[9px] font-bold text-emerald-700 uppercase tracking-wider font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              WhatsApp Connected
-            </span>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono cursor-pointer ${
+                waConnected
+                  ? 'bg-emerald-50 border border-emerald-100 text-emerald-700'
+                  : 'bg-amber-50 border border-amber-100 text-amber-700'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${waConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+              {waConnected === null ? 'Checking…' : waConnected ? 'WhatsApp Connected' : 'Connect WhatsApp'}
+            </button>
           </div>
 
           <div className="h-px bg-slate-100"></div>
@@ -1350,6 +1367,12 @@ export default function ClinicDashboard({
               <div className="border-b border-slate-100 pb-4 text-left">
                 <h2 className="font-display font-extrabold text-lg text-slate-950">Bot Integration Settings</h2>
                 <p className="text-slate-400 text-xs">Configure how the ClinicBook AI speaks, operates, and checks calendar synchronization.</p>
+              </div>
+
+              {/* WhatsApp connection — one-click Meta Embedded Signup */}
+              <div className="text-left">
+                <h3 className="font-display font-black text-sm text-slate-950 mb-3">WhatsApp Connection</h3>
+                <ConnectWhatsApp onConnected={() => setWaConnected(true)} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">

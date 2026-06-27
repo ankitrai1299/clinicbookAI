@@ -79,6 +79,8 @@ model WhatsAppChannel {
   // Meta Cloud API identifiers. phoneNumberId is the inbound routing key.
   phoneNumberId      String   @unique
   wabaId             String?
+  // Owning Meta Business id (resolved from the WABA during Embedded Signup).
+  businessId         String?
   displayPhoneNumber String?
   // Long-lived access token (encrypted when WA_CHANNEL_ENC_KEY is configured).
   accessToken        String   @db.Text
@@ -102,14 +104,36 @@ model User {
   email        String    @unique
   passwordHash String
   role         UserRole  @default(CLINIC_ADMIN)
+  // Email verification gate for self-service signup. @default(true) so an additive
+  // `db push` backfills EXISTING users as verified (never locks them out); new
+  // self-service signups are created with emailVerified:false explicitly.
+  emailVerified   Boolean   @default(true)
+  emailVerifiedAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   aiConversations AiConversation[]
+  emailOtp        EmailOtp?
 
   @@index([clinicId])
   @@index([role])
+}
+
+// One active email OTP per user (hashed, never plaintext). Used for the signup
+// email-verification gate. Short-lived (TTL) with an attempt cap and a resend
+// cooldown enforced in otp.service.ts.
+model EmailOtp {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  lastSentAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Patient {

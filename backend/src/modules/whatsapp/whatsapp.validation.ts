@@ -42,3 +42,13 @@ export const onboardWhatsAppChannelSchema = z.object({
 });
 
 export type OnboardWhatsAppChannelInput = z.infer<typeof onboardWhatsAppChannelSchema>;
+
+// Complete Meta Embedded Signup: the front-end posts the OAuth code + the
+// session info (phone number id + WABA id) returned by the Embedded Signup popup.
+export const embeddedSignupSchema = z.object({
+  code: z.string().trim().min(10).max(2000),
+  phoneNumberId: z.string().trim().min(5).max(40),
+  wabaId: z.string().trim().min(5).max(40)
+});
+
+export type EmbeddedSignupBody = z.infer<typeof embeddedSignupSchema>;

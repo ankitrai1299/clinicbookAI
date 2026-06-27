@@ -9,7 +9,7 @@ export const registerClinicHandler = asyncHandler(async (req: Request, res: Resp
 
   res.status(201).json({
     success: true,
-    message: 'Clinic registered successfully',
+    message: 'Verification code sent to your email',
     data: result,
   });
 });

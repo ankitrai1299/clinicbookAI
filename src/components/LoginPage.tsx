@@ -7,9 +7,11 @@ import { PageType } from '../types';
 
 interface LoginPageProps {
   setCurrentPage: (page: PageType) => void;
+  // Login of an unverified account (backend 403 EMAIL_NOT_VERIFIED) → route to OTP.
+  onNeedVerification: (email: string) => void;
 }
 
-export default function LoginPage({ setCurrentPage }: LoginPageProps) {
+export default function LoginPage({ setCurrentPage, onNeedVerification }: LoginPageProps) {
   const { setAuth } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,6 +27,11 @@ export default function LoginPage({ setCurrentPage }: LoginPageProps) {
       setAuth(accessToken, user);
       setCurrentPage('dashboard');
     } catch (err: unknown) {
+      // Unverified account → the backend re-sent an OTP; take them to verify.
+      if (err instanceof Error && err.message === 'EMAIL_NOT_VERIFIED') {
+        onNeedVerification(email);
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);

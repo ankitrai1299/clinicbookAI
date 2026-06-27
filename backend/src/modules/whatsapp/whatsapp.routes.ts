@@ -10,9 +10,16 @@ import {
   verifyWebhook,
   webhookDebugHandler
 } from './whatsapp.controller.js';
-import { getChannelHandler, onboardChannelHandler } from './whatsapp.onboarding.controller.js';
+import {
+  disconnectChannelHandler,
+  embeddedConfigHandler,
+  embeddedSignupHandler,
+  getChannelHandler,
+  onboardChannelHandler
+} from './whatsapp.onboarding.controller.js';
 import { verifyWhatsAppSignature } from './whatsapp.signature.js';
 import {
+  embeddedSignupSchema,
   onboardWhatsAppChannelSchema,
   sendWhatsAppTemplateSchema,
   sendWhatsAppTextSchema
@@ -25,11 +32,18 @@ const whatsappRouter = Router();
 whatsappRouter.get('/webhook', verifyWebhook);
 whatsappRouter.post('/webhook', verifyWhatsAppSignature, handleIncomingWebhook);
 
-// Per-clinic channel onboarding — STAFF-only. POST validates the clinic's own
-// WhatsApp Cloud API creds + webhook with Meta, encrypts the token, and binds a
-// WhatsAppChannel to the authenticated clinic. GET returns its status (no token).
-whatsappRouter.post('/channel', requireAuth, validate(onboardWhatsAppChannelSchema), onboardChannelHandler);
+// --- WhatsApp channel onboarding (STAFF-only, bound to the caller's clinic) ---
+// PRIMARY: Meta Embedded Signup (one-click). The front-end gets the public app
+// config, launches the popup, then posts the OAuth code + session info here.
+whatsappRouter.get('/embedded-signup/config', requireAuth, embeddedConfigHandler);
+whatsappRouter.post('/embedded-signup', requireAuth, validate(embeddedSignupSchema), embeddedSignupHandler);
+
+// Channel status (+ live token health) and disconnect (for reconnect flows).
 whatsappRouter.get('/channel', requireAuth, getChannelHandler);
+whatsappRouter.delete('/channel', requireAuth, disconnectChannelHandler);
+
+// FALLBACK / admin: manual onboarding by pasting Cloud API creds.
+whatsappRouter.post('/channel', requireAuth, validate(onboardWhatsAppChannelSchema), onboardChannelHandler);
 
 // Diagnostics — STAFF-only (exposes last inbound phone/message = patient PII).
 whatsappRouter.get('/debug', requireAuth, webhookDebugHandler);

@@ -23,12 +23,14 @@ import { env } from '../../config/env.js';
 import { buildWhatsAppClient } from '../../config/whatsapp.js';
 import { AppError } from '../../utils/AppError.js';
 import { clearChannelCaches } from './whatsapp.channel.js';
-import { deriveKey, encryptSecret, isEncrypted } from './whatsapp.crypto.js';
+import { decryptSecret, deriveKey, encryptSecret, isEncrypted } from './whatsapp.crypto.js';
 
 export interface OnboardChannelInput {
   phoneNumberId: string;
-  // Meta WhatsApp Business Account id (a.k.a. Business ID / WABA id).
+  // Meta WhatsApp Business Account id (a.k.a. WABA id).
   wabaId: string;
+  // Owning Meta Business id (resolved during Embedded Signup; optional).
+  businessId?: string;
   accessToken: string;
   // Optional per-channel webhook secrets (fall back to env when omitted).
   appSecret?: string;
@@ -54,6 +56,7 @@ export interface PublicChannel {
   clinicId: string;
   phoneNumberId: string;
   wabaId: string | null;
+  businessId: string | null;
   displayPhoneNumber: string | null;
   status: string;
   tokenEncrypted: boolean;
@@ -142,6 +145,7 @@ const toPublic = (row: {
   clinicId: string;
   phoneNumberId: string;
   wabaId: string | null;
+  businessId: string | null;
   displayPhoneNumber: string | null;
   status: string;
   accessToken: string;
@@ -151,6 +155,7 @@ const toPublic = (row: {
   clinicId: row.clinicId,
   phoneNumberId: row.phoneNumberId,
   wabaId: row.wabaId,
+  businessId: row.businessId,
   displayPhoneNumber: row.displayPhoneNumber,
   status: row.status,
   tokenEncrypted: isEncrypted(row.accessToken),
@@ -188,6 +193,7 @@ export const onboardWhatsAppChannel = async (
       clinicId,
       phoneNumberId: input.phoneNumberId,
       wabaId: input.wabaId,
+      businessId: input.businessId ?? null,
       displayPhoneNumber: verification.displayPhoneNumber ?? null,
       accessToken,
       appSecret: input.appSecret ?? null,
@@ -197,6 +203,7 @@ export const onboardWhatsAppChannel = async (
     update: {
       clinicId,
       wabaId: input.wabaId,
+      businessId: input.businessId ?? null,
       displayPhoneNumber: verification.displayPhoneNumber ?? null,
       accessToken,
       appSecret: input.appSecret ?? null,
@@ -218,4 +225,41 @@ export const getClinicChannel = async (clinicId: string): Promise<PublicChannel 
     orderBy: { updatedAt: 'desc' }
   });
   return row ? toPublic(row) : null;
+};
+
+export interface ChannelStatus {
+  channel: PublicChannel | null;
+  // Live token probe: true = token valid, false = expired/invalid (reconnect),
+  // null = no channel or probe skipped/unavailable.
+  healthy: boolean | null;
+}
+
+// Channel status for the dashboard, with a best-effort live token probe so the
+// UI can surface "needs reconnect" when a token has expired.
+export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelStatus> => {
+  const row = await prisma.whatsAppChannel.findFirst({
+    where: { clinicId },
+    orderBy: { updatedAt: 'desc' }
+  });
+  if (!row) return { channel: null, healthy: null };
+
+  let healthy: boolean | null = null;
+  try {
+    const key = env.WA_CHANNEL_ENC_KEY ? deriveKey(env.WA_CHANNEL_ENC_KEY) : null;
+    const token = decryptSecret(row.accessToken, key);
+    await buildWhatsAppClient(token).get(`/${row.phoneNumberId}`, { params: { fields: 'id' } });
+    healthy = true;
+  } catch {
+    healthy = false; // token rejected by Meta → reconnect needed
+  }
+  return { channel: toPublic(row), healthy };
+};
+
+// Disconnect the clinic's channel (e.g. before reconnecting, or to stop using
+// WhatsApp). Removes the routing row so inbound falls back to the env default and
+// outbound for this clinic stops resolving a per-clinic number.
+export const disconnectClinicChannel = async (clinicId: string): Promise<{ removed: number }> => {
+  const res = await prisma.whatsAppChannel.deleteMany({ where: { clinicId } });
+  clearChannelCaches();
+  return { removed: res.count };
 };

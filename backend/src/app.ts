@@ -22,6 +22,9 @@ export const createApp = () => {
   const app = express();
 
   app.disable('x-powered-by');
+  // Behind Railway's proxy: trust the first hop so express-rate-limit keys on the
+  // real client IP (X-Forwarded-For) instead of the proxy address.
+  app.set('trust proxy', 1);
   app.use(helmet());
   app.use(
     cors({

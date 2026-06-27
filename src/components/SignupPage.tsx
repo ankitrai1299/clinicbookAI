@@ -5,16 +5,16 @@ import {
 } from 'lucide-react';
 
 import { registerClinic } from '../api/auth';
-import { useAuth } from '../context/AuthContext';
 import { PageType, ClinicConfig } from '../types';
 
 interface SignupPageProps {
-  onSignupSuccess: (customConfig: Partial<ClinicConfig>) => void;
+  // Account created → email needs OTP verification. Parent captures the email +
+  // config and routes to the verification screen.
+  onPendingVerification: (email: string, customConfig: Partial<ClinicConfig>) => void;
   setCurrentPage: (page: PageType) => void;
 }
 
-export default function SignupPage({ onSignupSuccess, setCurrentPage }: SignupPageProps) {
-  const { setAuth } = useAuth();
+export default function SignupPage({ onPendingVerification, setCurrentPage }: SignupPageProps) {
   const [clinicName, setClinicName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [email, setEmail] = useState('');
@@ -35,7 +35,7 @@ export default function SignupPage({ onSignupSuccess, setCurrentPage }: SignupPa
     setLoading(true);
     setError(null);
     try {
-      const { user, accessToken } = await registerClinic({
+      const { email: registeredEmail } = await registerClinic({
         clinicName,
         ownerName,
         email,
@@ -43,13 +43,8 @@ export default function SignupPage({ onSignupSuccess, setCurrentPage }: SignupPa
         password,
       });
 
-      setAuth(accessToken, user);
-
-      // New clinics start with an empty doctor roster — the owner adds their own
-      // doctors from the Doctors & Schedules page. No demo/seed doctors.
-
-      setRegistered(true);
-
+      // No token yet — the owner must verify their email first. Hand the captured
+      // clinic config to the parent to apply once verification succeeds.
       const customConfig: Partial<ClinicConfig> = {
         name: clinicName,
         ownerName,
@@ -61,10 +56,8 @@ export default function SignupPage({ onSignupSuccess, setCurrentPage }: SignupPa
         whatsappNumber: phone,
       };
 
-      setTimeout(() => {
-        onSignupSuccess(customConfig);
-        setCurrentPage('dashboard');
-      }, 1200);
+      setRegistered(true);
+      onPendingVerification(registeredEmail || email, customConfig);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
       setLoading(false);
@@ -91,9 +84,9 @@ export default function SignupPage({ onSignupSuccess, setCurrentPage }: SignupPa
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-md">
                 <CheckCircle className="w-10 h-10" />
               </div>
-              <h3 className="font-display font-extrabold text-2xl text-slate-900">Configuring Clinic Webhooks...</h3>
+              <h3 className="font-display font-extrabold text-2xl text-slate-900">Account created!</h3>
               <p className="text-slate-500 text-sm max-w-md mx-auto">
-                Setting up virtual WhatsApp number, registering metadata workspace and securing database parameters. Redirecting to your clinic control desk...
+                We've emailed a 6-digit verification code to <span className="font-semibold text-slate-700">{email}</span>. Taking you to the verification step…
               </p>
               <div className="w-12 h-12 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mx-auto mt-6" />
             </div>

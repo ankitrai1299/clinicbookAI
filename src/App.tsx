@@ -7,13 +7,20 @@ import LandingPage from './components/LandingPage';
 import ClinicDashboard from './components/ClinicDashboard';
 import SignupPage from './components/SignupPage';
 import LoginPage from './components/LoginPage';
+import VerifyEmailPage from './components/VerifyEmailPage';
+import WelcomeScreen from './components/WelcomeScreen';
 import PatientRegistration from './components/PatientRegistration';
+import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
 
 function AppShell() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, setAuth } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageType>('landing');
+  // Self-service onboarding hand-off: email pending OTP verification, and the
+  // clinic config captured at signup to apply once verified.
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingConfig, setPendingConfig] = useState<Partial<ClinicConfig> | null>(null);
 
   // Dashboard lists start empty and are populated from the backend on load.
   // No demo/sample data is seeded into the UI.
@@ -60,13 +67,30 @@ function AppShell() {
     setTimeout(() => setGlobalNotification(null), 6000);
   };
 
-  const handleClinicSignup = (customConfig: Partial<ClinicConfig>) => {
+  const applyClinicConfig = (customConfig: Partial<ClinicConfig>) => {
     setClinicConfig(prev => ({
       ...prev,
       ...customConfig,
       whatsappNumber: customConfig.phone || prev.whatsappNumber
     }));
-    displayGlobalNotification(`🎉 Welcome on board! "${customConfig.name}" has been set up with WhatsApp booking enabled.`);
+  };
+
+  // Signup succeeded but the email is unverified — capture the email + the config
+  // to apply after verification, then route to the OTP screen.
+  const handlePendingVerification = (email: string, customConfig: Partial<ClinicConfig> | null) => {
+    setPendingEmail(email);
+    setPendingConfig(customConfig);
+    setCurrentPage('verify-email');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // OTP verified — store the session, apply any captured config, go to Welcome.
+  const handleVerified = (token: string, verifiedUser: AuthUser) => {
+    setAuth(token, verifiedUser);
+    if (pendingConfig) applyClinicConfig(pendingConfig);
+    setPendingConfig(null);
+    setCurrentPage('welcome');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (loading) {
@@ -101,13 +125,32 @@ function AppShell() {
         )}
 
         {currentPage === 'login' && (
-          <LoginPage setCurrentPage={handleSetPage} />
+          <LoginPage
+            setCurrentPage={handleSetPage}
+            onNeedVerification={(email) => handlePendingVerification(email, null)}
+          />
         )}
 
         {currentPage === 'signup' && (
           <SignupPage
-            onSignupSuccess={handleClinicSignup}
+            onPendingVerification={handlePendingVerification}
             setCurrentPage={handleSetPage}
+          />
+        )}
+
+        {currentPage === 'verify-email' && (
+          <VerifyEmailPage
+            email={pendingEmail}
+            onVerified={handleVerified}
+            onBack={() => setCurrentPage('signup')}
+          />
+        )}
+
+        {currentPage === 'welcome' && user && (
+          <WelcomeScreen
+            clinicName={clinicConfig.name}
+            ownerName={clinicConfig.ownerName || user.name}
+            onContinue={() => handleSetPage('dashboard')}
           />
         )}
 
