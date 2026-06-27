@@ -5,6 +5,7 @@ import { connectDatabase, disconnectDatabase } from './config/prisma.js';
 import { startReminderCron } from './cron/reminder.cron.js';
 import { startWaitlistCron } from './cron/waitlist.cron.js';
 import { logWhatsAppStartupInfo } from './modules/whatsapp/whatsapp.diagnostics.js';
+import { logEmailStartupInfo } from './services/email.service.js';
 
 const app = createApp();
 let server: ReturnType<typeof app.listen> | null = null;
@@ -35,6 +36,8 @@ const startServer = async () => {
     console.info(`ClinicBook AI backend listening on port ${env.PORT}`);
     // WhatsApp binding/observability banner (clinic, webhook URL, signature).
     void logWhatsAppStartupInfo();
+    // Email provider + sender banner (flags the Resend test-domain limitation).
+    logEmailStartupInfo();
   });
 
   startReminderCron();

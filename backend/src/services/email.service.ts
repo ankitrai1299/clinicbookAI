@@ -11,6 +11,23 @@ const client = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 
 export const isEmailConfigured = (): boolean => Boolean(env.RESEND_API_KEY);
 
+// Startup diagnostic so the active email config is visible in the deploy logs —
+// makes it obvious when EMAIL_FROM still points at the Resend test domain (which
+// only delivers to the account owner) vs a verified production domain.
+export const logEmailStartupInfo = (): void => {
+  if (!env.RESEND_API_KEY) {
+    console.warn('[email] RESEND_API_KEY not set — OTP codes are LOGGED to console, not emailed (dev mode).');
+    return;
+  }
+  console.info(`[email] Resend configured. Sender (EMAIL_FROM): ${env.EMAIL_FROM}`);
+  if (/@resend\.dev/i.test(env.EMAIL_FROM)) {
+    console.warn(
+      '[email] EMAIL_FROM uses the Resend test domain (@resend.dev) — emails deliver ONLY to your Resend account address. ' +
+        'Set EMAIL_FROM to a verified custom domain (e.g. "ClinicBook AI <noreply@clinicbook.ai>") for delivery to any clinic owner.'
+    );
+  }
+};
+
 interface SendArgs {
   to: string;
   subject: string;
