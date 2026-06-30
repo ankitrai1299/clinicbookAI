@@ -1,9 +1,9 @@
 import { Prisma, WaitlistStatus } from '@prisma/client';
 
-import { prisma } from '../../config/prisma.js';
-import { forClinic } from '../../config/tenantPrisma.js';
-import { AppError } from '../../utils/AppError.js';
-import { notifyWaitlistOffer, notifyWaitlistSlotOffer } from '../whatsapp/whatsapp.notifications.js';
+import { prisma } from '../../../config/prisma.js';
+import { forClinic } from '../../../config/tenantPrisma.js';
+import { AppError } from '../../../utils/AppError.js';
+import { notifyWaitlistOffer, notifyWaitlistSlotOffer } from '../../../core/whatsapp/whatsapp.notifications.js';
 import { createAppointment } from '../appointments/appointment.service.js';
 import { AddToWaitlistInput, ConvertWaitlistInput, UpdateWaitlistPriorityInput } from './waitlist.schemas.js';
 

@@ -1,17 +1,17 @@
 import { Router } from 'express';
 
-import aiRouter from '../modules/ai/ai.routes.js';
-import analyticsRouter from '../modules/analytics/analytics.routes.js';
-import appointmentRouter from '../modules/appointments/appointment.routes.js';
-import authRouter from '../modules/auth/auth.routes.js';
-import billingRouter from '../modules/billing/billing.routes.js';
-import clinicRouter from '../modules/clinics/clinic.routes.js';
-import doctorRouter from '../modules/doctors/doctor.routes.js';
-import notificationRouter from '../modules/notifications/notification.routes.js';
-import patientRouter from '../modules/patients/patient.routes.js';
-import publicPatientRouter from '../modules/patients/public.routes.js';
-import waitlistRouter from '../modules/waitlist/waitlist.routes.js';
-import whatsappRouter from '../modules/whatsapp/whatsapp.routes.js';
+import aiRouter from '../core/ai/ai.routes.js';
+import analyticsRouter from '../core/analytics/analytics.routes.js';
+import appointmentRouter from '../products/clinicbook/appointments/appointment.routes.js';
+import authRouter from '../core/auth/auth.routes.js';
+import billingRouter from '../core/billing/billing.routes.js';
+import clinicRouter from '../core/clinics/clinic.routes.js';
+import doctorRouter from '../core/doctors/doctor.routes.js';
+import notificationRouter from '../core/notifications/notification.routes.js';
+import patientRouter from '../core/patients/patient.routes.js';
+import publicPatientRouter from '../core/patients/public.routes.js';
+import waitlistRouter from '../products/clinicbook/waitlist/waitlist.routes.js';
+import whatsappRouter from '../core/whatsapp/whatsapp.routes.js';
 import healthRouter from './health.routes.js';
 
 const apiRouter = Router();

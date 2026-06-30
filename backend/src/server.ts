@@ -4,7 +4,7 @@ import { ensureSlotUniqueIndex } from './config/ensureIndexes.js';
 import { connectDatabase, disconnectDatabase } from './config/prisma.js';
 import { startReminderCron } from './cron/reminder.cron.js';
 import { startWaitlistCron } from './cron/waitlist.cron.js';
-import { logWhatsAppStartupInfo } from './modules/whatsapp/whatsapp.diagnostics.js';
+import { logWhatsAppStartupInfo } from './core/whatsapp/whatsapp.diagnostics.js';
 import { logEmailStartupInfo } from './services/email.service.js';
 
 const app = createApp();

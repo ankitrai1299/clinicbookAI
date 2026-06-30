@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 
-import { expireStaleOffers } from '../modules/waitlist/waitlist.service.js';
+import { expireStaleOffers } from '../products/clinicbook/waitlist/waitlist.service.js';
 
 // Runs every minute: any waitlist slot offer whose 15-minute hold has elapsed is
 // dropped and the slot is rolled to the next waiting patient. Always on (the

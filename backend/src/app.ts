@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 
 import { env } from './config/env.js';
 import apiRouter from './routes/index.js';
-import { stripeWebhookHandler } from './modules/billing/billing.controller.js';
+import { stripeWebhookHandler } from './core/billing/billing.controller.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';

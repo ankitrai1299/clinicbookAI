@@ -5,7 +5,7 @@ import { Patient, Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { forClinic, type TenantClient } from '../../config/tenantPrisma.js';
 import { AppError } from '../../utils/AppError.js';
-import { createAppointment } from '../appointments/appointment.service.js';
+import { createAppointment } from '../../products/clinicbook/appointments/appointment.service.js';
 import { isSlotAvailable } from '../../services/scheduling.service.js';
 import { notifyPatientRegistered } from '../whatsapp/whatsapp.notifications.js';
 import {

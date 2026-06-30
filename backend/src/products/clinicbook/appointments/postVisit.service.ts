@@ -14,7 +14,7 @@
 // Each action is fire-and-forget and ISOLATED: one throwing must never block the
 // others or the HTTP response that triggered completion.
 
-import { notifyAppointmentCompleted } from '../whatsapp/whatsapp.notifications.js';
+import { notifyAppointmentCompleted } from '../../../core/whatsapp/whatsapp.notifications.js';
 import type { AppointmentRecord } from './appointment.service.js';
 
 export type PostVisitAction = (appt: AppointmentRecord) => void | Promise<void>;

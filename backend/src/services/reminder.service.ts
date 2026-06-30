@@ -2,13 +2,13 @@ import { AppointmentStatus, Prisma, ReminderType } from '@prisma/client';
 
 import { prisma } from '../config/prisma.js';
 import { formatDoctorName, normalizeDoctorName } from '../utils/doctorName.js';
-import { sendTemplatedOrSession } from '../modules/whatsapp/whatsapp.service.js';
+import { sendTemplatedOrSession } from '../core/whatsapp/whatsapp.service.js';
 import { clinicLocalInstant } from './scheduling.service.js';
 import {
   AppointmentTemplateData,
   WhatsAppTemplate,
   appointmentReminderComponents
-} from '../modules/whatsapp/whatsapp.templates.js';
+} from '../core/whatsapp/whatsapp.templates.js';
 
 // The 24-hour reminder is opt-in (set REMINDER_24H_ENABLED=true). The 1-hour
 // reminder always runs when the cron is enabled — that's the one clinics asked

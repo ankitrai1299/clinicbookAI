@@ -34,14 +34,14 @@ import { forClinic } from '../../config/tenantPrisma.js';
 import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
-import { createAppointment, cancelAppointment, updateAppointment } from '../appointments/appointment.service.js';
+import { createAppointment, cancelAppointment, updateAppointment } from '../../products/clinicbook/appointments/appointment.service.js';
 import { getAvailableSlots, getDateAvailability, clinicNow } from '../../services/scheduling.service.js';
 import {
   joinWaitlist,
   pendingOfferFor,
   claimWaitlistOffer,
   declineWaitlistOffer
-} from '../waitlist/waitlist.service.js';
+} from '../../products/clinicbook/waitlist/waitlist.service.js';
 import { recordWhatsAppAudit } from './whatsapp.service.js';
 import { understand, confidenceMin, type Understanding } from './whatsapp.receptionist.js';
 import {

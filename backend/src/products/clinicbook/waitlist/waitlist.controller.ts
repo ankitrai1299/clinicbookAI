@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { WaitlistStatus } from '@prisma/client';
 
-import { asyncHandler } from '../../utils/asyncHandler.js';
+import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { AddToWaitlistInput, ConvertWaitlistInput, UpdateWaitlistPriorityInput } from './waitlist.schemas.js';
 import {
   addToWaitlist,

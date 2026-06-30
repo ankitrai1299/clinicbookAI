@@ -1,14 +1,14 @@
 import { Appointment, AppointmentStatus, Prisma } from '@prisma/client';
 
-import { forClinic } from '../../config/tenantPrisma.js';
-import { AppError } from '../../utils/AppError.js';
+import { forClinic } from '../../../config/tenantPrisma.js';
+import { AppError } from '../../../utils/AppError.js';
 import {
   notifyBookingConfirmation,
   notifyAppointmentRejectedWithAlternatives
-} from '../whatsapp/whatsapp.notifications.js';
-import { recordNotification } from '../notifications/notification.service.js';
+} from '../../../core/whatsapp/whatsapp.notifications.js';
+import { recordNotification } from '../../../core/notifications/notification.service.js';
 import { autoOfferFreedSlot } from '../waitlist/waitlist.service.js';
-import { canonicalizeTime, isPastSlot } from '../../services/scheduling.service.js';
+import { canonicalizeTime, isPastSlot } from '../../../services/scheduling.service.js';
 import { runPostVisitWorkflow } from './postVisit.service.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
 

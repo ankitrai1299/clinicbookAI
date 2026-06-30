@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import { requireDoctorAuth } from '../../middleware/doctorAuth.js';
 import { validate } from '../../middleware/validate.js';
-import { createLeaveSchema, setScheduleSchema } from '../doctors/doctor.schemas.js';
+import { createLeaveSchema, setScheduleSchema } from '../../core/doctors/doctor.schemas.js';
 import {
   addMyLeaveHandler,
   decideMyAppointmentHandler,

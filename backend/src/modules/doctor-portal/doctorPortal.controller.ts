@@ -11,15 +11,15 @@ import {
   getDoctorLeaves,
   getDoctorSchedule,
   setDoctorSchedule
-} from '../doctors/doctor.service.js';
-import { cancelAppointment, updateAppointment } from '../appointments/appointment.service.js';
+} from '../../core/doctors/doctor.service.js';
+import { cancelAppointment, updateAppointment } from '../../products/clinicbook/appointments/appointment.service.js';
 import { registerDoctor, loginDoctor, getDoctorAccount } from './doctorAuth.service.js';
 import {
   AppointmentDecisionInput,
   DoctorLoginInput,
   DoctorRegisterInput
 } from './doctorPortal.schemas.js';
-import { CreateLeaveInput, SetScheduleInput } from '../doctors/doctor.schemas.js';
+import { CreateLeaveInput, SetScheduleInput } from '../../core/doctors/doctor.schemas.js';
 
 // Pull the authenticated doctor out of the verified token. requireDoctorAuth
 // guarantees role === 'DOCTOR', userId = doctorId, clinicId = platform clinic.
