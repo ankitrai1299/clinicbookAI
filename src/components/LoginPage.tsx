@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowRight, CalendarCheck, Key, Mail, Stethoscope } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CalendarCheck, Key, Mail, Stethoscope } from 'lucide-react';
 
 import { loginUser } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
@@ -47,6 +47,14 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 bg-slate-50" id="login-page-root">
       <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-slate-100 shadow-md">
+
+        <button
+          onClick={() => setCurrentPage(isNova ? 'novascribe-landing' : 'landing')}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4 cursor-pointer"
+          id="login-back-btn"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
 
         <div className="flex flex-col items-center gap-2 mb-8">
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shadow-sky-100 ${
