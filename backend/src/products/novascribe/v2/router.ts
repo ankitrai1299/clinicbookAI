@@ -5,6 +5,7 @@
 
 import { promises as fsp } from 'fs';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { Request, Response, Router } from 'express';
@@ -21,11 +22,18 @@ import { generateMedicalReport } from './report.js';
 import { translateTranscript } from './translate.js';
 import { buildPatientHistory } from './patientHistory.js';
 
+// Default to a writable temp dir — works under the unprivileged container user
+// (the app dir is root-owned + read-only at runtime). Audio is ephemeral anyway
+// (move to object storage for durable replay). Override with NOVASCRIBE_AUDIO_DIR.
 export const NOVA_UPLOADS_DIR = path.resolve(
-  process.cwd(),
-  process.env.NOVASCRIBE_AUDIO_DIR ?? '.novascribe-data/uploads'
+  process.env.NOVASCRIBE_AUDIO_DIR ?? path.join(os.tmpdir(), 'novascribe-uploads')
 );
-fs.mkdirSync(NOVA_UPLOADS_DIR, { recursive: true });
+// Best-effort at boot; never throw (a non-writable path must not crash startup).
+try {
+  fs.mkdirSync(NOVA_UPLOADS_DIR, { recursive: true });
+} catch {
+  /* created lazily on first write; persistence simply degrades if it fails */
+}
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
@@ -59,10 +67,16 @@ novaRouter.post('/transcribe', upload.single('audio'), asyncHandler(async (req: 
 
   let audioUrl = '';
   if (req.body?.persist === 'true' || req.body?.persist === true) {
-    const safeId = String(req.body?.consultationId || 'audio').replace(/[^a-zA-Z0-9_-]/g, '');
-    const fileName = `${clinicId.slice(0, 8)}-${safeId}-${Date.now()}${audioExt(file.originalname, file.mimetype)}`;
-    await fsp.writeFile(path.join(NOVA_UPLOADS_DIR, fileName), file.buffer);
-    audioUrl = `/api/nova/uploads/${fileName}`;
+    // Persisting is best-effort: storage failure must not fail the transcription.
+    try {
+      const safeId = String(req.body?.consultationId || 'audio').replace(/[^a-zA-Z0-9_-]/g, '');
+      const fileName = `${clinicId.slice(0, 8)}-${safeId}-${Date.now()}${audioExt(file.originalname, file.mimetype)}`;
+      await fsp.mkdir(NOVA_UPLOADS_DIR, { recursive: true });
+      await fsp.writeFile(path.join(NOVA_UPLOADS_DIR, fileName), file.buffer);
+      audioUrl = `/api/nova/uploads/${fileName}`;
+    } catch (err) {
+      console.error('[nova.transcribe] audio persist failed (continuing):', err);
+    }
   }
 
   res.json({ rawText: text, transcript: text, audioUrl });
