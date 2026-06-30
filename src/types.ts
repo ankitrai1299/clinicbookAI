@@ -1,4 +1,4 @@
-export type PageType = 'landing' | 'dashboard' | 'demo' | 'signup' | 'login' | 'verify-email' | 'welcome';
+export type PageType = 'landing' | 'dashboard' | 'novascribe' | 'demo' | 'signup' | 'login' | 'verify-email' | 'welcome';
 
 export type DashboardTab = 'overview' | 'appointments' | 'calendar' | 'waitlist' | 'patients' | 'settings' | 'billing';
 

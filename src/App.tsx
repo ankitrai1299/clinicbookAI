@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
 import ClinicDashboard from './components/ClinicDashboard';
+import NovaScribe from './components/novascribe/NovaScribe';
 import SignupPage from './components/SignupPage';
 import LoginPage from './components/LoginPage';
 import VerifyEmailPage from './components/VerifyEmailPage';
@@ -167,6 +168,10 @@ function AppShell() {
             doctorsList={doctorsList}
             setDoctorsList={setDoctorsList}
           />
+        )}
+
+        {currentPage === 'novascribe' && user && (
+          <NovaScribe clinicName={clinicConfig.name} />
         )}
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarCheck, LayoutDashboard, LogIn, LogOut, Menu, UserPlus, X } from 'lucide-react';
+import { CalendarCheck, LayoutDashboard, LogIn, LogOut, Menu, Stethoscope, UserPlus, X } from 'lucide-react';
 
 import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
@@ -61,6 +61,21 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               >
                 <LayoutDashboard className="w-4 h-4" />
                 Clinic Dashboard
+              </button>
+            )}
+
+            {user && (
+              <button
+                id="nav-item-novascribe"
+                onClick={() => handleNavClick('novascribe')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
+                  currentPage === 'novascribe'
+                    ? 'bg-sky-50 text-sky-700'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Stethoscope className="w-4 h-4" />
+                NovaScribe
               </button>
             )}
 
@@ -132,6 +147,19 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
             >
               <LayoutDashboard className="w-5 h-5 text-slate-400" />
               Clinic Dashboard
+            </button>
+          )}
+
+          {user && (
+            <button
+              id="mobile-nav-item-novascribe"
+              onClick={() => handleNavClick('novascribe')}
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl text-base font-medium transition-colors ${
+                currentPage === 'novascribe' ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <Stethoscope className="w-5 h-5 text-slate-400" />
+              NovaScribe
             </button>
           )}
 
