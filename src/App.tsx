@@ -6,6 +6,9 @@ import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
 import ClinicDashboard from './components/ClinicDashboard';
 import NovaScribe from './components/novascribe/NovaScribe';
+import ProductHub from './components/ProductHub';
+import NovaScribeLanding from './components/NovaScribeLanding';
+import type { ActiveProduct } from './components/Navigation';
 import SignupPage from './components/SignupPage';
 import LoginPage from './components/LoginPage';
 import VerifyEmailPage from './components/VerifyEmailPage';
@@ -17,7 +20,10 @@ import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
 
 function AppShell() {
   const { user, loading, logout, setAuth } = useAuth();
-  const [currentPage, setCurrentPage] = useState<PageType>('landing');
+  // The platform launcher (product chooser) is the first screen.
+  const [currentPage, setCurrentPage] = useState<PageType>('hub');
+  // Which product's app to land on after a successful login.
+  const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>('dashboard');
   // Self-service onboarding hand-off: email pending OTP verification, and the
   // clinic config captured at signup to apply once verified.
   const [pendingEmail, setPendingEmail] = useState('');
@@ -32,19 +38,20 @@ function AppShell() {
   const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
   const [globalNotification, setGlobalNotification] = useState<string | null>(null);
 
-  // Redirect to login when accessing dashboard without auth, and vice versa
+  // Gate the authenticated apps; after login land on the product the user chose.
   useEffect(() => {
     if (loading) return;
-    if (!user && currentPage === 'dashboard') {
+    if (!user && (currentPage === 'dashboard' || currentPage === 'novascribe')) {
       setCurrentPage('login');
     }
     if (user && (currentPage === 'login' || currentPage === 'signup')) {
-      setCurrentPage('dashboard');
+      setCurrentPage(intendedApp);
     }
   }, [user, loading]);
 
   const handleSetPage = (page: PageType) => {
-    if (page === 'dashboard' && !user) {
+    if ((page === 'dashboard' || page === 'novascribe') && !user) {
+      setIntendedApp(page);
       setCurrentPage('login');
       return;
     }
@@ -52,9 +59,32 @@ function AppShell() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Platform launcher handlers — open a product (straight to its app when logged
+  // in, otherwise its landing / login).
+  const openHub = () => handleSetPage('hub');
+  const openClinicBook = () => {
+    setIntendedApp('dashboard');
+    handleSetPage(user ? 'dashboard' : 'landing');
+  };
+  const openNovaScribe = () => {
+    if (user) {
+      handleSetPage('novascribe');
+    } else {
+      setIntendedApp('novascribe');
+      handleSetPage('novascribe-landing');
+    }
+  };
+  const activeProduct: ActiveProduct =
+    currentPage === 'novascribe' || currentPage === 'novascribe-landing'
+      ? 'novascribe'
+      : currentPage === 'hub'
+        ? null
+        : 'clinicbook';
+
   const handleLogout = () => {
     logout();
-    setCurrentPage('landing');
+    setCurrentPage('hub');
+    setIntendedApp('dashboard');
     // Clear dashboard state on logout (no demo data)
     setAppointments([]);
     setWaitlist([]);
@@ -118,9 +148,27 @@ function AppShell() {
         clinicName={clinicConfig.name}
         user={user}
         onLogout={handleLogout}
+        activeProduct={activeProduct}
+        onOpenHub={openHub}
       />
 
       <div className="flex-1">
+        {currentPage === 'hub' && (
+          <ProductHub
+            userName={user?.name}
+            onOpenClinicBook={openClinicBook}
+            onOpenNovaScribe={openNovaScribe}
+          />
+        )}
+
+        {currentPage === 'novascribe-landing' && (
+          <NovaScribeLanding
+            isLoggedIn={!!user}
+            onOpen={() => handleSetPage('novascribe')}
+            onBack={openHub}
+          />
+        )}
+
         {currentPage === 'landing' && (
           <LandingPage setCurrentPage={handleSetPage} />
         )}

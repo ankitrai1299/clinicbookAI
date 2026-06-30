@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { CalendarCheck, LayoutDashboard, LogIn, LogOut, Menu, Stethoscope, UserPlus, X } from 'lucide-react';
+import { CalendarCheck, LayoutDashboard, LayoutGrid, LogIn, LogOut, Menu, Stethoscope, UserPlus, X } from 'lucide-react';
 
 import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
+
+export type ActiveProduct = 'clinicbook' | 'novascribe' | null;
 
 interface NavigationProps {
   currentPage: PageType;
@@ -10,9 +12,11 @@ interface NavigationProps {
   clinicName: string;
   user: AuthUser | null;
   onLogout: () => void;
+  activeProduct: ActiveProduct;
+  onOpenHub: () => void;
 }
 
-export default function Navigation({ currentPage, setCurrentPage, clinicName, user, onLogout }: NavigationProps) {
+export default function Navigation({ currentPage, setCurrentPage, clinicName, user, onLogout, activeProduct, onOpenHub }: NavigationProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleNavClick = (page: PageType) => {
@@ -21,27 +25,44 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const isNova = activeProduct === 'novascribe';
+
   return (
     <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-100 shadow-xs" id="main-navigation">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
 
-          {/* Logo Brand */}
-          <div className="flex items-center">
+          {/* Apps switcher + product brand */}
+          <div className="flex items-center gap-2">
+            {user && (
+              <button
+                onClick={onOpenHub}
+                title="All apps"
+                id="apps-switcher"
+                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                  currentPage === 'hub' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <LayoutGrid className="w-5 h-5" />
+              </button>
+            )}
+
             <button
-              onClick={() => handleNavClick('landing')}
+              onClick={onOpenHub}
               className="flex items-center gap-2.5 cursor-pointer focus:outline-hidden"
               id="brand-logo-btn"
             >
-              <div className="w-10 h-10 rounded-xl bg-sky-600 flex items-center justify-center text-white shadow-md shadow-sky-100 transition-all duration-300 hover:scale-105">
-                <CalendarCheck className="w-6 h-6" />
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md transition-all duration-300 hover:scale-105 ${
+                isNova ? 'bg-gradient-to-br from-sky-500 to-sky-700 shadow-sky-100' : 'bg-sky-600 shadow-sky-100'
+              }`}>
+                {isNova ? <Stethoscope className="w-6 h-6" /> : <CalendarCheck className="w-6 h-6" />}
               </div>
               <div className="text-left">
                 <span className="block font-display text-xl font-bold tracking-tight text-slate-900 leading-tight">
-                  ClinicBook <span className="text-sky-600">AI</span>
+                  {isNova ? <>Nova<span className="text-sky-600">Scribe</span></> : <>ClinicBook <span className="text-sky-600">AI</span></>}
                 </span>
                 <span className="block text-[10px] font-mono text-slate-400 uppercase tracking-widest leading-none">
-                  {user ? (clinicName || user.name) : 'WhatsApp Engine'}
+                  {isNova ? 'AI Medical Scribe' : (user ? (clinicName || user.name) : 'WhatsApp Engine')}
                 </span>
               </div>
             </button>
@@ -49,7 +70,7 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
 
           {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center gap-1.5">
-            {user && (
+            {user && !isNova && (
               <button
                 id="nav-item-dashboard"
                 onClick={() => handleNavClick('dashboard')}
@@ -66,16 +87,12 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
 
             {user && (
               <button
-                id="nav-item-novascribe"
-                onClick={() => handleNavClick('novascribe')}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
-                  currentPage === 'novascribe'
-                    ? 'bg-sky-50 text-sky-700'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
+                id="nav-item-apps"
+                onClick={onOpenHub}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all duration-200 cursor-pointer"
               >
-                <Stethoscope className="w-4 h-4" />
-                NovaScribe
+                <LayoutGrid className="w-4 h-4" />
+                All Apps
               </button>
             )}
 
@@ -139,6 +156,16 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
         <div className="md:hidden bg-white border-b border-slate-100 py-3 px-4 space-y-1 shadow-lg animate-fadeIn" id="mobile-menu-panel">
           {user && (
             <button
+              id="mobile-nav-item-apps"
+              onClick={() => { onOpenHub(); setIsOpen(false); }}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-base font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
+            >
+              <LayoutGrid className="w-5 h-5 text-slate-400" />
+              All Apps
+            </button>
+          )}
+          {user && !isNova && (
+            <button
               id="mobile-nav-item-dashboard"
               onClick={() => handleNavClick('dashboard')}
               className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl text-base font-medium transition-colors ${
@@ -147,19 +174,6 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
             >
               <LayoutDashboard className="w-5 h-5 text-slate-400" />
               Clinic Dashboard
-            </button>
-          )}
-
-          {user && (
-            <button
-              id="mobile-nav-item-novascribe"
-              onClick={() => handleNavClick('novascribe')}
-              className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl text-base font-medium transition-colors ${
-                currentPage === 'novascribe' ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Stethoscope className="w-5 h-5 text-slate-400" />
-              NovaScribe
             </button>
           )}
 
