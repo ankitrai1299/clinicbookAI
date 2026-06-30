@@ -14,6 +14,7 @@
 // Each action is fire-and-forget and ISOLATED: one throwing must never block the
 // others or the HTTP response that triggered completion.
 
+import { eventBus } from '../../../core/events/index.js';
 import { notifyAppointmentCompleted } from '../../../core/whatsapp/whatsapp.notifications.js';
 import type { AppointmentRecord } from './appointment.service.js';
 
@@ -32,6 +33,19 @@ const postVisitActions: PostVisitAction[] = [
         clinicName: appt.clinic.name
       });
     }
+  },
+  // Publish a cross-product domain event so OTHER products (e.g. NovaScribe,
+  // which opens a draft consultation note) can react WITHOUT ClinicBook
+  // importing them. Isolated like every other action: emit never throws.
+  function publishAppointmentCompleted(appt) {
+    eventBus.emit('appointment.completed', {
+      clinicId: appt.clinicId,
+      appointmentId: appt.id,
+      patientId: appt.patientId,
+      doctorId: appt.doctorId,
+      patientName: appt.patient?.name,
+      doctorName: appt.doctor?.name
+    });
   }
   // registerPostVisitAction(requestFeedback)
   // registerPostVisitAction(requestRating)

@@ -27,7 +27,9 @@ export const TENANT_MODELS = new Set<string>([
   'AiConversation',
   'WhatsAppLog',
   'WhatsAppSession',
-  'WhatsAppConversation'
+  'WhatsAppConversation',
+  // NovaScribe consultation notes — clinic-scoped like everything else.
+  'ConsultationNote'
 ]);
 
 // Operations whose `where` we constrain with clinicId.

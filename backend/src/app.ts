@@ -9,6 +9,7 @@ import { stripeWebhookHandler } from './core/billing/billing.controller.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
+import { registerNovaScribeSubscriptions } from './products/novascribe/novascribe.subscriptions.js';
 
 const parseCorsOrigins = () => {
   if (env.CORS_ORIGIN.trim() === '*') {
@@ -20,6 +21,10 @@ const parseCorsOrigins = () => {
 
 export const createApp = () => {
   const app = express();
+
+  // Wire product event subscriptions (NovaScribe reacts to ClinicBook's
+  // appointment.completed). Idempotent — safe to call on every app build.
+  registerNovaScribeSubscriptions();
 
   app.disable('x-powered-by');
   // Behind Railway's proxy: trust the first hop so express-rate-limit keys on the

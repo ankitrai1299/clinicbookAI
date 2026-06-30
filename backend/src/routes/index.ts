@@ -10,6 +10,7 @@ import doctorRouter from '../core/doctors/doctor.routes.js';
 import notificationRouter from '../core/notifications/notification.routes.js';
 import patientRouter from '../core/patients/patient.routes.js';
 import publicPatientRouter from '../core/patients/public.routes.js';
+import novascribeRouter from '../products/novascribe/novascribe.routes.js';
 import waitlistRouter from '../products/clinicbook/waitlist/waitlist.routes.js';
 import whatsappRouter from '../core/whatsapp/whatsapp.routes.js';
 import healthRouter from './health.routes.js';
@@ -27,6 +28,7 @@ apiRouter.use('/api/patients', patientRouter);
 apiRouter.use('/api/public', publicPatientRouter);
 apiRouter.use('/api/appointments', appointmentRouter);
 apiRouter.use('/api/waitlist', waitlistRouter);
+apiRouter.use('/api/novascribe', novascribeRouter);
 apiRouter.use('/api/whatsapp', whatsappRouter);
 apiRouter.use('/api/analytics', analyticsRouter);
 

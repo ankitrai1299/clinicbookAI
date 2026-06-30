@@ -442,3 +442,48 @@ model WhatsAppSession {
   @@index([phone])
   @@index([clinicId])
 }
+
+// ─── NovaScribe (products/novascribe) ────────────────────────────────────────
+// Doctor's AI scribe. Additive, standalone table: references appointment /
+// patient / doctor by id (plain Strings, NOT formal relations) so adding it does
+// NOT modify any existing model — purely a new table. Tenant-scoped by clinicId
+// (registered in TENANT_MODELS).
+
+enum ConsultationNoteStatus {
+  AWAITING_AUDIO // opened on appointment.completed; no transcript yet
+  DRAFTED        // AI produced a SOAP + prescription draft from the transcript
+  REVIEWED       // doctor edited the draft
+  FINALIZED      // doctor approved & locked it (immutable)
+}
+
+model ConsultationNote {
+  id            String                 @id @default(cuid())
+  clinicId      String
+  appointmentId String?
+  patientId     String?
+  doctorId      String?
+  patientName   String?
+  doctorName    String?
+
+  status        ConsultationNoteStatus @default(AWAITING_AUDIO)
+
+  transcript    String?                @db.Text
+  // Structured SOAP note (drafted by AI, editable by the doctor).
+  subjective    String?                @db.Text
+  objective     String?                @db.Text
+  assessment    String?                @db.Text
+  plan          String?                @db.Text
+  // Prescription draft: array of { drug, dose, frequency, duration, notes }.
+  prescription  Json?
+
+  reviewedBy    String?
+  reviewedAt    DateTime?
+
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([clinicId])
+  @@index([clinicId, status])
+  @@index([clinicId, appointmentId])
+  @@index([clinicId, createdAt])
+}
