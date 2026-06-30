@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowRight, CalendarCheck, Key, Mail } from 'lucide-react';
+import { AlertCircle, ArrowRight, CalendarCheck, Key, Mail, Stethoscope } from 'lucide-react';
 
 import { loginUser } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
@@ -9,9 +9,13 @@ interface LoginPageProps {
   setCurrentPage: (page: PageType) => void;
   // Login of an unverified account (backend 403 EMAIL_NOT_VERIFIED) → route to OTP.
   onNeedVerification: (email: string) => void;
+  // Which product the user is signing in to (drives the branding). After a
+  // successful login the host App routes to the intended product automatically.
+  product?: 'clinicbook' | 'novascribe';
 }
 
-export default function LoginPage({ setCurrentPage, onNeedVerification }: LoginPageProps) {
+export default function LoginPage({ setCurrentPage, onNeedVerification, product = 'clinicbook' }: LoginPageProps) {
+  const isNova = product === 'novascribe';
   const { setAuth } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,7 +29,9 @@ export default function LoginPage({ setCurrentPage, onNeedVerification }: LoginP
     try {
       const { user, accessToken } = await loginUser({ email, password });
       setAuth(accessToken, user);
-      setCurrentPage('dashboard');
+      // Do NOT navigate here — the host App routes to the intended product
+      // (dashboard or novascribe) once the user is set. Hardcoding 'dashboard'
+      // would send NovaScribe sign-ins to the wrong app.
     } catch (err: unknown) {
       // Unverified account → the backend re-sent an OTP; take them to verify.
       if (err instanceof Error && err.message === 'EMAIL_NOT_VERIFIED') {
@@ -43,11 +49,17 @@ export default function LoginPage({ setCurrentPage, onNeedVerification }: LoginP
       <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-slate-100 shadow-md">
 
         <div className="flex flex-col items-center gap-2 mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-sky-600 flex items-center justify-center text-white shadow-md shadow-sky-100">
-            <CalendarCheck className="w-7 h-7" />
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shadow-sky-100 ${
+            isNova ? 'bg-gradient-to-br from-sky-500 to-sky-700' : 'bg-sky-600'
+          }`}>
+            {isNova ? <Stethoscope className="w-7 h-7" /> : <CalendarCheck className="w-7 h-7" />}
           </div>
-          <h1 className="font-display text-2xl font-bold text-slate-900">Sign in to your clinic</h1>
-          <p className="text-slate-400 text-sm text-center">Access your ClinicBook AI dashboard</p>
+          <h1 className="font-display text-2xl font-bold text-slate-900">
+            {isNova ? 'Sign in to NovaScribe' : 'Sign in to your clinic'}
+          </h1>
+          <p className="text-slate-400 text-sm text-center">
+            {isNova ? 'Access your NovaScribe AI medical scribe' : 'Access your ClinicBook AI dashboard'}
+          </p>
         </div>
 
         {error && (

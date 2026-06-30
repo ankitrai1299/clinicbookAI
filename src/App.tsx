@@ -183,6 +183,7 @@ function AppShell() {
           <LoginPage
             setCurrentPage={handleSetPage}
             onNeedVerification={(email) => handlePendingVerification(email, null)}
+            product={intendedApp === 'novascribe' ? 'novascribe' : 'clinicbook'}
           />
         )}
 
