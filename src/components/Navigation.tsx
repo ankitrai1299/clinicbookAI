@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarCheck, LayoutDashboard, LayoutGrid, LogIn, LogOut, Menu, Stethoscope, UserPlus, X } from 'lucide-react';
+import { Activity, CalendarCheck, LayoutDashboard, LayoutGrid, LogIn, LogOut, Menu, Stethoscope, UserPlus, X } from 'lucide-react';
 
 import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
@@ -52,17 +52,33 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               className="flex items-center gap-2.5 cursor-pointer focus:outline-hidden"
               id="brand-logo-btn"
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md transition-all duration-300 hover:scale-105 ${
-                isNova ? 'bg-gradient-to-br from-sky-500 to-sky-700 shadow-sky-100' : 'bg-sky-600 shadow-sky-100'
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md shadow-sky-100 transition-all duration-300 hover:scale-105 ${
+                activeProduct === 'novascribe'
+                  ? 'bg-gradient-to-br from-sky-500 to-sky-700'
+                  : activeProduct === 'clinicbook'
+                    ? 'bg-sky-600'
+                    : 'bg-gradient-to-br from-teal-500 to-sky-600'
               }`}>
-                {isNova ? <Stethoscope className="w-6 h-6" /> : <CalendarCheck className="w-6 h-6" />}
+                {activeProduct === 'novascribe'
+                  ? <Stethoscope className="w-6 h-6" />
+                  : activeProduct === 'clinicbook'
+                    ? <CalendarCheck className="w-6 h-6" />
+                    : <Activity className="w-6 h-6" />}
               </div>
               <div className="text-left">
                 <span className="block font-display text-xl font-bold tracking-tight text-slate-900 leading-tight">
-                  {isNova ? <>Nova<span className="text-sky-600">Scribe</span></> : <>ClinicBook <span className="text-sky-600">AI</span></>}
+                  {activeProduct === 'novascribe'
+                    ? <>Nova<span className="text-sky-600">Scribe</span></>
+                    : activeProduct === 'clinicbook'
+                      ? <>ClinicBook <span className="text-sky-600">AI</span></>
+                      : <>Healthcare <span className="text-sky-600">AI</span></>}
                 </span>
                 <span className="block text-[10px] font-mono text-slate-400 uppercase tracking-widest leading-none">
-                  {isNova ? 'AI Medical Scribe' : (user ? (clinicName || user.name) : 'WhatsApp Engine')}
+                  {activeProduct === 'novascribe'
+                    ? 'AI Medical Scribe'
+                    : activeProduct === 'clinicbook'
+                      ? (user ? (clinicName || user.name) : 'WhatsApp Engine')
+                      : 'Platform'}
                 </span>
               </div>
             </button>
@@ -70,7 +86,7 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
 
           {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center gap-1.5">
-            {user && !isNova && (
+            {user && activeProduct === 'clinicbook' && (
               <button
                 id="nav-item-dashboard"
                 onClick={() => handleNavClick('dashboard')}
@@ -85,7 +101,7 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               </button>
             )}
 
-            {user && (
+            {user && currentPage !== 'hub' && (
               <button
                 id="nav-item-apps"
                 onClick={onOpenHub}
@@ -164,7 +180,7 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               All Apps
             </button>
           )}
-          {user && !isNova && (
+          {user && activeProduct === 'clinicbook' && (
             <button
               id="mobile-nav-item-dashboard"
               onClick={() => handleNavClick('dashboard')}
