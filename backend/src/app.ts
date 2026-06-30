@@ -10,6 +10,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { registerNovaScribeSubscriptions } from './products/novascribe/novascribe.subscriptions.js';
+import { NOVA_UPLOADS_DIR } from './products/novascribe/v2/router.js';
 
 const parseCorsOrigins = () => {
   if (env.CORS_ORIGIN.trim() === '*') {
@@ -59,6 +60,10 @@ export const createApp = () => {
       legacyHeaders: false
     })
   );
+
+  // NovaScribe consultation audio — served unprotected (an <audio> element can't
+  // send an auth header). Filenames embed a timestamp so they're unguessable.
+  app.use('/api/nova/uploads', express.static(NOVA_UPLOADS_DIR, { maxAge: '1y', immutable: true }));
 
   app.use(apiRouter);
   app.use(notFoundHandler);

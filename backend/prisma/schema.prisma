@@ -458,6 +458,26 @@ enum ConsultationNoteStatus {
   FAILED         // pipeline failed; see errorMessage (doctor can retry)
 }
 
+// ─── NovaScribe v2 generic document store ────────────────────────────────────
+// One table backs all NovaScribe collections (patients, consultations, reports,
+// prescriptions, transcripts) as JSON documents keyed by an app-provided string
+// id, scoped per clinic. Mirrors the reference app's id-keyed repository model on
+// Postgres without modelling every clinical sub-field as a column.
+model NovaDoc {
+  clinicId   String
+  collection String // 'patients' | 'consultations' | 'reports' | 'prescriptions' | 'transcripts'
+  id         String // app-provided id (e.g. con-..., pat-...)
+  // Denormalised from data.patientId so patient-history can index/query by it.
+  patientId  String?
+  data       Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@id([clinicId, collection, id])
+  @@index([clinicId, collection, updatedAt])
+  @@index([clinicId, collection, patientId])
+}
+
 model ConsultationNote {
   id            String                 @id @default(cuid())
   clinicId      String

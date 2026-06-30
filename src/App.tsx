@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
 import ClinicDashboard from './components/ClinicDashboard';
-import NovaScribe from './components/novascribe/NovaScribe';
+import NovaScribeApp from './novascribe/NovaScribeApp';
 import ProductHub from './components/ProductHub';
 import NovaScribeLanding from './components/NovaScribeLanding';
 import type { ActiveProduct } from './components/Navigation';
@@ -132,6 +132,12 @@ function AppShell() {
     );
   }
 
+  // NovaScribe is a full-screen app (own sidebar). Render it as a takeover — the
+  // "All Apps" item in its sidebar returns to the platform hub.
+  if (user && currentPage === 'novascribe') {
+    return <NovaScribeApp onExitToHub={openHub} doctorName={user.name} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#fafcff] flex flex-col font-sans selection:bg-sky-100 antialiased" id="clinicbook-ai-app">
 
@@ -218,9 +224,6 @@ function AppShell() {
           />
         )}
 
-        {currentPage === 'novascribe' && user && (
-          <NovaScribe clinicName={clinicConfig.name} />
-        )}
       </div>
 
     </div>
