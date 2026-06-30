@@ -1,39 +1,26 @@
-// NovaScribe — the doctor's AI scribe.
+// NovaScribe service — consultation lifecycle. Thin orchestration over the
+// pipeline (STT + AI), storage and job queue. All DB access is tenant-scoped.
 //
-// Flow:
-//   1. ClinicBook completes an appointment → `appointment.completed` event →
-//      we open a draft note (status AWAITING_AUDIO).  [see novascribe.subscriptions]
-//   2. The consultation transcript arrives (typed/pasted now; STT later) →
-//      generateFromTranscript() asks the LLM for a SOAP note + prescription draft
-//      → status DRAFTED.
-//   3. The doctor reviews/edits and approves → reviewConsultationNote(finalize)
-//      → status FINALIZED (locked) and we emit `consultation.finalized`.
+// Lifecycle:
+//   create draft (manual or via appointment.completed)        -> AWAITING_AUDIO
+//   attach audio  -> save + enqueue STT/AI pipeline (async)    -> PROCESSING
+//   pipeline done                                              -> DRAFTED (or FAILED)
+//   paste transcript -> enqueue AI pipeline (async)            -> PROCESSING -> DRAFTED
+//   doctor edits/approves                                      -> REVIEWED / FINALIZED
 //
-// Everything is tenant-scoped via forClinic(clinicId). The AI output is always a
-// DRAFT for a licensed doctor to review — never auto-finalised.
+// AI output is ALWAYS a draft; only the doctor finalizes (immutable, emits
+// consultation.finalized for downstream products like PatientLoop).
 
 import { Prisma, ConsultationNoteStatus } from '@prisma/client';
 
-import { complete, isAiConfigured } from '../../core/ai/llm.js';
+import { isAiConfigured } from '../../core/ai/llm.js';
 import { eventBus } from '../../core/events/index.js';
 import { forClinic } from '../../config/tenantPrisma.js';
 import { AppError } from '../../utils/AppError.js';
-
-export interface PrescriptionItem {
-  drug: string;
-  dose: string;
-  frequency: string;
-  duration: string;
-  notes: string;
-}
-
-interface SoapDraft {
-  subjective: string;
-  objective: string;
-  assessment: string;
-  plan: string;
-  prescription: PrescriptionItem[];
-}
+import { novascribeQueue } from './jobs/queue.js';
+import { processAudioPipeline, runTranscriptPipeline } from './pipeline/pipeline.js';
+import { getAudioStorage } from './storage/index.js';
+import type { PrescriptionItem } from './novascribe.types.js';
 
 export interface CreateDraftInput {
   clinicId: string;
@@ -45,9 +32,8 @@ export interface CreateDraftInput {
 }
 
 /**
- * Open a draft consultation note. Idempotent per appointment: if a note already
- * exists for the appointmentId, the existing one is returned (so a re-emitted
- * `appointment.completed` event never creates duplicates).
+ * Open a draft consultation note. Idempotent per appointment (a re-emitted
+ * appointment.completed event never creates duplicates).
  */
 export const createConsultationDraft = async (input: CreateDraftInput) => {
   const db = forClinic(input.clinicId);
@@ -94,98 +80,103 @@ export const getConsultationNote = async (clinicId: string, id: string) => {
   return note;
 };
 
-const SOAP_SYSTEM = [
-  'You are a clinical documentation assistant helping a licensed doctor.',
-  'From a doctor–patient consultation transcript, produce a structured SOAP note',
-  'and a prescription draft.',
-  'Return STRICT JSON with exactly this shape:',
-  '{',
-  '  "subjective": string,   // patient-reported history, symptoms, concerns',
-  '  "objective": string,    // exam findings, vitals, measurable observations',
-  '  "assessment": string,   // diagnosis / clinical impression',
-  '  "plan": string,         // treatment plan, investigations, follow-up',
-  '  "prescription": [ { "drug": string, "dose": string, "frequency": string, "duration": string, "notes": string } ]',
-  '}',
-  'Rules: use an empty string or empty array when information is not present.',
-  'Do NOT invent clinical facts, diagnoses, or drugs that are not supported by the transcript.',
-  'This output is a DRAFT that the doctor will review, edit and approve before use.'
-].join('\n');
-
-const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
-
-const normalisePrescription = (v: unknown): PrescriptionItem[] => {
-  if (!Array.isArray(v)) {
-    return [];
+const assertEditable = (note: { status: ConsultationNoteStatus }) => {
+  if (note.status === ConsultationNoteStatus.FINALIZED) {
+    throw new AppError('This note is finalized and can no longer be changed', 409);
   }
-  return v
-    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-    .map((item) => ({
-      drug: asString(item.drug),
-      dose: asString(item.dose),
-      frequency: asString(item.frequency),
-      duration: asString(item.duration),
-      notes: asString(item.notes)
-    }))
-    .filter((item) => item.drug.length > 0);
 };
 
-/** Ask the LLM to draft a SOAP note + prescription from a transcript. */
-const draftSoapNote = async (transcript: string): Promise<SoapDraft> => {
-  const raw = await complete({
-    system: SOAP_SYSTEM,
-    user: `Consultation transcript:\n${transcript}`,
-    json: true,
-    temperature: 0.2
-  });
-
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    throw new AppError('AI returned a malformed draft. Please try again.', 502);
+const extFromMime = (mime?: string): string => {
+  switch ((mime ?? '').toLowerCase()) {
+    case 'audio/webm':
+      return 'webm';
+    case 'audio/mpeg':
+    case 'audio/mp3':
+      return 'mp3';
+    case 'audio/wav':
+    case 'audio/x-wav':
+      return 'wav';
+    case 'audio/m4a':
+    case 'audio/mp4':
+      return 'm4a';
+    case 'audio/ogg':
+      return 'ogg';
+    default:
+      return 'bin';
   }
-
-  return {
-    subjective: asString(parsed.subjective),
-    objective: asString(parsed.objective),
-    assessment: asString(parsed.assessment),
-    plan: asString(parsed.plan),
-    prescription: normalisePrescription(parsed.prescription)
-  };
 };
 
 /**
- * Generate (or regenerate) the SOAP + prescription draft for a note from a
- * transcript. Moves the note to DRAFTED. A FINALIZED note is locked.
+ * Save consultation audio and kick off the STT + AI pipeline asynchronously.
+ * Returns the note in PROCESSING immediately; the client polls for DRAFTED.
  */
-export const generateFromTranscript = async (clinicId: string, id: string, transcript: string) => {
+export const attachAudio = async (
+  clinicId: string,
+  id: string,
+  audio: Buffer,
+  mimeType?: string,
+  languageHint?: string
+) => {
   const db = forClinic(clinicId);
-
   const note = await db.consultationNote.findFirst({ where: { id, clinicId } });
   if (!note) {
     throw new AppError('Consultation note not found', 404);
   }
-  if (note.status === ConsultationNoteStatus.FINALIZED) {
-    throw new AppError('This note is finalized and can no longer be regenerated', 409);
-  }
+  assertEditable(note);
   if (!isAiConfigured()) {
     throw new AppError('AI is not configured. Add OPENAI_API_KEY to backend/.env', 503);
   }
 
-  const draft = await draftSoapNote(transcript);
+  const key = `${clinicId}/${id}.${extFromMime(mimeType)}`;
+  await getAudioStorage().save(key, audio, mimeType);
 
-  return db.consultationNote.update({
-    where: { id },
-    data: {
-      transcript,
-      subjective: draft.subjective,
-      objective: draft.objective,
-      assessment: draft.assessment,
-      plan: draft.plan,
-      prescription: draft.prescription as unknown as Prisma.InputJsonValue,
-      status: ConsultationNoteStatus.DRAFTED
+  const updated = await db.consultationNote.update({
+    where: { id, clinicId },
+    data: { audioPath: key, status: ConsultationNoteStatus.PROCESSING, errorMessage: null }
+  });
+
+  novascribeQueue.enqueue(`audio:${id}`, () =>
+    processAudioPipeline(clinicId, id, key, languageHint)
+  );
+
+  return updated;
+};
+
+/**
+ * Drive the AI pipeline from a pasted/typed transcript (bypasses STT). Async +
+ * poll, same as audio.
+ */
+export const generateFromTranscript = async (clinicId: string, id: string, transcript: string) => {
+  const db = forClinic(clinicId);
+  const note = await db.consultationNote.findFirst({ where: { id, clinicId } });
+  if (!note) {
+    throw new AppError('Consultation note not found', 404);
+  }
+  assertEditable(note);
+  if (!isAiConfigured()) {
+    throw new AppError('AI is not configured. Add OPENAI_API_KEY to backend/.env', 503);
+  }
+
+  const updated = await db.consultationNote.update({
+    where: { id, clinicId },
+    data: { transcript, status: ConsultationNoteStatus.PROCESSING, errorMessage: null }
+  });
+
+  novascribeQueue.enqueue(`transcript:${id}`, async () => {
+    try {
+      await runTranscriptPipeline(clinicId, id, transcript);
+    } catch (err) {
+      await forClinic(clinicId).consultationNote.update({
+        where: { id, clinicId },
+        data: {
+          status: ConsultationNoteStatus.FAILED,
+          errorMessage: err instanceof Error ? err.message : String(err)
+        }
+      });
     }
   });
+
+  return updated;
 };
 
 export interface ReviewInput {
@@ -198,9 +189,8 @@ export interface ReviewInput {
 }
 
 /**
- * Doctor reviews/edits the draft. With finalize=true the note is locked
- * (FINALIZED) and `consultation.finalized` is emitted for downstream products
- * (e.g. PatientLoop medicine reminders).
+ * Doctor reviews/edits the draft. finalize=true locks it (FINALIZED, immutable)
+ * and emits consultation.finalized for downstream products.
  */
 export const reviewConsultationNote = async (
   clinicId: string,
@@ -209,14 +199,11 @@ export const reviewConsultationNote = async (
   reviewedBy: string
 ) => {
   const db = forClinic(clinicId);
-
   const note = await db.consultationNote.findFirst({ where: { id, clinicId } });
   if (!note) {
     throw new AppError('Consultation note not found', 404);
   }
-  if (note.status === ConsultationNoteStatus.FINALIZED) {
-    throw new AppError('This note is already finalized', 409);
-  }
+  assertEditable(note);
 
   const finalize = edits.finalize === true;
 
@@ -233,7 +220,7 @@ export const reviewConsultationNote = async (
     data.prescription = edits.prescription as unknown as Prisma.InputJsonValue;
   }
 
-  const updated = await db.consultationNote.update({ where: { id }, data });
+  const updated = await db.consultationNote.update({ where: { id, clinicId }, data });
 
   if (finalize) {
     eventBus.emit('consultation.finalized', {

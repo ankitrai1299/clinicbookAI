@@ -12,3 +12,7 @@ backups/
 .tools/
 verify-shots/
 *.exe
+
+# NovaScribe local audio storage (runtime)
+backend/.novascribe-data/
+.novascribe-data/

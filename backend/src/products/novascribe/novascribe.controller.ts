@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import {
+  attachAudio,
   createConsultationDraft,
   generateFromTranscript,
   getConsultationNote,
@@ -57,6 +58,23 @@ export const createDraftHandler = asyncHandler(async (req: Request, res: Respons
   res.status(201).json({
     success: true,
     message: 'Consultation note created',
+    data: note
+  });
+});
+
+export const attachAudioHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const { id } = req.params as NoteIdParams;
+  const file = (req as Request & { file?: { buffer: Buffer; mimetype: string } }).file;
+  if (!file) {
+    throw new AppError('Audio file is required (field name: "audio")', 400);
+  }
+  const languageHint = typeof req.body?.language === 'string' ? req.body.language : undefined;
+  const note = await attachAudio(clinicId, id, file.buffer, file.mimetype, languageHint);
+
+  res.status(202).json({
+    success: true,
+    message: 'Audio received — transcription & AI draft in progress',
     data: note
   });
 });

@@ -6,6 +6,10 @@ import { z } from 'zod';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolves to backend/.env regardless of where the process is started from
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: false });
+// Local-only dev overrides (git-ignored). Present only on developer machines —
+// on Railway/production this file doesn't exist, so behaviour is unchanged.
+// override:true so a local DATABASE_URL/PORT here wins over the committed .env.
+dotenv.config({ path: path.resolve(__dirname, '../../.env.local'), override: true });
 
 // Parse a boolean-ish env var. Unlike z.coerce.boolean() (which treats the
 // string "false" as true), this only treats the explicit truthy tokens as true,

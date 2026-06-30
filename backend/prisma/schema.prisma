@@ -450,10 +450,12 @@ model WhatsAppSession {
 // (registered in TENANT_MODELS).
 
 enum ConsultationNoteStatus {
-  AWAITING_AUDIO // opened on appointment.completed; no transcript yet
+  AWAITING_AUDIO // opened (manually or on appointment.completed); no audio yet
+  PROCESSING     // audio received; STT + AI pipeline running (async job)
   DRAFTED        // AI produced a SOAP + prescription draft from the transcript
   REVIEWED       // doctor edited the draft
   FINALIZED      // doctor approved & locked it (immutable)
+  FAILED         // pipeline failed; see errorMessage (doctor can retry)
 }
 
 model ConsultationNote {
@@ -467,14 +469,29 @@ model ConsultationNote {
 
   status        ConsultationNoteStatus @default(AWAITING_AUDIO)
 
+  // --- Audio + STT pipeline -------------------------------------------------
+  // Where the consultation audio is stored (storage-backend-relative key) and
+  // the detected/declared language. errorMessage is set when status = FAILED.
+  audioPath     String?
+  language      String?
+  durationSec   Int?
+  errorMessage  String?                @db.Text
+
   transcript    String?                @db.Text
+  // Diarized transcript segments: [{ speaker, text, startSec, endSec, confidence }].
+  segments      Json?
+
   // Structured SOAP note (drafted by AI, editable by the doctor).
   subjective    String?                @db.Text
   objective     String?                @db.Text
   assessment    String?                @db.Text
   plan          String?                @db.Text
-  // Prescription draft: array of { drug, dose, frequency, duration, notes }.
+  // Prescription draft: array of { drug, dose, frequency, duration, notes, flagged }.
   prescription  Json?
+  // Per-fact evidence/grounding spans for anti-hallucination review UI:
+  // { field -> [{ quote, startSec?, confidence }] }. Lets the doctor see WHERE
+  // in the transcript each generated fact came from.
+  evidence      Json?
 
   reviewedBy    String?
   reviewedAt    DateTime?
