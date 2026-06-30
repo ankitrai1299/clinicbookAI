@@ -74,8 +74,13 @@ function AppShell() {
       handleSetPage('novascribe-landing');
     }
   };
+  // The login/signup/verify screens belong to whichever product the user is
+  // entering, so the navbar brands them as NovaScribe when that's the intent.
+  const onNovaAuthFlow =
+    (currentPage === 'login' || currentPage === 'signup' || currentPage === 'verify-email') &&
+    intendedApp === 'novascribe';
   const activeProduct: ActiveProduct =
-    currentPage === 'novascribe' || currentPage === 'novascribe-landing'
+    currentPage === 'novascribe' || currentPage === 'novascribe-landing' || onNovaAuthFlow
       ? 'novascribe'
       : currentPage === 'hub'
         ? null

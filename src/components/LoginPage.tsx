@@ -80,7 +80,7 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="clinic@example.com"
+              placeholder={isNova ? 'doctor@example.com' : 'clinic@example.com'}
               className="w-full text-xs px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-sky-500 transition-colors"
             />
           </div>
