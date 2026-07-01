@@ -6,6 +6,19 @@ export interface Patient {
   phone?: string;
 }
 
+// An upcoming ClinicBook appointment surfaced in NovaScribe so the doctor can
+// start a scribe for that visit. `patientId` is the SHARED core patient id.
+export interface UpcomingAppointment {
+  appointmentId: string;
+  patientId: string;
+  patientName: string;
+  doctorName?: string | null;
+  speciality?: string | null;
+  date: string; // YYYY-MM-DD
+  time: string; // e.g. "6:00 PM"
+  status: string;
+}
+
 export interface TranscriptLine {
   // Real speaker diarization is not implemented yet, so transcript lines use
   // 'Unknown Speaker'. 'Doctor'/'Patient'/'System' remain for legacy/mock data.

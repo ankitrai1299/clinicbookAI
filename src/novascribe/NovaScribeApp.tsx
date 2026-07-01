@@ -7,6 +7,7 @@ import {
   ReportRecord,
   PrescriptionRecord,
   TranscriptRecord,
+  UpcomingAppointment,
 } from './types';
 import { Menu, X } from 'lucide-react';
 // Eagerly loaded shell — the only chunks on the first-paint critical path.
@@ -29,6 +30,7 @@ import {
   getReports,
   getPrescriptions,
   getTranscripts,
+  getUpcomingAppointments,
   savePatient,
   saveConsultation,
 } from './services/api';
@@ -130,6 +132,7 @@ export default function App({ onExitToHub, doctorName }: NovaScribeAppProps = {}
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [prescriptions, setPrescriptions] = useState<PrescriptionRecord[]>([]);
   const [transcripts, setTranscripts] = useState<TranscriptRecord[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<UpcomingAppointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
@@ -171,18 +174,20 @@ export default function App({ onExitToHub, doctorName }: NovaScribeAppProps = {}
   const loadData = async () => {
     setLoading(true);
     try {
-      const [p, c, r, pr, t] = await Promise.all([
+      const [p, c, r, pr, t, ua] = await Promise.all([
         getPatients().catch(() => []),
         getConsultations().catch(() => []),
         getReports().catch(() => []),
         getPrescriptions().catch(() => []),
         getTranscripts().catch(() => []),
+        getUpcomingAppointments().catch(() => []),
       ]);
       setPatients((Array.isArray(p) ? p : []).map(normalizePatient));
       setConsultations((Array.isArray(c) ? c : []).map(normalizeConsultation));
       setReports(Array.isArray(r) ? r : []);
       setPrescriptions(Array.isArray(pr) ? pr : []);
       setTranscripts(Array.isArray(t) ? t : []);
+      setUpcomingAppointments(Array.isArray(ua) ? ua : []);
     } finally {
       setLoading(false);
     }
@@ -309,8 +314,10 @@ export default function App({ onExitToHub, doctorName }: NovaScribeAppProps = {}
             patientsCount={patients.length}
             reportsCount={reports.length}
             prescriptionsCount={prescriptions.length}
+            upcomingAppointments={upcomingAppointments}
             onStartNew={handleStartNewConsultation}
             onSelectConsultation={handleSelectExistingConsultation}
+            onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName)}
           />
         );
       case 'patients':

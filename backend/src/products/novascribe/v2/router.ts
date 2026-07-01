@@ -16,6 +16,7 @@ import { AppError } from '../../../utils/AppError.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
 import { forClinic } from '../../../config/tenantPrisma.js';
 import { getPatients } from '../../../core/patients/patient.service.js';
+import { getAppointments } from '../../../products/clinicbook/appointments/appointment.service.js';
 import {
   consultationsRepo, patientsRepo, prescriptionsRepo, reportsRepo, transcriptsRepo
 } from './repo.js';
@@ -132,6 +133,29 @@ novaRouter.post('/patients', asyncHandler(async (req: Request, res: Response) =>
   await patientsRepo.upsert(clinicId, req.body, true); // replace
   res.json({ success: true });
 }));
+// Upcoming appointments (shared from ClinicBook) so the doctor can start a scribe
+// straight from today's / future visits. Today + future, excluding cancelled and
+// already-completed; "today" is judged in the clinic timezone (Asia/Kolkata).
+novaRouter.get('/appointments/upcoming', asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = clinicOf(req);
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const all = await getAppointments(clinicId);
+  const upcoming = all
+    .filter((a) => a.status !== 'CANCELLED' && a.status !== 'COMPLETED' && a.status !== 'NO_SHOW')
+    .filter((a) => a.appointmentDate.toISOString().slice(0, 10) >= todayStr)
+    .map((a) => ({
+      appointmentId: a.id,
+      patientId: a.patientId,
+      patientName: a.patient?.name ?? 'Patient',
+      doctorName: a.doctor?.name ?? null,
+      speciality: a.doctor?.speciality ?? null,
+      date: a.appointmentDate.toISOString().slice(0, 10),
+      time: a.appointmentTime,
+      status: a.status
+    }));
+  res.json(upcoming);
+}));
+
 novaRouter.get('/patients/:patientId/history', asyncHandler(async (req: Request, res: Response) => {
   const clinicId = clinicOf(req);
   const order = req.query.order === 'desc' ? 'desc' : 'asc';

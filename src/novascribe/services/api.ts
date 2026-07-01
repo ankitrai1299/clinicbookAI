@@ -6,6 +6,7 @@ import {
   PrescriptionRecord,
   TranscriptRecord,
   ConsultationHistoryItem,
+  UpcomingAppointment,
 } from '../types';
 
 // Served by the main ClinicBook backend under /api/nova (auth + per-clinic).
@@ -145,6 +146,13 @@ export async function getPatients(): Promise<Patient[]> {
 export async function getConsultations(): Promise<Consultation[]> {
   const res = await fetch(`${BASE}/consultations`, { headers: authHeader() });
   if (!res.ok) throw new Error('Failed to fetch consultations');
+  return res.json();
+}
+
+// Upcoming ClinicBook appointments (shared) so the doctor can scribe a visit.
+export async function getUpcomingAppointments(): Promise<UpcomingAppointment[]> {
+  const res = await fetch(`${BASE}/appointments/upcoming`, { headers: authHeader() });
+  if (!res.ok) throw new Error('Failed to fetch upcoming appointments');
   return res.json();
 }
 

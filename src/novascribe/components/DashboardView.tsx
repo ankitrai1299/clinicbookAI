@@ -1,15 +1,17 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Consultation } from '../types';
-import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill } from 'lucide-react';
+import { Consultation, UpcomingAppointment } from '../types';
+import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill, CalendarClock } from 'lucide-react';
 
 interface DashboardViewProps {
   consultations: Consultation[];
   patientsCount?: number;
   reportsCount?: number;
   prescriptionsCount?: number;
+  upcomingAppointments?: UpcomingAppointment[];
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
+  onScribeAppointment?: (appt: UpcomingAppointment) => void;
 }
 
 export default function DashboardView({
@@ -17,9 +19,17 @@ export default function DashboardView({
   patientsCount,
   reportsCount,
   prescriptionsCount,
+  upcomingAppointments = [],
   onStartNew,
   onSelectConsultation,
+  onScribeAppointment,
 }: DashboardViewProps) {
+  // Today's date (YYYY-MM-DD) in the clinic timezone, to badge today's visits.
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const prettyDate = (d: string) =>
+    d === todayStr
+      ? 'Today'
+      : new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   const [searchQuery, setSearchQuery] = React.useState('');
 
   // Sortable timestamp for a session: prefer updatedAt, then createdAt, then the
@@ -103,6 +113,44 @@ export default function DashboardView({
           );
         })}
       </div>
+
+      {/* Upcoming Appointments — shared from ClinicBook; scribe a visit in one tap */}
+      {upcomingAppointments.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
+          <div className="p-5 border-b border-slate-100 flex items-center gap-2 bg-slate-50/50">
+            <CalendarClock size={18} className="text-blue-500" />
+            <h2 className="font-semibold text-lg text-slate-800">Upcoming Appointments</h2>
+            <span className="ml-1 text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+              {upcomingAppointments.length}
+            </span>
+          </div>
+          <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto custom-scrollbar">
+            {upcomingAppointments.map((a) => (
+              <div key={a.appointmentId} className="p-4 flex items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-900 truncate">{a.patientName}</div>
+                  <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${
+                      a.date === todayStr ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      <Clock size={12} /> {prettyDate(a.date)} · {a.time}
+                    </span>
+                    {a.doctorName && <span className="truncate">Dr. {a.doctorName.replace(/^dr\.?\s*/i, '')}</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => onScribeAppointment?.(a)}
+                  className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm hover:shadow-md transition-all flex items-center gap-2"
+                  title={`Start scribe for ${a.patientName}`}
+                >
+                  <Mic size={16} />
+                  <span>Scribe</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Consultations List */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex-1 flex flex-col">
