@@ -39,9 +39,10 @@ const bookingSkill: Skill = {
       fromVoice: meta.fromVoice === true
     });
 
-    // The FSM owns its own state. It's "done" (from the brain's view) when it has
-    // returned to IDLE; while mid-flow the brain keeps this skill active so the
-    // next turn resumes here.
+    // The FSM owns its own state. From the brain's view it's "done" at a RESTING
+    // point (idle/menu/booked/handoff) so the next message can be re-routed to
+    // another skill; only while ACTIVELY awaiting a booking sub-selection does it
+    // stay active so the brain resumes here.
     const done = !(await isBookingFlowActive(ctx.clinicId, phone));
     return { reply, done };
   }

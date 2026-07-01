@@ -414,13 +414,33 @@ const saveSession = async (params: BookingParams, state: string, data: SessionDa
 
 const resetSession = (params: BookingParams, state: string = S.IDLE): Promise<void> => saveSession(params, state, {});
 
-// Read-only helper for the Healthcare MCP brain: is the patient CURRENTLY mid-flow
-// in the FSM (any non-IDLE state)? The booking skill uses this to tell the brain
-// to keep itself active so a mid-booking turn is resumed here, never re-routed to
-// another skill. Pure read — does NOT change the FSM's behaviour.
+// States where the FSM is ACTIVELY awaiting a specific selection — here the next
+// message belongs to THIS flow, so the brain must resume booking (never re-route).
+// Resting states (IDLE/MENU/BOOKED/HANDOFF) are deliberately NOT included: at a
+// rest point the next message could be anything, so the brain is free to route it
+// to another skill (prescription, reminder, …). Without this distinction the FSM
+// would hog the session forever (it is rarely truly IDLE) and cross-product
+// routing would never fire.
+const MID_FLOW_STATES = new Set<string>([
+  S.SPECIALITY,
+  S.DOCTOR,
+  S.DATE,
+  S.SLOT,
+  S.CONFIRM,
+  S.CANCEL_SELECT,
+  S.CANCEL_CONFIRM,
+  S.RESCHED_SELECT,
+  S.WAITLIST_CONFIRM,
+  S.WAITLIST_OFFER
+]);
+
+// Read-only helper for the Healthcare MCP brain: is the patient CURRENTLY mid a
+// booking sub-selection? The booking skill maps this to `done` (mid-flow → not
+// done → brain keeps booking active; resting → done → brain re-routes next turn).
+// Pure read — does NOT change the FSM's behaviour.
 export const isBookingFlowActive = async (clinicId: string, phone: string): Promise<boolean> => {
   const { state } = await loadSession(clinicId, phone);
-  return state !== S.IDLE;
+  return MID_FLOW_STATES.has(state);
 };
 
 // --- Renderers ------------------------------------------------------------
