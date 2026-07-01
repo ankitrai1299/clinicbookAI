@@ -14,6 +14,8 @@ import multer from 'multer';
 import { requireAuth } from '../../../middleware/auth.js';
 import { AppError } from '../../../utils/AppError.js';
 import { asyncHandler } from '../../../utils/asyncHandler.js';
+import { forClinic } from '../../../config/tenantPrisma.js';
+import { getPatients } from '../../../core/patients/patient.service.js';
 import {
   consultationsRepo, patientsRepo, prescriptionsRepo, reportsRepo, transcriptsRepo
 } from './repo.js';
@@ -106,8 +108,23 @@ novaRouter.post('/generate-report', asyncHandler(async (req: Request, res: Respo
 }));
 
 // ── Patients ─────────────────────────────────────────────────────
+// ONE shared patient identity across the platform: NovaScribe reads the SAME
+// core Patient records as ClinicBook, so anyone registered via ClinicBook / the
+// WhatsApp bot appears here automatically (name + patient code) — no separate
+// NovaScribe patient store to keep in sync. Mapped to the NovaScribe patient
+// shape; `id` stays the core id so consultations link to the shared patient.
 novaRouter.get('/patients', asyncHandler(async (req: Request, res: Response) => {
-  res.json(await patientsRepo.findAll(clinicOf(req)));
+  const patients = await getPatients(clinicOf(req));
+  res.json(
+    patients.map((p) => ({
+      id: p.id,
+      name: p.name,
+      age: p.age ?? 0,
+      gender: p.gender ?? '',
+      phone: p.phone,
+      patientCode: p.patientCode ?? null
+    }))
+  );
 }));
 novaRouter.post('/patients', asyncHandler(async (req: Request, res: Response) => {
   const clinicId = clinicOf(req);
@@ -152,7 +169,10 @@ collection('transcripts', transcriptsRepo);
 novaRouter.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   const clinicId = clinicOf(req);
   const [patients, consultations, reports, prescriptions, transcripts] = await Promise.all([
-    patientsRepo.count(clinicId), consultationsRepo.count(clinicId), reportsRepo.count(clinicId),
+    // Count the SHARED core patients (same source as GET /patients), not the
+    // legacy NovaScribe patient store — so the dashboard tile matches the list.
+    forClinic(clinicId).patient.count({ where: { clinicId } }),
+    consultationsRepo.count(clinicId), reportsRepo.count(clinicId),
     prescriptionsRepo.count(clinicId), transcriptsRepo.count(clinicId)
   ]);
   res.json({ patients, consultations, reports, prescriptions, transcripts });
