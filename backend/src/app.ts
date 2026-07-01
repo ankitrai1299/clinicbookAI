@@ -12,6 +12,7 @@ import { notFoundHandler } from './middleware/notFound.js';
 import { registerNovaScribeSubscriptions } from './products/novascribe/novascribe.subscriptions.js';
 import { registerClinicBookCapabilities } from './products/clinicbook/clinicbook.capabilities.js';
 import { registerClinicBookSkills } from './products/clinicbook/skills/booking.skill.js';
+import { registerNovaScribeSkills } from './products/novascribe/skills/prescription.skill.js';
 import { setIntentClassifier } from './core/mcp/index.js';
 import { mcpIntentClassifier } from './core/ai/mcp.classifier.js';
 import { NOVA_UPLOADS_DIR } from './products/novascribe/v2/router.js';
@@ -35,6 +36,7 @@ export const createApp = () => {
   //  - NovaScribe subscribes to ClinicBook's appointment.completed event.
   registerClinicBookCapabilities();
   registerClinicBookSkills();
+  registerNovaScribeSkills();
   setIntentClassifier(mcpIntentClassifier);
   registerNovaScribeSubscriptions();
 

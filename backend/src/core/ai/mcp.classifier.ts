@@ -1,43 +1,26 @@
-// Adapter that plugs core/ai's natural-language UNDERSTANDING into the MCP brain.
-// The brain (core/mcp) stays free of any AI dependency; at startup we inject this
-// classifier via setIntentClassifier. HYBRID model: this only UNDERSTANDS (intent
-// + entities) — it never acts.
+// The brain's intent ROUTER (injected via setIntentClassifier). Its ONLY job is
+// to decide WHICH product skill a message belongs to — not to fully understand it.
 //
-// It reuses the existing, tested understanding: understandPatientMessage (AI) with
-// a deterministic keyword fallback (classifyIntent) so it works with no OpenAI key
-// and never throws. Slots (speciality/doctor/date phrase) are passed through for a
-// skill to resolve deterministically.
+// Deliberately lightweight (keyword, no AI): the ClinicBook booking FSM already
+// runs its own AI understanding internally, so booking-family messages just fall
+// through to 'unknown' → the fallback booking skill. That keeps booking parity and
+// avoids a second OpenAI call per message. Only DISTINCTIVE cross-product intents
+// (a patient asking for their prescription/scribe; medicine reminders later) are
+// matched here and routed to the owning product's skill.
 
-import { forClinic } from '../../config/tenantPrisma.js';
-import { classifyIntent } from '../whatsapp/whatsapp.intent.js';
 import type { IntentClassification, IntentClassifier, McpContext } from '../mcp/index.js';
-import { understandPatientMessage } from './ai.service.js';
 
-const clinicVocabulary = async (clinicId: string): Promise<{ specialities: string[]; doctorNames: string[] }> => {
-  const db = forClinic(clinicId);
-  const doctors = await db.doctor.findMany({ where: { clinicId }, select: { name: true, speciality: true } });
-  const specialities = [...new Set(doctors.map((d) => d.speciality).filter(Boolean))];
-  const doctorNames = doctors.map((d) => d.name).filter(Boolean);
-  return { specialities, doctorNames };
-};
+// NovaScribe: patient wants their prescription / doctor's notes / scribe. Kept
+// specific so it never steals a booking message ("book", "appointment", a date…).
+const PRESCRIPTION =
+  /\b(prescription|nuskha|parchi|scribe)\b|dawai(yon|yan)?\s*(ki\s*)?(list|likhi|kaunsi|kya|batao)|doctor\s*(ne)?\s*(kya)?\s*likh|medicine[s]?\s*(list|likhi|details?)|soap\s*note|meri\s*(dawai|medicine|parchi)/i;
 
-export const mcpIntentClassifier: IntentClassifier = async (
-  ctx: McpContext,
+export const mcpIntentClassifier: IntentClassifier = (
+  _ctx: McpContext,
   text: string
-): Promise<IntentClassification> => {
-  const { specialities, doctorNames } = await clinicVocabulary(ctx.clinicId);
-
-  // Preferred: AI understanding (intent + speciality/doctor/date + confidence).
-  const ai = await understandPatientMessage(text, specialities, doctorNames);
-  if (ai) {
-    return {
-      intent: ai.intent,
-      confidence: ai.confidence,
-      slots: { speciality: ai.speciality, doctorName: ai.doctorName, dateText: ai.dateText }
-    };
-  }
-
-  // Fallback: deterministic keyword classifier (no OpenAI key or AI errored).
-  const kw = classifyIntent(text, specialities);
-  return { intent: kw.intent, slots: { speciality: kw.speciality } };
+): IntentClassification => {
+  const t = (text || '').toLowerCase();
+  if (PRESCRIPTION.test(t)) return { intent: 'prescription' };
+  // Everything else → fallback booking skill (the FSM understands it internally).
+  return { intent: 'unknown' };
 };
