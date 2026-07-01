@@ -9,6 +9,7 @@
 import { prisma } from '../../config/prisma.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
+import { describeBrainRollout } from '../mcp/index.js';
 
 export const WEBHOOK_PATH = '/api/whatsapp/webhook';
 
@@ -142,6 +143,9 @@ export const logWhatsAppStartupInfo = async (): Promise<void> => {
   console.info(
     `[WhatsApp] Receptionist: AI=${env.WA_AI_RECEPTIONIST ? 'ON' : 'OFF'} | Interactive=${env.WA_INTERACTIVE ? 'ON' : 'OFF'} | OpenAI key=${env.OPENAI_API_KEY ? 'set' : 'MISSING'}`
   );
+  // Healthcare MCP brain rollout — presence of this line proves the MCP build is
+  // live; the value shows exactly which numbers route through the brain.
+  console.info(`[mcp] Brain rollout: ${describeBrainRollout()}`);
   if (!env.PUBLIC_BASE_URL) {
     console.warn('[WhatsApp] PUBLIC_BASE_URL is not set — webhook URL shown is localhost. Set it to your tunnel/Railway domain so it matches the Meta callback.');
   }

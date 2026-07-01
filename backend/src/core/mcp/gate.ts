@@ -40,3 +40,12 @@ export const isBrainEnabledFor = (phone: string): boolean => {
   if (wildcard) return true;
   return set.has(nationalKey(phone));
 };
+
+/** Human-readable rollout state for the startup banner (confirms deploy + config). */
+export const describeBrainRollout = (): string => {
+  const raw = env.MCP_BRAIN_NUMBERS ?? '';
+  const { set, wildcard } = parsed();
+  if (wildcard) return `ON for EVERYONE (MCP_BRAIN_NUMBERS="${raw}")`;
+  if (set.size === 0) return `OFF — everyone on FSM (MCP_BRAIN_NUMBERS="${raw}")`;
+  return `ON for ${set.size} number(s) [${[...set].join(', ')}] (MCP_BRAIN_NUMBERS="${raw}")`;
+};

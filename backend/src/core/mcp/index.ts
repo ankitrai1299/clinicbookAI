@@ -14,7 +14,7 @@ export type { RouteDecision } from './mcp.router.js';
 export { skillRegistry } from './skillRegistry.js';
 export { runConversation } from './conversation.js';
 export type { ConversationResult } from './conversation.js';
-export { isBrainEnabledFor } from './gate.js';
+export { isBrainEnabledFor, describeBrainRollout } from './gate.js';
 export type { Skill, SkillTurnResult, ConversationState } from './skill.types.js';
 export type {
   Capability,
