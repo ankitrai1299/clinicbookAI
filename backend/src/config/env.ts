@@ -95,6 +95,14 @@ const envSchema = z.object({
   // "*"/"all" → everyone (default ON); comma-separated numbers (last-10 match)
   // → only those; "off" → disabled.
   WA_VOICE_TEST_NUMBERS: z.string().default(''),
+  // Healthcare MCP brain rollout (strangler-fig). Which senders' inbound WhatsApp
+  // messages are routed through the platform brain (core/mcp) instead of calling
+  // the FSM directly. Values: blank / "off" / "none" → DISABLED for everyone
+  // (default — live path unchanged); "*"/"all" → everyone; comma-separated
+  // numbers (last-10 match) → only those (test-numbers-first rollout). Default is
+  // intentionally OFF so production behaviour is byte-for-byte unchanged until a
+  // number is explicitly opted in.
+  MCP_BRAIN_NUMBERS: z.string().default(''),
   // Whisper language hint for voice notes (ISO-639-1, e.g. "hi", "en"). Voice
   // auto-detection often mis-fires on short Hindi/Hinglish clips (it picks Urdu
   // and garbles "doctor" → "cardiologist"), so we pin a language by default.

@@ -7,6 +7,7 @@ import {
   notifyAppointmentRejectedWithAlternatives
 } from '../../../core/whatsapp/whatsapp.notifications.js';
 import { recordNotification } from '../../../core/notifications/notification.service.js';
+import { eventBus } from '../../../core/events/index.js';
 import { autoOfferFreedSlot } from '../waitlist/waitlist.service.js';
 import { canonicalizeTime, isPastSlot } from '../../../services/scheduling.service.js';
 import { runPostVisitWorkflow } from './postVisit.service.js';
@@ -104,6 +105,16 @@ const onStatusTransition = (prev: AppointmentStatus, appt: AppointmentRecord): v
       title: 'Appointment cancelled',
       body: `${patientName}'s appointment with ${doctorName} on ${whenLabel(appt)} was cancelled. Alternate slots were offered.`,
       appointmentId: appt.id
+    });
+
+    // Cross-product domain event (fire-and-forget, isolated, no-op until
+    // subscribed). Emitted here so BOTH cancel paths — cancelAppointment and
+    // updateAppointment(status=CANCELLED) — publish exactly once.
+    eventBus.emit('appointment.cancelled', {
+      clinicId: appt.clinicId,
+      appointmentId: appt.id,
+      patientId: appt.patientId,
+      doctorId: appt.doctorId
     });
 
     // Automatic waitlist recovery: offer the freed slot to the next waiting patient.
@@ -295,6 +306,22 @@ export const createAppointment = async (
     appointmentId: appointment.id
   });
 
+  // Cross-product domain event so OTHER modules (PatientLoop reminders, Calendar,
+  // Analytics) can react WITHOUT ClinicBook importing them. Fire-and-forget and
+  // isolated — emit never throws and no path is blocked; a no-op until something
+  // subscribes, so ClinicBook's own behaviour is unchanged.
+  eventBus.emit('appointment.booked', {
+    clinicId,
+    appointmentId: appointment.id,
+    patientId: appointment.patientId,
+    doctorId: appointment.doctorId,
+    patientName: appointment.patient?.name,
+    doctorName: appointment.doctor?.name,
+    status: appointment.status,
+    appointmentDate: appointment.appointmentDate.toISOString().slice(0, 10),
+    appointmentTime: appointment.appointmentTime
+  });
+
   return appointment;
 };
 
@@ -426,6 +453,17 @@ export const updateAppointment = async (
       title: 'Appointment rescheduled',
       body: `${appointment.patient?.name ?? 'A patient'}'s appointment with ${appointment.doctor?.name ?? 'the doctor'} was moved to ${whenLabel(appointment)}.`,
       appointmentId: appointment.id
+    });
+
+    // Cross-product domain event (fire-and-forget, isolated, no-op until
+    // subscribed) so Calendar/Analytics/PatientLoop can react to the new slot.
+    eventBus.emit('appointment.rescheduled', {
+      clinicId,
+      appointmentId: appointment.id,
+      patientId: appointment.patientId,
+      doctorId: appointment.doctorId,
+      appointmentDate: appointment.appointmentDate.toISOString().slice(0, 10),
+      appointmentTime: appointment.appointmentTime
     });
   }
 

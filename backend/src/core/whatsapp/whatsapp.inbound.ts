@@ -23,6 +23,8 @@ import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { handleWhatsAppMessage } from './whatsapp.booking.js';
 import { resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
+import { isBrainEnabledFor, runConversation } from '../mcp/index.js';
+import type { McpContext } from '../mcp/index.js';
 import {
   logInboundMessage,
   recordInboundMessage,
@@ -222,29 +224,53 @@ const processOne = async (
     if (clinicId) {
       const patient = await findOrCreatePatient(clinicId, from);
       patientCode = patient.patientCode;
-      // Deterministic booking state machine owns the ENTIRE conversation. No AI
-      // controls flow, picks doctors, or books — every reply is FSM-generated.
-      // A null result means "stay silent" (non-actionable chatter once the
-      // booking/conversation is settled) — keep it null so nothing is sent.
-      const fsmReply = await handleWhatsAppMessage({
-        clinicId,
-        patientId: patient.id,
-        patientName: patient.name,
-        clinicName: patient.clinic?.name ?? 'our clinic',
-        phone: to,
-        patientCode: patient.patientCode,
-        message: text,
-        replyId: interactiveId,
-        fromVoice
-      });
+
+      // ROLLOUT (strangler-fig): opted-in senders route through the Healthcare MCP
+      // brain (understand → route → skill); everyone else takes the unchanged FSM
+      // path directly. Gate defaults OFF, so production is byte-for-byte unchanged
+      // until a number is explicitly enabled via MCP_BRAIN_NUMBERS. In slice 1 the
+      // brain's fallback skill delegates to this SAME FSM, so the reply is
+      // identical while the pipeline is exercised end-to-end.
+      let botReply: BotReply | null;
+      if (isBrainEnabledFor(to)) {
+        const ctx: McpContext = {
+          clinicId,
+          channel: 'whatsapp',
+          actor: { kind: 'patient', patientId: patient.id, externalId: to, displayName: patient.name },
+          meta: {
+            phone: to,
+            patientName: patient.name,
+            clinicName: patient.clinic?.name ?? 'our clinic',
+            patientCode: patient.patientCode,
+            replyId: interactiveId,
+            fromVoice
+          }
+        };
+        const result = await runConversation(ctx, text);
+        botReply = result.reply as BotReply | null;
+      } else {
+        // Deterministic booking state machine owns the ENTIRE conversation. No AI
+        // controls flow, picks doctors, or books — every reply is FSM-generated.
+        botReply = await handleWhatsAppMessage({
+          clinicId,
+          patientId: patient.id,
+          patientName: patient.name,
+          clinicName: patient.clinic?.name ?? 'our clinic',
+          phone: to,
+          patientCode: patient.patientCode,
+          message: text,
+          replyId: interactiveId,
+          fromVoice
+        });
+      }
       // null = stay silent. A plain string is trimmed (empty → safe fallback);
       // an interactive reply is passed through untouched.
       reply =
-        fsmReply === null
+        botReply === null
           ? null
-          : typeof fsmReply === 'string'
-            ? fsmReply.trim() || SAFE_FALLBACK
-            : fsmReply;
+          : typeof botReply === 'string'
+            ? botReply.trim() || SAFE_FALLBACK
+            : botReply;
     } else {
       // No clinic bound → cannot run the FSM (it needs a clinic's doctors). Send a
       // FIXED deterministic message. Never fall back to an AI responder.

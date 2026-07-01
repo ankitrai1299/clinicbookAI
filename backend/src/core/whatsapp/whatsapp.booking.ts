@@ -414,6 +414,15 @@ const saveSession = async (params: BookingParams, state: string, data: SessionDa
 
 const resetSession = (params: BookingParams, state: string = S.IDLE): Promise<void> => saveSession(params, state, {});
 
+// Read-only helper for the Healthcare MCP brain: is the patient CURRENTLY mid-flow
+// in the FSM (any non-IDLE state)? The booking skill uses this to tell the brain
+// to keep itself active so a mid-booking turn is resumed here, never re-routed to
+// another skill. Pure read — does NOT change the FSM's behaviour.
+export const isBookingFlowActive = async (clinicId: string, phone: string): Promise<boolean> => {
+  const { state } = await loadSession(clinicId, phone);
+  return state !== S.IDLE;
+};
+
 // --- Renderers ------------------------------------------------------------
 const displayName = (name: string): string => (/^WhatsApp Patient/i.test(name) ? 'there' : name.split(' ')[0]);
 

@@ -29,7 +29,10 @@ export const TENANT_MODELS = new Set<string>([
   'WhatsAppSession',
   'WhatsAppConversation',
   // NovaScribe consultation notes — clinic-scoped like everything else.
-  'ConsultationNote'
+  'ConsultationNote',
+  // Healthcare MCP channel-agnostic conversation session — clinic-scoped so one
+  // clinic can never read/overwrite another's patient conversation state.
+  'ConversationSession'
 ]);
 
 // Operations whose `where` we constrain with clinicId.

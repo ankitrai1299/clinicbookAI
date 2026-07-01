@@ -443,6 +443,28 @@ model WhatsAppSession {
   @@index([clinicId])
 }
 
+// ─── Healthcare MCP (core/mcp) ───────────────────────────────────────────────
+// CHANNEL-AGNOSTIC conversation session for the platform brain. Unlike
+// WhatsAppSession (phone-keyed, WhatsApp-only), this is keyed on the shared
+// patient identity + channel, so the SAME patient continues one logical thread
+// across WhatsApp today and Voice/Web/Mobile later. Holds which skill is active
+// and its brain-managed state. Additive, standalone table — it does NOT modify
+// any existing model. Tenant-scoped by clinicId (registered in TENANT_MODELS).
+model ConversationSession {
+  id          String   @id @default(cuid())
+  clinicId    String
+  patientId   String
+  channel     String   @default("whatsapp")
+  activeSkill String?
+  data        String   @default("{}") @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([clinicId, patientId, channel])
+  @@index([clinicId])
+  @@index([patientId])
+}
+
 // ─── NovaScribe (products/novascribe) ────────────────────────────────────────
 // Doctor's AI scribe. Additive, standalone table: references appointment /
 // patient / doctor by id (plain Strings, NOT formal relations) so adding it does

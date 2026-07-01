@@ -10,6 +10,10 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { registerNovaScribeSubscriptions } from './products/novascribe/novascribe.subscriptions.js';
+import { registerClinicBookCapabilities } from './products/clinicbook/clinicbook.capabilities.js';
+import { registerClinicBookSkills } from './products/clinicbook/skills/booking.skill.js';
+import { setIntentClassifier } from './core/mcp/index.js';
+import { mcpIntentClassifier } from './core/ai/mcp.classifier.js';
 import { NOVA_UPLOADS_DIR } from './products/novascribe/v2/router.js';
 
 const parseCorsOrigins = () => {
@@ -23,8 +27,15 @@ const parseCorsOrigins = () => {
 export const createApp = () => {
   const app = express();
 
-  // Wire product event subscriptions (NovaScribe reacts to ClinicBook's
-  // appointment.completed). Idempotent — safe to call on every app build.
+  // Wire the platform brain + product event subscriptions. Both are idempotent,
+  // so calling on every app build (incl. tests) is safe.
+  //  - Products register their MCP capabilities (ClinicBook: appointment.*).
+  //  - Products register their conversational skills (ClinicBook: booking).
+  //  - The brain's NL understanding is backed by core/ai.
+  //  - NovaScribe subscribes to ClinicBook's appointment.completed event.
+  registerClinicBookCapabilities();
+  registerClinicBookSkills();
+  setIntentClassifier(mcpIntentClassifier);
   registerNovaScribeSubscriptions();
 
   app.disable('x-powered-by');
