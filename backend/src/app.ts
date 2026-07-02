@@ -76,7 +76,18 @@ export const createApp = () => {
 
   // NovaScribe consultation audio — served unprotected (an <audio> element can't
   // send an auth header). Filenames embed a timestamp so they're unguessable.
-  app.use('/api/nova/uploads', express.static(NOVA_UPLOADS_DIR, { maxAge: '1y', immutable: true }));
+  // helmet() sets Cross-Origin-Resource-Policy: same-origin globally, which blocks
+  // the cross-origin <audio> element (frontend on a different domain than this API)
+  // from loading these files (net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin). Override
+  // CORP to cross-origin for just this static route so playback/download works.
+  app.use(
+    '/api/nova/uploads',
+    express.static(NOVA_UPLOADS_DIR, {
+      maxAge: '1y',
+      immutable: true,
+      setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+    })
+  );
 
   app.use(apiRouter);
   app.use(notFoundHandler);
