@@ -18,13 +18,40 @@ import { registerExternalDataSource } from '../../core/datasource/index.js';
 import { registerExternalAppointmentSource } from '../../products/clinicbook/appointments/appointmentSource.js';
 import { nativeAppointments } from '../../products/clinicbook/appointments/appointment.native.js';
 import { mockEmrDataSource } from './mock/mockEmrDataSource.js';
-import { FhirClient, HttpFhirTransport } from './fhir/fhirClient.js';
+import { FhirClient, HttpFhirTransport, type TokenSource } from './fhir/fhirClient.js';
 import { openEmrDataSource } from './openemr/openEmrDataSource.js';
 import { openEmrAppointments } from './openemr/openEmrAppointments.js';
 import { syncThroughDataSource } from './openemr/syncThrough.js';
+import { createOpenEmrTokenProvider } from './openemr/openEmrAuth.js';
 
 const parseList = (raw: string | undefined): string[] =>
   (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+
+// Resolve how to authenticate to OpenEMR: a ready static token (managed sandbox)
+// or an OAuth2 password-grant provider (self-hosted). Returns undefined if
+// neither is configured (the transport then sends no Authorization).
+export const resolveOpenEmrToken = (fhirBaseUrl: string): TokenSource | undefined => {
+  if (process.env.OPENEMR_TOKEN) return process.env.OPENEMR_TOKEN;
+
+  const clientId = process.env.OPENEMR_CLIENT_ID;
+  const username = process.env.OPENEMR_USERNAME;
+  const password = process.env.OPENEMR_PASSWORD;
+  if (clientId && username && password) {
+    const tokenUrl =
+      process.env.OPENEMR_TOKEN_URL ?? fhirBaseUrl.replace(/\/apis\/[^/]+\/fhir\/?$/, '/oauth2/default/token');
+    return createOpenEmrTokenProvider({
+      tokenUrl,
+      clientId,
+      clientSecret: process.env.OPENEMR_CLIENT_SECRET,
+      username,
+      password,
+      scope: process.env.OPENEMR_SCOPE ?? 'openid offline_access api:fhir',
+      userRole: process.env.OPENEMR_USER_ROLE,
+      insecureTls: process.env.OPENEMR_INSECURE_TLS === 'true'
+    });
+  }
+  return undefined;
+};
 
 export const registerEmrIntegration = (): void => {
   // Mock EMR (in-memory) — read/patient/slot demo, wrapped in the shadow mirror
@@ -44,7 +71,7 @@ export const registerEmrIntegration = (): void => {
   const baseUrl = process.env.OPENEMR_FHIR_BASE_URL;
   if (openEmrClinics.length > 0 && baseUrl) {
     const set = new Set(openEmrClinics);
-    const client = new FhirClient(new HttpFhirTransport(baseUrl, process.env.OPENEMR_TOKEN));
+    const client = new FhirClient(new HttpFhirTransport(baseUrl, resolveOpenEmrToken(baseUrl)));
     // Reads (doctors/slots/patients) through the shadow mirror → local ids.
     registerExternalDataSource((clinicId) =>
       set.has(clinicId) ? syncThroughDataSource(clinicId, 'openemr', openEmrDataSource(clinicId, client)) : null

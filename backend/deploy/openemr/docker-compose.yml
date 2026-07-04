@@ -1,0 +1,46 @@
+# Local OpenEMR sandbox for testing ClinicBook's EMR integration. NOT for
+# production. First boot auto-installs OpenEMR (5-10 min) — watch with
+#   docker compose -f deploy/openemr/docker-compose.yml logs -f openemr
+# until you see "OpenEMR configuration complete!". Then open https://localhost:8310
+# (self-signed cert — accept it) and log in with the OE_USER / OE_PASS below.
+#
+#   Start:  docker compose -f deploy/openemr/docker-compose.yml up -d
+#   Stop:   docker compose -f deploy/openemr/docker-compose.yml down
+#   Reset:  docker compose -f deploy/openemr/docker-compose.yml down -v   (wipes data)
+
+services:
+  mysql:
+    image: mariadb:11.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - dbvol:/var/lib/mysql
+    restart: unless-stopped
+
+  openemr:
+    image: openemr/openemr:7.0.3
+    ports:
+      - "8300:80"
+      - "8310:443"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_USER: root
+      MYSQL_ROOT_PASS: root
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemr
+      OE_USER: admin
+      OE_PASS: AdminPass123!
+    depends_on:
+      - mysql
+    volumes:
+      - sitevolume:/var/www/localhost/htdocs/openemr/sites
+      - logvolume:/var/log
+    restart: unless-stopped
+
+volumes:
+  dbvol: {}
+  sitevolume: {}
+  logvolume: {}

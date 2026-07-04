@@ -5,6 +5,7 @@
 // transport.
 
 import axios, { type AxiosInstance } from 'axios';
+import https from 'node:https';
 
 import type { FhirBundle } from './types.js';
 
@@ -14,21 +15,36 @@ export interface FhirTransport {
   put<T>(path: string, body: unknown): Promise<T>;
 }
 
+// Resolves to a Bearer token. A static string for a ready sandbox token, or an
+// async provider (see openEmrAuth) that fetches + refreshes an OAuth2 token.
+export type TokenSource = string | (() => Promise<string>);
+
 // Real HTTP transport. baseUrl points at the FHIR root (e.g.
-// https://emr.example.com/apis/default/fhir); token is a Bearer access token.
+// https://emr.example.com/apis/default/fhir); token is resolved per request so
+// an OAuth2 access token can refresh without rebuilding the client.
 export class HttpFhirTransport implements FhirTransport {
   private http: AxiosInstance;
 
-  constructor(baseUrl: string, token?: string) {
+  constructor(baseUrl: string, token?: TokenSource, opts: { insecureTls?: boolean } = {}) {
     this.http = axios.create({
       baseURL: baseUrl.replace(/\/$/, ''),
       timeout: 15_000,
       headers: {
         Accept: 'application/fhir+json',
-        'Content-Type': 'application/fhir+json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
+        'Content-Type': 'application/fhir+json'
+      },
+      // LOCAL DEV ONLY: a self-hosted OpenEMR ships a self-signed cert. Never set
+      // this against a real server — it disables TLS verification.
+      ...(opts.insecureTls ? { httpsAgent: new https.Agent({ rejectUnauthorized: false }) } : {})
     });
+
+    if (token) {
+      this.http.interceptors.request.use(async (config) => {
+        const bearer = typeof token === 'function' ? await token() : token;
+        if (bearer) config.headers.Authorization = `Bearer ${bearer}`;
+        return config;
+      });
+    }
   }
 
   async get<T>(path: string, query?: Record<string, string | string[]>): Promise<T> {
