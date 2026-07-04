@@ -33,6 +33,9 @@ export class HttpFhirTransport implements FhirTransport {
         Accept: 'application/fhir+json',
         'Content-Type': 'application/fhir+json'
       },
+      // FHIR wants repeated params (e.g. start=ge..&start=lt..), NOT axios's
+      // default bracketed form (start[]=..), which servers reject as unknown.
+      paramsSerializer: { indexes: null },
       // LOCAL DEV ONLY: a self-hosted OpenEMR ships a self-signed cert. Never set
       // this against a real server — it disables TLS verification.
       ...(opts.insecureTls ? { httpsAgent: new https.Agent({ rejectUnauthorized: false }) } : {})
