@@ -11,6 +11,7 @@ import type { FhirBundle } from './types.js';
 export interface FhirTransport {
   get<T>(path: string, query?: Record<string, string | string[]>): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
+  put<T>(path: string, body: unknown): Promise<T>;
 }
 
 // Real HTTP transport. baseUrl points at the FHIR root (e.g.
@@ -39,6 +40,11 @@ export class HttpFhirTransport implements FhirTransport {
     const res = await this.http.post<T>(path, body);
     return res.data;
   }
+
+  async put<T>(path: string, body: unknown): Promise<T> {
+    const res = await this.http.put<T>(path, body);
+    return res.data;
+  }
 }
 
 export class FhirClient {
@@ -54,5 +60,9 @@ export class FhirClient {
 
   create<T>(resourceType: string, body: unknown): Promise<T> {
     return this.transport.post<T>(`/${resourceType}`, body);
+  }
+
+  update<T>(resourceType: string, id: string, body: unknown): Promise<T> {
+    return this.transport.put<T>(`/${resourceType}/${id}`, body);
   }
 }

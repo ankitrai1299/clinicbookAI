@@ -59,6 +59,9 @@ const makeStub = () => {
     },
     async post<T>(): Promise<T> {
       return { resourceType: 'Patient', id: 'e-new', name: [{ text: 'New Pt' }], telecom: [{ system: 'phone', value: '+911111111111' }] } as T;
+    },
+    async put<T>(): Promise<T> {
+      return { resourceType: 'Appointment', id: 'a-1' } as T;
     }
   };
   return { transport, calls };

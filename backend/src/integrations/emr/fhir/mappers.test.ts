@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import { AppointmentStatus } from '@prisma/client';
 
 import {
   humanNameToString,
   bundleToDoctorRefs,
   instantToClinicLabel,
   slotBundleToLabels,
-  patientToRecord
+  patientToRecord,
+  statusToFhir,
+  appointmentToFhir
 } from './mappers.js';
 import type { FhirBundle, FhirPractitioner, FhirPractitionerRole, FhirSlot, FhirPatient } from './types.js';
 
@@ -97,5 +100,31 @@ describe('FHIR mappers', () => {
     expect(rec.patientCode).toBe('EMR:e-42');
     expect(rec.source).toBe('emr');
     expect(rec.clinicId).toBe('clinic-1');
+  });
+
+  it('statusToFhir maps ClinicBook lifecycle to FHIR appointment status', () => {
+    expect(statusToFhir(AppointmentStatus.PENDING)).toBe('pending');
+    expect(statusToFhir(AppointmentStatus.CONFIRMED)).toBe('booked');
+    expect(statusToFhir(AppointmentStatus.CANCELLED)).toBe('cancelled');
+    expect(statusToFhir(AppointmentStatus.COMPLETED)).toBe('fulfilled');
+    expect(statusToFhir(AppointmentStatus.NO_SHOW)).toBe('noshow');
+  });
+
+  it('appointmentToFhir builds a FHIR Appointment with UTC instants + EMR participant refs', () => {
+    const fhir = appointmentToFhir({
+      status: AppointmentStatus.PENDING,
+      appointmentDate: new Date('2026-07-10T00:00:00.000Z'), // UTC-midnight calendar day
+      appointmentTime: '09:00 AM', // 09:00 IST = 03:30 UTC
+      emrDoctorId: 'D1',
+      emrPatientId: 'P1',
+      durationMinutes: 30
+    });
+    expect(fhir.status).toBe('pending');
+    expect(fhir.start).toBe('2026-07-10T03:30:00.000Z');
+    expect(fhir.end).toBe('2026-07-10T04:00:00.000Z');
+    expect(fhir.participant).toEqual([
+      { actor: { reference: 'Practitioner/D1' }, status: 'accepted' },
+      { actor: { reference: 'Patient/P1' }, status: 'accepted' }
+    ]);
   });
 });

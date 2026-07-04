@@ -61,6 +61,20 @@ export interface FhirPatient {
   birthDate?: string;
 }
 
+export interface FhirAppointmentParticipant {
+  actor?: FhirReference;
+  status?: string; // 'accepted' | 'declined' | ...
+}
+export interface FhirAppointment {
+  resourceType: 'Appointment';
+  id?: string;
+  status?: string; // 'proposed'|'pending'|'booked'|'cancelled'|'fulfilled'|'noshow'|...
+  start?: string; // ISO instant
+  end?: string;
+  description?: string;
+  participant?: FhirAppointmentParticipant[];
+}
+
 export interface FhirBundleEntry<T> {
   resource?: T;
 }

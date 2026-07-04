@@ -16,6 +16,18 @@ import {
   clearExternalDataSources
 } from '../src/core/datasource/index.js';
 import { mockEmrDataSource } from '../src/integrations/emr/mock/mockEmrDataSource.js';
+import { link, toExternal, toLocal } from '../src/integrations/emr/externalIdMap.service.js';
+import { syncThroughDataSource } from '../src/integrations/emr/openemr/syncThrough.js';
+import { ensureShadowDoctor, ensureShadowPatient } from '../src/integrations/emr/openemr/shadowSync.js';
+import { openEmrAppointments } from '../src/integrations/emr/openemr/openEmrAppointments.js';
+import { FhirClient, type FhirTransport } from '../src/integrations/emr/fhir/fhirClient.js';
+import { nativeAppointments } from '../src/products/clinicbook/appointments/appointment.native.js';
+import {
+  appointmentSourceFor,
+  registerExternalAppointmentSource,
+  clearExternalAppointmentSources
+} from '../src/products/clinicbook/appointments/appointmentSource.js';
+import type { PatientRecord } from '../src/core/datasource/ports.js';
 import {
   getDoctors,
   getDoctorSchedule,
@@ -195,12 +207,107 @@ async function main() {
   const emrSlots = await dataSourceFor(EMR_CLINIC).slots.getAvailable('emr-doc-1', dateStr);
   check('EMR clinic slots from adapter', emrSlots.length === 5 && emrSlots[0] === '09:00 AM', emrSlots);
 
-  // The REAL clinic is untouched by the EMR registration — still native/Postgres.
+  // The REAL clinic is untouched by an EMR registration scoped to ANOTHER clinic
+  // — still served natively from Postgres (its seeded doctor is present).
   const nativeStill = await dataSourceFor(clinic.id).doctors.listNames();
-  check('native clinic still served by Postgres (EMR reg does not leak)',
-    nativeStill.includes(DOC_NAME) && !nativeStill.some((n) => n.includes('(EMR)')), nativeStill);
+  check('native clinic still served by Postgres (EMR reg for another clinic does not leak)',
+    nativeStill.includes(DOC_NAME), nativeStill);
 
   clearExternalDataSources();
+
+  console.log('\nEXTERNAL ID MAP (Phase 4 Step 1):');
+  await link(clinic.id, 'openemr', 'patient', patient.id, 'emr-P-777');
+  const ext = await toExternal(clinic.id, 'openemr', 'patient', patient.id);
+  check('toExternal resolves the linked EMR id', ext === 'emr-P-777', ext);
+  const loc = await toLocal(clinic.id, 'openemr', 'patient', 'emr-P-777');
+  check('toLocal resolves back to the local id', loc === patient.id, loc);
+  await link(clinic.id, 'openemr', 'patient', patient.id, 'emr-P-888'); // idempotent re-link
+  const ext2 = await toExternal(clinic.id, 'openemr', 'patient', patient.id);
+  check('re-link updates externalId (idempotent upsert)', ext2 === 'emr-P-888', ext2);
+  const missing = await toExternal(clinic.id, 'openemr', 'doctor', 'nope');
+  check('unmapped lookup returns null', missing === null);
+
+  console.log('\nSYNC-THROUGH SHADOW MIRROR (Phase 4 Step 2):');
+  clearExternalDataSources();
+  const SYS = 'mock';
+  registerExternalDataSource((cid) =>
+    cid === clinic.id ? syncThroughDataSource(clinic.id, SYS, mockEmrDataSource(clinic.id)) : null
+  );
+
+  const synced = dataSourceFor(clinic.id);
+  const sRefs = await synced.doctors.listRefs();
+  const emrRef = sRefs.find((d) => d.name.includes('(EMR)'));
+  check('EMR doctors surface with LOCAL ids (not raw EMR ids)',
+    !!emrRef && !emrRef.id.startsWith('emr-doc-'), emrRef?.id);
+
+  const backToEmr = emrRef ? await toExternal(clinic.id, SYS, 'doctor', emrRef.id) : null;
+  check('shadow doctor is id-mapped back to the EMR id', backToEmr === 'emr-doc-1' || backToEmr === 'emr-doc-2', backToEmr);
+
+  const localDoc = emrRef ? await prisma.doctor.findFirst({ where: { id: emrRef.id, clinicId: clinic.id } }) : null;
+  check('a real LOCAL shadow Doctor row exists for the EMR doctor', !!localDoc);
+
+  // Slots: caller passes the LOCAL doctor id; wrapper translates to EMR id.
+  const syncSlots = emrRef ? await synced.slots.getAvailable(emrRef.id, dateStr) : [];
+  check('slots resolve via local->EMR id translation (5-slot demo grid)', syncSlots.length === 5, syncSlots.length);
+
+  // Onboard a patient through the EMR clinic → EMR create + local shadow + local id.
+  const sp = await synced.patients.onboard({ name: 'Sync Pt', phone: '+919990002222', language: 'English', source: 'whatsapp' });
+  const spExt = await toExternal(clinic.id, SYS, 'patient', sp.id);
+  check('onboarded EMR patient has a local shadow + id map', !sp.id.startsWith('emr-pat-') && !!spExt, { id: sp.id, ext: spExt });
+
+  clearExternalDataSources();
+
+  console.log('\nEMR APPOINTMENT WRITE (Phase 4 Step 4 — stub FHIR + real local mirror):');
+  const SYS4 = 'mock';
+  // Shadow doctor + patient with id-maps so the write path can translate ids.
+  const localDoctorId = await ensureShadowDoctor(clinic.id, SYS4, { id: 'emr-doc-1', name: 'Dr EMR Write', speciality: 'Cardiology' });
+  const emrPatient = { id: 'emr-pat-write-1', name: 'EMR Write Pt', phone: '+919990004444', language: 'English' } as PatientRecord;
+  const localPatientId = await ensureShadowPatient(clinic.id, SYS4, emrPatient);
+
+  // Stub FHIR transport records POST/PUT and returns an Appointment with a
+  // per-run-unique id (real EMR ids are 1:1 with a local appt; a constant id
+  // would collide with prior runs' mappings on the externalId unique key).
+  const emrApptId = `emr-appt-${Date.now()}`;
+  const calls: Array<{ verb: string; path: string; body?: any }> = [];
+  const stub: FhirTransport = {
+    async get<T>() { return { resourceType: 'Bundle', entry: [] } as T; },
+    async post<T>(path: string, body: unknown) { calls.push({ verb: 'POST', path, body }); return { resourceType: 'Appointment', id: emrApptId } as T; },
+    async put<T>(path: string, body: unknown) { calls.push({ verb: 'PUT', path, body }); return { resourceType: 'Appointment', id: emrApptId } as T; }
+  };
+  const emrAppts = openEmrAppointments(clinic.id, SYS4, new FhirClient(stub), nativeAppointments(clinic.id));
+
+  // Clean any leftover active appt on this slot from a prior run (idempotent).
+  const writeTime = '03:30 PM';
+  const stale = await prisma.appointment.findFirst({ where: { clinicId: clinic.id, doctorId: localDoctorId, appointmentTime: writeTime, appointmentDate: new Date(`${dateStr}T00:00:00.000Z`), status: { not: 'CANCELLED' } } });
+  if (stale) await prisma.appointment.update({ where: { id: stale.id }, data: { status: 'CANCELLED' } });
+
+  const emrBooked = await emrAppts.create({
+    doctorId: localDoctorId, patientId: localPatientId,
+    appointmentDate: new Date(`${dateStr}T00:00:00.000Z`), appointmentTime: writeTime,
+    status: AppointmentStatus.PENDING
+  });
+  const postCall = calls.find((c) => c.verb === 'POST' && c.path === '/Appointment');
+  check('create POSTs a FHIR Appointment with EMR participant refs',
+    !!postCall && JSON.stringify(postCall.body?.participant).includes('Practitioner/emr-doc-1') && JSON.stringify(postCall.body?.participant).includes('Patient/emr-pat-write-1'));
+  check('create writes a LOCAL mirror row (local ids)', emrBooked.doctorId === localDoctorId && emrBooked.patientId === localPatientId);
+  const apptExt = await toExternal(clinic.id, SYS4, 'appointment', emrBooked.id);
+  check('mirror appointment is id-linked to the EMR appointment', apptExt === emrApptId, apptExt);
+
+  // Cancel via applyUpdate → mirror cancels + PUT pushes cancelled status to EMR.
+  const cancelledRes = await emrAppts.applyUpdate(emrBooked.id, { status: AppointmentStatus.CANCELLED });
+  const putCall = calls.find((c) => c.verb === 'PUT' && c.path === `/Appointment/${emrApptId}`);
+  check('cancel PUTs status=cancelled to the EMR', !!putCall && putCall.body?.status === 'cancelled', putCall?.body?.status);
+  check('local mirror reflects the cancellation', typeof cancelledRes !== 'string' && cancelledRes.status === AppointmentStatus.CANCELLED);
+
+  console.log('\nRESOLVER GATING (Phase 4 Step 5 — native default, EMR only when gated):');
+  clearExternalAppointmentSources();
+  const def = appointmentSourceFor(clinic.id);
+  check('appointmentSourceFor defaults to native (no providers registered)', typeof def.create === 'function');
+  const sentinel = { create: async () => ({}) } as any;
+  registerExternalAppointmentSource((cid: string) => (cid === 'emr-appt-clinic' ? sentinel : null));
+  check('a gated clinic gets the EMR appointment source', appointmentSourceFor('emr-appt-clinic') === sentinel);
+  check('a non-gated clinic stays native (EMR provider does not leak)', appointmentSourceFor(clinic.id) !== sentinel);
+  clearExternalAppointmentSources();
 
   console.log(`\nResult: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

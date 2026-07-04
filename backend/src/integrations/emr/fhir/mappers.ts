@@ -3,7 +3,9 @@
 // reusable heart of every FHIR-based EMR adapter (OpenEMR, Epic, Cerner …): the
 // transport differs, the mapping is the same.
 
-import { CLINIC_TIMEZONE, canonicalizeTime } from '../../../services/slotMath.js';
+import { AppointmentStatus } from '@prisma/client';
+
+import { CLINIC_TIMEZONE, canonicalizeTime, clinicLocalInstant } from '../../../services/slotMath.js';
 import type { DoctorRef, PatientRecord } from '../../../core/datasource/ports.js';
 import type {
   FhirBundle,
@@ -12,7 +14,8 @@ import type {
   FhirPractitionerRole,
   FhirSlot,
   FhirPatient,
-  FhirContactPoint
+  FhirContactPoint,
+  FhirAppointment
 } from './types.js';
 
 // "Dr Meera Rao" from a FHIR HumanName (prefer .text, else prefix+given+family).
@@ -121,3 +124,42 @@ export const patientBundleToRecords = (
   bundle: FhirBundle<FhirPatient> | undefined,
   clinicId: string
 ): PatientRecord[] => resources(bundle).map((p) => patientToRecord(p, clinicId));
+
+// --- Appointments ----------------------------------------------------------
+// ClinicBook lifecycle status → FHIR Appointment.status.
+const STATUS_TO_FHIR: Record<AppointmentStatus, string> = {
+  [AppointmentStatus.PENDING]: 'pending',
+  [AppointmentStatus.CONFIRMED]: 'booked',
+  [AppointmentStatus.CANCELLED]: 'cancelled',
+  [AppointmentStatus.COMPLETED]: 'fulfilled',
+  [AppointmentStatus.NO_SHOW]: 'noshow'
+};
+export const statusToFhir = (s: AppointmentStatus): string => STATUS_TO_FHIR[s];
+
+export interface AppointmentToFhirInput {
+  status: AppointmentStatus;
+  appointmentDate: Date; // UTC-midnight calendar day (as stored)
+  appointmentTime: string; // clinic-local "HH:MM AM/PM"
+  emrDoctorId: string;
+  emrPatientId: string;
+  durationMinutes?: number;
+}
+
+// Build a FHIR Appointment resource for a create/update. start/end are true UTC
+// instants derived from the clinic-local date+time (reuses clinicLocalInstant,
+// the same math reminders use), and participants reference the EMR's own
+// Practitioner/Patient ids (translated by the caller via ExternalIdMap).
+export const appointmentToFhir = (i: AppointmentToFhirInput): FhirAppointment => {
+  const start = clinicLocalInstant(i.appointmentDate, i.appointmentTime);
+  const end = new Date(start.getTime() + (i.durationMinutes ?? 30) * 60_000);
+  return {
+    resourceType: 'Appointment',
+    status: statusToFhir(i.status),
+    start: start.toISOString(),
+    end: end.toISOString(),
+    participant: [
+      { actor: { reference: `Practitioner/${i.emrDoctorId}` }, status: 'accepted' },
+      { actor: { reference: `Patient/${i.emrPatientId}` }, status: 'accepted' }
+    ]
+  };
+};

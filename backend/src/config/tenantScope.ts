@@ -32,7 +32,10 @@ export const TENANT_MODELS = new Set<string>([
   'ConsultationNote',
   // Healthcare MCP channel-agnostic conversation session — clinic-scoped so one
   // clinic can never read/overwrite another's patient conversation state.
-  'ConversationSession'
+  'ConversationSession',
+  // EMR integration: local↔external id map, clinic-scoped so one clinic's
+  // mapping can never be read/overwritten by another.
+  'ExternalIdMap'
 ]);
 
 // Operations whose `where` we constrain with clinicId.

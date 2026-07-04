@@ -546,3 +546,26 @@ model ConsultationNote {
   @@index([clinicId, appointmentId])
   @@index([clinicId, createdAt])
 }
+
+// ---------------------------------------------------------------------------
+// External identity mapping (EMR integration). Links a ClinicBook LOCAL id to
+// the id the same entity has in an external EMR/HMIS (OpenEMR/Epic/…), per
+// clinic + system. Lets the EMR adapters translate between our ids and the
+// EMR's for patients, doctors and appointments, so the rest of the app keeps
+// using LOCAL ids only. Clinic-scoped at the app layer (in TENANT_MODELS);
+// no FK relation kept, deliberately minimal.
+// ---------------------------------------------------------------------------
+model ExternalIdMap {
+  id         String   @id @default(cuid())
+  clinicId   String
+  system     String // e.g. "openemr"
+  entity     String // "patient" | "doctor" | "appointment"
+  localId    String
+  externalId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([clinicId, system, entity, localId])
+  @@unique([clinicId, system, entity, externalId])
+  @@index([clinicId, system, entity])
+}
