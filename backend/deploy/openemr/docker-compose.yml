@@ -10,7 +10,9 @@
 
 services:
   mysql:
-    image: mariadb:11.4
+    # OpenEMR 7.0.3 supports MariaDB 10.x; 11.x makes its auto-setup loop
+    # ("Running quick setup!" repeating) — verified. Stay on the 10.11 LTS line.
+    image: mariadb:10.11
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_general_ci

@@ -85,6 +85,15 @@ mirror row. Verify:
 
 ## Notes
 
+- **Do NOT run this under Docker-in-WSL2 with the overlay filesystem.** OpenEMR's
+  first-boot chmod-hardens ~30k files; on WSL2's overlayfs each chmod triggers a
+  copy-up, so setup is I/O-bound and effectively hangs (never serves the login
+  page). Use a **native Linux host / VM / cloud** (or Docker Desktop's own VM,
+  which doesn't hit this) to bring OpenEMR up. The ClinicBook adapter itself was
+  validated read+write against a real FHIR server (HAPI R4) — this sandbox is
+  only needed to exercise OpenEMR's OAuth2 + OpenEMR-specific quirks.
+- **MariaDB version**: use the 10.x line (compose pins 10.11). OpenEMR 7.0.3's
+  auto-setup loops on MariaDB 11.x.
 - **Production**: when you go live, run the guarded `prisma db push` of `ExternalIdMap`
   against prod (it was only pushed to local dev here), set the same env on the server
   (a real token/OAuth, **no** `OPENEMR_INSECURE_TLS`), and list only the real EMR
