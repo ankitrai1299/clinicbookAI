@@ -26,8 +26,22 @@ export const nativeDoctors = (clinicId: string): DoctorPort => {
   return {
     list: () => db.doctor.findMany({ where: { clinicId }, orderBy: { name: 'asc' } }),
 
+    // Ordered by name like list()/listBySpeciality(): the public booking page,
+    // createPublicBooking and GET /api/v1/doctors all render straight from this,
+    // and an unordered findMany returns Postgres heap order (which reshuffles
+    // whenever a doctor row is updated).
     listRefs: () =>
-      db.doctor.findMany({ where: { clinicId }, select: { id: true, name: true, speciality: true } }),
+      db.doctor.findMany({
+        where: { clinicId },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, speciality: true }
+      }),
+
+    findRefById: (id: string): Promise<DoctorRef | null> =>
+      db.doctor.findFirst({
+        where: { id, clinicId },
+        select: { id: true, name: true, speciality: true }
+      }),
 
     listSpecialities: async (): Promise<string[]> => {
       const docs = await db.doctor.findMany({ where: { clinicId }, select: { speciality: true } });

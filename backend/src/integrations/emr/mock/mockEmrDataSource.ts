@@ -52,6 +52,7 @@ const mockDoctors = (clinicId: string): DoctorPort => {
   return {
     list: async () => DEMO_DOCTORS.map(asDoctor),
     listRefs: async () => [...DEMO_DOCTORS],
+    findRefById: async (id: string) => DEMO_DOCTORS.find((d) => d.id === id) ?? null,
     listSpecialities: async () =>
       [...new Set(DEMO_DOCTORS.map((d) => d.speciality))].sort((a, b) => a.localeCompare(b)),
     listBySpeciality: async (speciality: string) =>

@@ -61,10 +61,23 @@ export const resolveApiKey = async (plaintext: string): Promise<ResolvedApiKey |
   return { id: row.id, clinicId: row.clinicId };
 };
 
-/** Fire-and-forget usage stamp; never blocks or fails a request. */
+// lastUsedAt is a coarse observability field with no correctness role, so it must
+// not cost one row UPDATE (plus WAL record, dead tuple and index maintenance) per
+// request. Without this throttle a polling partner serializes every request on the
+// same ApiKey row's lock and, because the write is fire-and-forget, holds a
+// connection-pool slot AFTER the response is sent. One write per key per window.
+const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+const lastStamped = new Map<string, number>();
+
+/** Fire-and-forget usage stamp, throttled per key; never blocks or fails a request. */
 export const touchApiKey = (id: string): void => {
+  const now = Date.now();
+  const previous = lastStamped.get(id);
+  if (previous !== undefined && now - previous < TOUCH_INTERVAL_MS) return;
+  lastStamped.set(id, now);
+
   void prisma.apiKey
-    .update({ where: { id }, data: { lastUsedAt: new Date() } })
+    .update({ where: { id }, data: { lastUsedAt: new Date(now) } })
     .catch((err: unknown) => console.error('[apikey] lastUsedAt update failed:', err));
 };
 

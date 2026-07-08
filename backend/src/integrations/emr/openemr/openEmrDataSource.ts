@@ -26,6 +26,8 @@ import type { FhirClient } from '../fhir/fhirClient.js';
 import type { FhirPractitioner, FhirPractitionerRole, FhirSlot, FhirPatient } from '../fhir/types.js';
 import {
   bundleToDoctorRefs,
+  buildSpecialtyIndex,
+  practitionerToDoctorRef,
   slotBundleToLabels,
   patientBundleToRecords,
   patientToRecord
@@ -53,9 +55,25 @@ const openEmrDoctors = (clinicId: string, client: FhirClient): DoctorPort => {
   const asDoctor = (r: DoctorRef): Doctor =>
     ({ id: r.id, clinicId, name: r.name, speciality: r.speciality, experienceYears: null, email: null, phone: null, passwordHash: null }) as Doctor;
 
+  // One practitioner by id: a read + a scoped role search, instead of pulling the
+  // whole Practitioner + PractitionerRole bundles to find a single doctor.
+  const findRefById = async (id: string): Promise<DoctorRef | null> => {
+    try {
+      const [practitioner, roles] = await Promise.all([
+        client.read<FhirPractitioner>('Practitioner', id),
+        client.search<FhirPractitionerRole>('PractitionerRole', { practitioner: `Practitioner/${id}` })
+      ]);
+      if (!practitioner?.id) return null;
+      return practitionerToDoctorRef(practitioner, buildSpecialtyIndex(roles));
+    } catch {
+      return null; // 404/410 from the EMR -> "no such doctor here"
+    }
+  };
+
   return {
     list: async () => (await refs()).map(asDoctor),
     listRefs: refs,
+    findRefById,
     listSpecialities: async () =>
       [...new Set((await refs()).map((d) => d.speciality))].sort((a, b) => a.localeCompare(b)),
     listBySpeciality: async (speciality: string) =>

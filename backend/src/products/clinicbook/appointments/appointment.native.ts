@@ -42,7 +42,9 @@ export const nativeAppointments = (clinicId: string): AppointmentPort => {
   };
 
   const create = async (input: AppointmentCreateData): Promise<AppointmentRecord> => {
-    await ensureClinicDoctorPatient(input.doctorId, input.patientId);
+    // Doctor/patient existence is asserted by the SERVICE via assertRefs() before
+    // any date/time guard, so it is not repeated here (one round-trip, and the
+    // 404-before-400 precedence is owned in one place for every adapter).
 
     // Atomic slot lock. Re-check inside a transaction that no active
     // (non-cancelled) appointment holds this doctor/date/time, then create. The

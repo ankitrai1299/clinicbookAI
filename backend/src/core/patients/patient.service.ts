@@ -142,7 +142,7 @@ export const createPublicBooking = async (clinicId: string, input: PublicBooking
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true, name: true } });
   if (!clinic) throw new AppError('Clinic not found', 404);
 
-  const doctor = (await dataSourceFor(clinicId).doctors.listRefs()).find((d) => d.id === input.doctorId);
+  const doctor = await dataSourceFor(clinicId).doctors.findRefById(input.doctorId);
   if (!doctor) throw new AppError('Doctor not found at this clinic', 404);
 
   // Reject anything that isn't a real, currently-open slot.

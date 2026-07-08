@@ -156,6 +156,12 @@ export const createAppointment = async (
   const notify = options.notify ?? true;
   const src = appointmentSourceFor(clinicId);
 
+  // Existence/tenant-membership check runs FIRST, before the date/time guards —
+  // an unknown doctor must surface as 404, not as a 400 about the slot. Doing it
+  // here (rather than inside the adapter's create) also means EVERY appointment
+  // source, including the EMR one, gets the check without re-implementing it.
+  await src.assertRefs(input.doctorId, input.patientId);
+
   const appointmentDate = normalizeDate(input.appointmentDate);
   const appointmentTime = normalizeTime(input.appointmentTime);
 
@@ -347,8 +353,20 @@ export const cancelAppointment = async (clinicId: string, id: string): Promise<A
   // Can't cancel a completed (or no-show) appointment.
   assertTransition(prev.status, AppointmentStatus.CANCELLED);
 
-  const result = await src.applyUpdate(id, { status: AppointmentStatus.CANCELLED });
-  const appointment = result === LOST_RACE ? await getSingleAppointment(clinicId, id) : result;
+  // Guard the write on the status we just read so only ONE concurrent cancel
+  // flips the row. Without this a double-clicked "Reject" fires onStatusTransition
+  // twice: two WhatsApp messages to the patient, two appointment.cancelled events,
+  // and autoOfferFreedSlot offering the same freed slot to two waitlisted patients.
+  const result = await src.applyUpdate(
+    id,
+    { status: AppointmentStatus.CANCELLED },
+    { expectedStatus: prev.status }
+  );
+  // Lost the race: another request already cancelled it (and messaged the patient).
+  if (result === LOST_RACE) {
+    return getSingleAppointment(clinicId, id);
+  }
+  const appointment = result;
 
   onStatusTransition(prev.status, appointment);
   return appointment;
@@ -418,6 +436,12 @@ export const markNoShowAppointment = async (clinicId: string, id: string): Promi
   // completed or cancelled one.
   assertTransition(current.status, AppointmentStatus.NO_SHOW);
 
-  const result = await src.applyUpdate(id, { status: AppointmentStatus.NO_SHOW });
+  // Same concurrency guard as the other transitions, so a double-click can't
+  // re-apply it (and the LOST_RACE branch below is actually reachable).
+  const result = await src.applyUpdate(
+    id,
+    { status: AppointmentStatus.NO_SHOW },
+    { expectedStatus: current.status }
+  );
   return result === LOST_RACE ? getSingleAppointment(clinicId, id) : result;
 };

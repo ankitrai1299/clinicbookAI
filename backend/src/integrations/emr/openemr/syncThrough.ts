@@ -26,6 +26,9 @@ const syncDoctors = (clinicId: string, system: string, raw: DoctorPort): DoctorP
   };
   return {
     listRefs: shadowRefs,
+    // Callers hold a LOCAL id, so serve it from the local shadow row — no EMR
+    // round-trip and no roster-wide shadow upsert just to validate one doctor.
+    findRefById: (localId: string) => local.findRefById(localId),
     list: async () => {
       await shadowRefs(); // ensure shadows exist, then serve local rows
       return local.list();

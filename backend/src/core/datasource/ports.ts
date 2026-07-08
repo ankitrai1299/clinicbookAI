@@ -42,8 +42,13 @@ export interface DoctorPort {
   // --- Reads (booking hot path + dashboard) ---
   /** Full doctor rows, ordered by name. */
   list(): Promise<Doctor[]>;
-  /** {id,name,speciality} for every doctor — basis for name matching. */
+  /** {id,name,speciality} for every doctor, ordered by name — basis for name
+   *  matching AND for the public booking page / GET /api/v1/doctors. */
   listRefs(): Promise<DoctorRef[]>;
+  /** One doctor by id, or null. Exists so callers validating a single id don't
+   *  have to pull the whole roster (which, on an EMR source, also costs a
+   *  round-trip + a shadow upsert per doctor). */
+  findRefById(id: string): Promise<DoctorRef | null>;
   /** Distinct, sorted speciality labels offered by this clinic. */
   listSpecialities(): Promise<string[]>;
   /** Doctors in one speciality (case-insensitive), ordered by name. */

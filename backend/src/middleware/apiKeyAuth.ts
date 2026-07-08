@@ -27,17 +27,21 @@ export const requireApiKey = (req: Request, _res: Response, next: NextFunction):
     return;
   }
 
-  void resolveApiKey(key)
-    .then((resolved) => {
-      if (!resolved) {
-        next(new AppError('Invalid or revoked API key.', 401));
-        return;
-      }
-      req.apiKey = resolved;
-      req.clinic = { id: resolved.clinicId };
-      req.db = forClinic(resolved.clinicId);
-      touchApiKey(resolved.id);
-      next();
-    })
-    .catch(next);
+  // Two-argument .then, NOT .then(...).catch(next): with a trailing .catch the
+  // whole downstream middleware chain runs INSIDE the fulfilment callback, so a
+  // synchronous throw from any later handler unwinds back into this promise and
+  // calls next(err) a SECOND time on a request whose error path already ran
+  // (double errorHandler -> ERR_HTTP_HEADERS_SENT). Rejections of resolveApiKey
+  // itself go to the onRejected arm; next() is the last thing we do.
+  void resolveApiKey(key).then((resolved) => {
+    if (!resolved) {
+      next(new AppError('Invalid or revoked API key.', 401));
+      return;
+    }
+    req.apiKey = resolved;
+    req.clinic = { id: resolved.clinicId };
+    req.db = forClinic(resolved.clinicId);
+    touchApiKey(resolved.id);
+    next();
+  }, next);
 };

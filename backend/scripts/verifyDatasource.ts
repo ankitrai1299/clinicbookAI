@@ -10,6 +10,7 @@
 import './../src/config/env.js';
 import { AppointmentStatus } from '@prisma/client';
 import { prisma } from '../src/config/prisma.js';
+import { forClinic } from '../src/config/tenantPrisma.js';
 import {
   dataSourceFor,
   registerExternalDataSource,
@@ -298,6 +299,34 @@ async function main() {
   const putCall = calls.find((c) => c.verb === 'PUT' && c.path === `/Appointment/${emrApptId}`);
   check('cancel PUTs status=cancelled to the EMR', !!putCall && putCall.body?.status === 'cancelled', putCall?.body?.status);
   check('local mirror reflects the cancellation', typeof cancelledRes !== 'string' && cancelledRes.status === AppointmentStatus.CANCELLED);
+
+  console.log('\nREGRESSION GUARDS (from the pre-deploy code review):');
+  // R1: listRefs lost `orderBy: name asc` — public booking page + /api/v1/doctors.
+  const refsSorted = await ds.doctors.listRefs();
+  const sortedNames = refsSorted.map((d) => d.name);
+  check('listRefs() is ordered by name asc',
+    sortedNames.every((n, i) => i === 0 || sortedNames[i - 1].localeCompare(n) <= 0), sortedNames.slice(0, 3));
+
+  // R6: findRefById is an indexed point lookup, not a roster scan.
+  const oneRef = await ds.doctors.findRefById(doctorId);
+  const noRef = await ds.doctors.findRefById('no-such-doctor');
+  check('findRefById returns the doctor, null for unknown', oneRef?.id === doctorId && noRef === null);
+
+  // R5: forClinic + dataSourceFor memoized (63 $extends per WhatsApp msg -> 1).
+  check('forClinic(clinicId) is memoized', forClinic(clinic.id) === forClinic(clinic.id));
+  check('dataSourceFor(clinicId) is memoized', dataSourceFor(clinic.id) === dataSourceFor(clinic.id));
+
+  // R2: unknown doctor must be 404 even when the slot is also in the past
+  // (existence check runs BEFORE the date/time guards).
+  const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+  let code = 0;
+  try {
+    await createAppointment(clinic.id, {
+      doctorId: 'no-such-doctor', patientId: patient.id,
+      appointmentDate: yesterday, appointmentTime: '09:00 AM'
+    }, { notify: false });
+  } catch (e: any) { code = e?.statusCode ?? 0; }
+  check('unknown doctor + past slot -> 404 (not 400 "past slot")', code === 404, { code });
 
   console.log('\nRESOLVER GATING (Phase 4 Step 5 — native default, EMR only when gated):');
   clearExternalAppointmentSources();

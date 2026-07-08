@@ -71,8 +71,9 @@ export interface AppointmentPort {
 
   /**
    * Atomically create an appointment IF the doctor/date/time slot is still free.
-   * Validates the doctor and patient belong to the clinic. Throws AppError(404)
-   * if either is missing, AppError(409) if the slot is already taken.
+   * Throws AppError(409) if the slot is already taken. The caller (the service)
+   * has already run assertRefs(), so implementations must NOT re-validate the
+   * doctor/patient — that keeps 404-before-400 precedence in one place.
    */
   create(input: AppointmentCreateData): Promise<AppointmentRecord>;
 

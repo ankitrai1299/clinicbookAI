@@ -15,6 +15,7 @@ import { Router } from 'express';
 
 import { prisma } from '../../config/prisma.js';
 import { requireApiKey } from '../../middleware/apiKeyAuth.js';
+import { apiKeyLimiter } from '../../middleware/rateLimiters.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { AppError } from '../../utils/AppError.js';
 import { dataSourceFor } from '../datasource/index.js';
@@ -22,8 +23,11 @@ import { getAvailableSlots } from '../../services/scheduling.service.js';
 
 const router = Router();
 
-// Every /api/v1 route is key-authenticated and tenant-bound.
+// Every /api/v1 route is key-authenticated and tenant-bound, then rate-limited
+// PER KEY (not per IP — see rateLimiters.ts). Order matters: the limiter needs
+// req.apiKey.id, which requireApiKey sets.
 router.use(requireApiKey);
+router.use(apiKeyLimiter);
 
 const clinicId = (req: { clinic?: { id: string } }): string => req.clinic!.id;
 
