@@ -594,3 +594,27 @@ model ApiKey {
 
   @@index([clinicId])
 }
+
+// ---------------------------------------------------------------------------
+// Public-API idempotency. A partner retrying POST /api/v1/appointments after a
+// timeout must not create a second booking: it replays the first result instead.
+//
+// A row is CLAIMED before the work starts (the @@unique makes two concurrent
+// requests with the same key race for it — the loser gets 409 "in progress"),
+// then stamped with the resulting appointmentId on success, or deleted on
+// failure so the caller can legitimately retry.
+//
+// Clinic-scoped (in TENANT_MODELS): the key namespace belongs to the clinic, so
+// two partners can pick the same key string without colliding.
+// ---------------------------------------------------------------------------
+model IdempotencyKey {
+  id            String   @id @default(cuid())
+  clinicId      String
+  key           String
+  endpoint      String // e.g. "POST /v1/appointments"
+  appointmentId String? // set once the work succeeded; null while in flight
+  createdAt     DateTime @default(now())
+
+  @@unique([clinicId, key])
+  @@index([clinicId, createdAt])
+}
