@@ -10,6 +10,7 @@ import doctorRouter from '../core/doctors/doctor.routes.js';
 import notificationRouter from '../core/notifications/notification.routes.js';
 import patientRouter from '../core/patients/patient.routes.js';
 import publicPatientRouter from '../core/patients/public.routes.js';
+import publicApiV1Router from '../core/publicapi/v1.routes.js';
 import novascribeRouter from '../products/novascribe/novascribe.routes.js';
 import { novaRouter } from '../products/novascribe/v2/router.js';
 import waitlistRouter from '../products/clinicbook/waitlist/waitlist.routes.js';
@@ -27,6 +28,8 @@ apiRouter.use('/api/doctors', doctorRouter);
 apiRouter.use('/api/notifications', notificationRouter);
 apiRouter.use('/api/patients', patientRouter);
 apiRouter.use('/api/public', publicPatientRouter);
+// Partner-facing PUBLIC API, authenticated by an ApiKey (not a JWT). Versioned.
+apiRouter.use('/api/v1', publicApiV1Router);
 apiRouter.use('/api/appointments', appointmentRouter);
 apiRouter.use('/api/waitlist', waitlistRouter);
 apiRouter.use('/api/novascribe', novascribeRouter);

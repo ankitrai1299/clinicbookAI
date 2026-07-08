@@ -569,3 +569,28 @@ model ExternalIdMap {
   @@unique([clinicId, system, entity, externalId])
   @@index([clinicId, system, entity])
 }
+
+// ---------------------------------------------------------------------------
+// Public API keys. A partner system (hospital app / EMR / integrator) puts one
+// of these in its own env and calls our /api/v1 surface; the key is what tells
+// us WHICH clinic the request belongs to.
+//
+// Like WhatsAppChannel, this is a ROUTING/AUTH table looked up BEFORE a clinic
+// is known, so it is deliberately NOT in TENANT_MODELS — resolution uses the raw
+// prisma client. Management (list/revoke) filters by clinicId explicitly.
+//
+// Only the sha256 HASH of the key is stored; the plaintext is shown once at
+// creation and never again (same discipline as a password).
+// ---------------------------------------------------------------------------
+model ApiKey {
+  id         String    @id @default(cuid())
+  clinicId   String
+  name       String
+  keyHash    String    @unique
+  prefix     String // e.g. "ck_live_a1b2c3" — safe to show in a UI list
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([clinicId])
+}

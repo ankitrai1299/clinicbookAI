@@ -18,6 +18,12 @@ declare global {
         id: string;
       };
       db?: TenantClient;
+      // Set by requireApiKey on the PUBLIC /api/v1 channel — the partner key
+      // that resolved this request's tenant (same clinic/db shape as above).
+      apiKey?: {
+        id: string;
+        clinicId: string;
+      };
     }
   }
 }
