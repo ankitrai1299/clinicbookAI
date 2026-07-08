@@ -618,3 +618,56 @@ model IdempotencyKey {
   @@unique([clinicId, key])
   @@index([clinicId, createdAt])
 }
+
+// ---------------------------------------------------------------------------
+// Outbound webhooks. A partner registers a URL and we POST it every domain event
+// it subscribed to, signed so the partner can prove the request came from us.
+//
+// `secret` is encrypted at rest with the same AES-256-GCM helper as
+// WhatsAppChannel.accessToken (plaintext when no key is configured, dev only).
+// We must be able to DECRYPT it (unlike an API key, which we only ever hash),
+// because signing an outgoing request needs the plaintext.
+// ---------------------------------------------------------------------------
+model WebhookEndpoint {
+  id        String   @id @default(cuid())
+  clinicId  String
+  url       String
+  secret    String // encrypted at rest
+  events    String[] // domain event names this endpoint wants
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  deliveries WebhookDelivery[]
+
+  @@index([clinicId, enabled])
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+// A TRANSACTIONAL OUTBOX row, not a fire-and-forget HTTP call. The event handler
+// only writes this row; a cron drains it, so a partner being down (or a deploy
+// mid-emit) delays delivery instead of losing it. Retried with exponential
+// backoff, then parked as FAILED with the last error for support to inspect.
+model WebhookDelivery {
+  id            String                @id @default(cuid())
+  clinicId      String
+  endpointId    String
+  event         String
+  payload       Json
+  status        WebhookDeliveryStatus @default(PENDING)
+  attempts      Int                   @default(0)
+  nextAttemptAt DateTime              @default(now())
+  lastError     String?
+  deliveredAt   DateTime?
+  createdAt     DateTime              @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  // The cron scans across ALL clinics for what is due — this index is that query.
+  @@index([status, nextAttemptAt])
+  @@index([clinicId, createdAt])
+}

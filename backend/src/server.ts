@@ -4,6 +4,7 @@ import { ensureSlotUniqueIndex } from './config/ensureIndexes.js';
 import { connectDatabase, disconnectDatabase } from './config/prisma.js';
 import { startReminderCron } from './cron/reminder.cron.js';
 import { startWaitlistCron } from './cron/waitlist.cron.js';
+import { startWebhookCron } from './cron/webhook.cron.js';
 import { logWhatsAppStartupInfo } from './core/whatsapp/whatsapp.diagnostics.js';
 import { logEmailStartupInfo } from './services/email.service.js';
 
@@ -42,6 +43,7 @@ const startServer = async () => {
 
   startReminderCron();
   startWaitlistCron();
+  startWebhookCron();
 
   process.on('SIGINT', () => {
     void shutdown('SIGINT');

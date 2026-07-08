@@ -39,7 +39,12 @@ export const TENANT_MODELS = new Set<string>([
   // Public-API idempotency keys. Scoped so two partners may reuse the same key
   // string without colliding. (ApiKey itself is NOT here — like WhatsAppChannel
   // it is the routing table consulted BEFORE a clinic is known.)
-  'IdempotencyKey'
+  'IdempotencyKey',
+  // Outbound webhooks. Management (register/list/disable) is clinic-scoped; the
+  // delivery cron sweeps across ALL clinics with the raw client and re-scopes per
+  // row, exactly like the reminder/waitlist crons.
+  'WebhookEndpoint',
+  'WebhookDelivery'
 ]);
 
 // Operations whose `where` we constrain with clinicId.
