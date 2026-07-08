@@ -99,8 +99,15 @@ const syncPatients = (clinicId: string, system: string, raw: PatientPort): Patie
     list: () => local.list(),
     listRecent: () => local.listRecent(),
     findById: (id) => local.findById(id),
-    update: (id, data) => local.update(id, data),
-    remove: (id) => local.remove(id)
+    // Writes go to the RAW source, which is where the "we can't write patients
+    // back to the EMR yet" guard lives (501/400). Routing them to `local` instead
+    // made those guards unreachable AND silently lied: a dashboard edit would touch
+    // only the shadow row, and the next ensureShadowPatient would overwrite it from
+    // the EMR — the change would vanish with no error. Deleting was worse: the
+    // shadow row went, the EMR patient survived, the next resolve re-created it
+    // with a NEW id, orphaning every Appointment/Reminder pointing at the old one.
+    update: (id, data) => raw.update(id, data),
+    remove: (id) => raw.remove(id)
   };
 };
 

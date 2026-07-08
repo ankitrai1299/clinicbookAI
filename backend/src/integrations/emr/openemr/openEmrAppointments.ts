@@ -20,7 +20,7 @@ import type {
   ApplyUpdateResult
 } from '../../../products/clinicbook/appointments/appointment.port.js';
 import { LOST_RACE } from '../../../products/clinicbook/appointments/appointment.port.js';
-import type { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus } from '@prisma/client';
 import type { FhirClient } from '../fhir/fhirClient.js';
 import type { FhirAppointment } from '../fhir/types.js';
 import { appointmentToFhir } from '../fhir/mappers.js';
@@ -44,23 +44,39 @@ export const openEmrAppointments = (
       throw new AppError('Doctor or patient is not linked to the EMR yet.', 409);
     }
 
-    // Source of truth: create in the EMR first. A conflict there (slot taken)
-    // surfaces as an error we translate to a clean 409 upstream.
-    const fhir = await client.create<FhirAppointment>(
-      'Appointment',
-      appointmentToFhir({
-        status: input.status,
-        appointmentDate: input.appointmentDate,
-        appointmentTime: input.appointmentTime,
-        emrDoctorId,
-        emrPatientId
-      })
-    );
-
-    // Mirror locally (reuses the native atomic slot-lock + hydration), link ids.
+    // RESERVE LOCALLY FIRST. The mirror's atomic slot-lock (partial unique index)
+    // is the only conflict detector we own, and it is cheap. Writing to the EMR
+    // first meant two patients racing for one slot BOTH created a FHIR Appointment
+    // and only the loser found out — leaving the EMR double-booked with an orphan
+    // we could neither link, cancel, nor even see. Any row we have to undo is now
+    // in OUR database, where undoing it is reliable.
     const local = await mirror.create(input);
-    if (fhir.id) await link(clinicId, system, 'appointment', local.id, fhir.id);
-    return local;
+
+    try {
+      const fhir = await client.create<FhirAppointment>(
+        'Appointment',
+        appointmentToFhir({
+          status: input.status,
+          appointmentDate: input.appointmentDate,
+          appointmentTime: input.appointmentTime,
+          emrDoctorId,
+          emrPatientId
+        })
+      );
+      if (!fhir.id) throw new AppError('The EMR did not return an appointment id.', 502);
+      await link(clinicId, system, 'appointment', local.id, fhir.id);
+      return local;
+    } catch (err) {
+      // The EMR refused, or the id-map write failed. Release the reservation so
+      // the slot is bookable again. CANCELLED (not deleted) keeps the audit trail
+      // and is excluded from the active-slot unique index, so the slot reopens.
+      await mirror
+        .applyUpdate(local.id, { status: AppointmentStatus.CANCELLED })
+        .catch((e: unknown) =>
+          console.error(`[emr] could not release local reservation ${local.id} after an EMR failure:`, e)
+        );
+      throw err;
+    }
   };
 
   // Reflect a locally-applied change (reschedule / cancel / confirm / complete)
@@ -68,11 +84,22 @@ export const openEmrAppointments = (
   // messaged the patient, so an EMR hiccup is logged, not thrown (retry/reconcile
   // later) — the app keeps working on the mirror.
   const pushUpdateToEmr = async (record: AppointmentRecord): Promise<void> => {
-    const externalApptId = await toExternal(clinicId, system, 'appointment', record.id);
-    if (!externalApptId) return; // not an EMR-created appointment / unmapped
-    const [emrDoctorId, emrPatientId] = await emrRefs(record.doctorId, record.patientId);
-    if (!emrDoctorId || !emrPatientId) return;
+    // EVERYTHING here is inside the try. The mirror row is already committed and
+    // the service is about to run onStatusTransition (WhatsApp message, cancelled
+    // event, waitlist auto-offer). If a transient ExternalIdMap read threw out
+    // here, applyUpdate would reject AFTER the commit: the patient would never be
+    // told, the slot would never be re-offered, and a retry would hit the
+    // "already cancelled" idempotent branch and lose those side-effects forever.
+    //
+    // TODO: this makes the EMR eventually-divergent when a push fails — there is
+    // no retry. When EMR writes go live, move the push into a durable outbox (the
+    // same shape as core/webhooks: enqueue a row, drain it with a cron).
     try {
+      const externalApptId = await toExternal(clinicId, system, 'appointment', record.id);
+      if (!externalApptId) return; // not an EMR-created appointment / unmapped
+      const [emrDoctorId, emrPatientId] = await emrRefs(record.doctorId, record.patientId);
+      if (!emrDoctorId || !emrPatientId) return;
+
       const body = appointmentToFhir({
         status: record.status,
         appointmentDate: record.appointmentDate,

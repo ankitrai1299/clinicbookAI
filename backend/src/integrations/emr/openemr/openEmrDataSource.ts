@@ -12,7 +12,7 @@
 import type { Doctor } from '@prisma/client';
 
 import { AppError } from '../../../utils/AppError.js';
-import { canonicalizeTime } from '../../../services/slotMath.js';
+import { canonicalizeTime, clinicNow, labelToMinutes, slotIsFuture } from '../../../services/slotMath.js';
 import type {
   ClinicDataSource,
   DoctorPort,
@@ -23,7 +23,7 @@ import type {
   PatientCreateData
 } from '../../../core/datasource/ports.js';
 import type { FhirClient } from '../fhir/fhirClient.js';
-import type { FhirPractitioner, FhirPractitionerRole, FhirSlot, FhirPatient } from '../fhir/types.js';
+import type { FhirBundle, FhirPractitioner, FhirPractitionerRole, FhirSlot, FhirPatient } from '../fhir/types.js';
 import {
   bundleToDoctorRefs,
   buildSpecialtyIndex,
@@ -91,19 +91,39 @@ const openEmrDoctors = (clinicId: string, client: FhirClient): DoctorPort => {
 };
 
 const openEmrSlots = (client: FhirClient): SlotPort => {
-  const getAvailable = async (doctorId: string, dateStr: string): Promise<string[]> => {
-    const bundle = await client.search<FhirSlot>('Slot', {
+  // Deliberately NO `status` filter: the presence of ANY slot that day is what
+  // tells us the doctor is WORKING. Asking only for free slots collapses "not
+  // working" and "fully booked" into the same empty answer, and the date picker
+  // treats them differently (skip the day vs label it "Fully booked").
+  const fetchDay = (doctorId: string, dateStr: string) =>
+    client.search<FhirSlot>('Slot', {
       'schedule.actor': `Practitioner/${doctorId}`,
-      start: [`ge${dateStr}`, `lt${nextDay(dateStr)}`],
-      status: 'free'
+      start: [`ge${dateStr}`, `lt${nextDay(dateStr)}`]
     });
-    return slotBundleToLabels(bundle);
+
+  // The EMR reports a slot free for the whole calendar day — it knows nothing of
+  // our clinic-local "never offer a past or near-past slot" rule. nativeSlots
+  // applies it, so this must too: otherwise at 15:30 IST the bot offers 09:00 AM
+  // and createAppointment's isPastSlot guard then refuses to book it, dead-ending
+  // the patient. Same slotMath the native adapter uses, so both agree exactly.
+  const bookableFrom = (bundle: FhirBundle<FhirSlot>, dateStr: string, at: Date): string[] => {
+    const now = clinicNow(at);
+    return slotBundleToLabels(bundle).filter((label) => {
+      const mins = labelToMinutes(label);
+      return mins !== null && slotIsFuture(mins, dateStr, now);
+    });
   };
+
+  const getAvailable = async (doctorId: string, dateStr: string, at: Date = new Date()): Promise<string[]> =>
+    bookableFrom(await fetchDay(doctorId, dateStr), dateStr, at);
+
   return {
     getAvailable,
     getDateAvailability: async (doctorId: string, dateStr: string) => {
-      const available = (await getAvailable(doctorId, dateStr)).length;
-      return { working: available > 0, available };
+      const bundle = await fetchDay(doctorId, dateStr);
+      // Any slot at all => the doctor has a schedule that day and isn't on leave.
+      const working = (bundle.entry?.length ?? 0) > 0;
+      return { working, available: working ? bookableFrom(bundle, dateStr, new Date()).length : 0 };
     },
     isAvailable: async (doctorId: string, dateStr: string, time: string) => {
       const canonical = canonicalizeTime(time);

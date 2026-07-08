@@ -328,6 +328,46 @@ async function main() {
   } catch (e: any) { code = e?.statusCode ?? 0; }
   check('unknown doctor + past slot -> 404 (not 400 "past slot")', code === 404, { code });
 
+  console.log('\nEMR WRITE FAILURE -> local reservation released (no orphan):');
+  // The FHIR POST fails. Because we now reserve LOCALLY FIRST, the compensating
+  // path must release that reservation so the slot reopens — and crucially the EMR
+  // was never written, so there is no orphan appointment we can't see or cancel.
+  const failTime = '02:30 PM';
+  const failStub: FhirTransport = {
+    async get<T>() { return { resourceType: 'Bundle', entry: [] } as T; },
+    async post<T>(): Promise<T> { throw new Error('EMR rejected the appointment'); },
+    async put<T>(): Promise<T> { throw new Error('unused'); }
+  };
+  const failingAppts = openEmrAppointments(clinic.id, SYS4, new FhirClient(failStub), nativeAppointments(clinic.id));
+
+  const staleFail = await prisma.appointment.findFirst({ where: { clinicId: clinic.id, doctorId: localDoctorId, appointmentTime: failTime, appointmentDate: new Date(`${dateStr}T00:00:00.000Z`), status: { not: 'CANCELLED' } } });
+  if (staleFail) await prisma.appointment.update({ where: { id: staleFail.id }, data: { status: 'CANCELLED' } });
+
+  let threw = false;
+  try {
+    await failingAppts.create({
+      doctorId: localDoctorId, patientId: localPatientId,
+      appointmentDate: new Date(`${dateStr}T00:00:00.000Z`), appointmentTime: failTime,
+      status: AppointmentStatus.PENDING
+    });
+  } catch { threw = true; }
+  check('create() surfaces the EMR failure to the caller', threw);
+
+  const leftover = await prisma.appointment.findFirst({
+    where: { clinicId: clinic.id, doctorId: localDoctorId, appointmentTime: failTime,
+             appointmentDate: new Date(`${dateStr}T00:00:00.000Z`), status: { not: 'CANCELLED' } }
+  });
+  check('no ACTIVE local row remains (reservation released)', leftover === null);
+
+  // Direct proof the atomic slot-lock was released: the very same slot books again.
+  const retry = await nativeAppointments(clinic.id).create({
+    doctorId: localDoctorId, patientId: localPatientId,
+    appointmentDate: new Date(`${dateStr}T00:00:00.000Z`), appointmentTime: failTime,
+    status: AppointmentStatus.PENDING
+  });
+  check('the slot lock was released (the same slot books again)', !!retry.id);
+  await prisma.appointment.update({ where: { id: retry.id }, data: { status: 'CANCELLED' } });
+
   console.log('\nRESOLVER GATING (Phase 4 Step 5 — native default, EMR only when gated):');
   clearExternalAppointmentSources();
   const def = appointmentSourceFor(clinic.id);
