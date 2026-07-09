@@ -98,8 +98,12 @@ const DeveloperApi: React.FC = () => {
     { ok: true; clinicName: string; mode: string; scopes: string[] } | { ok: false; error: string } | null
   >(null);
 
-  const runTest = async () => {
-    const key = testKey.trim();
+  // `explicitKey` lets "Test it now" pass the freshly-minted key directly instead
+  // of racing the setTestKey state update. `retriesLeft` covers the moment right
+  // after creation: the row can take a beat to become readable (commit/replica
+  // lag), so a first "invalid" is retried once before we believe it.
+  const runTest = async (explicitKey?: string, retriesLeft = 0) => {
+    const key = (explicitKey ?? testKey).trim();
     if (!key) return;
     setTesting(true);
     setTestResult(null);
@@ -109,10 +113,17 @@ const DeveloperApi: React.FC = () => {
       if (res.ok && (json as { success?: boolean }).success) {
         const data = (json as { data: { clinicName: string; mode: string; scopes: string[] } }).data;
         setTestResult({ ok: true, clinicName: data.clinicName, mode: data.mode, scopes: data.scopes });
+      } else if (retriesLeft > 0) {
+        await new Promise((r) => setTimeout(r, 1200));
+        return runTest(key, retriesLeft - 1);
       } else {
         setTestResult({ ok: false, error: (json as { message?: string }).message || `HTTP ${res.status}` });
       }
     } catch (e) {
+      if (retriesLeft > 0) {
+        await new Promise((r) => setTimeout(r, 1200));
+        return runTest(key, retriesLeft - 1);
+      }
       setTestResult({ ok: false, error: (e as Error).message || 'Could not reach the API' });
     } finally {
       setTesting(false);
@@ -557,7 +568,7 @@ curl -X POST ${API_BASE}/api/v1/appointments \\
 
             <div className="flex gap-2">
               <button
-                onClick={() => { setTestKey(justIssued.plaintext); setJustIssued(null); setTimeout(runTest, 0); }}
+                onClick={() => { const k = justIssued.plaintext; setTestKey(k); setJustIssued(null); runTest(k, 3); }}
                 className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-500 transition inline-flex items-center justify-center gap-2"
               >
                 <Plug className="w-4 h-4" /> Test it now
