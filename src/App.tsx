@@ -4,6 +4,7 @@ import { PageType, Appointment, WaitlistPatient, ReminderLog, ClinicConfig, Doct
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
+import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
 import NovaScribeApp from './novascribe/NovaScribeApp';
 import ProductHub from './components/ProductHub';
@@ -182,6 +183,12 @@ function AppShell() {
 
         {currentPage === 'landing' && (
           <LandingPage setCurrentPage={handleSetPage} />
+        )}
+
+        {/* Public API docs — reachable without a login so a partner's developer
+            can evaluate the integration before signing up. */}
+        {currentPage === 'developers' && (
+          <DeveloperDocs setCurrentPage={handleSetPage} />
         )}
 
         {currentPage === 'login' && (

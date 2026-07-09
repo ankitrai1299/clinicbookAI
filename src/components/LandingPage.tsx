@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ArrowRight, CheckCircle2, MessageSquare, AlertCircle, Sparkles, 
-  Globe, Calendar, Bell, Users, Plus, Star, Landmark, ShieldCheck, HelpCircle
+import {
+  ArrowRight, CheckCircle2, MessageSquare, AlertCircle, Sparkles,
+  Globe, Calendar, Bell, Users, Plus, Star, Landmark, ShieldCheck, HelpCircle,
+  Terminal, Webhook, FlaskConical, KeyRound
 } from 'lucide-react';
 import { PageType } from '../types';
 
@@ -311,6 +312,84 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 5b. DEVELOPERS & API — market the integration to hospitals/EMRs before signup */}
+      <section className="py-20 bg-slate-900 text-white relative overflow-hidden" id="developers-section">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6">
+              <span className="inline-flex items-center gap-2 text-sky-300 font-semibold text-sm uppercase tracking-wider font-mono">
+                <Terminal className="w-4 h-4" /> Developers &amp; API
+              </span>
+              <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+                Already run an EMR or hospital app? <span className="text-sky-400">Plug ClinicBook in.</span>
+              </h2>
+              <p className="text-slate-300 text-md leading-relaxed">
+                Drop our API key into your system and every appointment it books flows through ClinicBook —
+                WhatsApp confirmations, reminders and the clinic dashboard keep working untouched. Or let us
+                push every booking back to you with signed webhooks. Build safely against a sandbox key that
+                never messages a real patient.
+              </p>
+              <div className="grid sm:grid-cols-3 gap-3 pt-2">
+                {[
+                  { icon: KeyRound, label: 'REST API', desc: 'Book, reschedule, cancel' },
+                  { icon: Webhook, label: 'Webhooks', desc: 'Signed, retried events' },
+                  { icon: FlaskConical, label: 'Sandbox keys', desc: 'Test with zero risk' }
+                ].map((f, i) => {
+                  const Icon = f.icon;
+                  return (
+                    <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                      <Icon className="w-5 h-5 text-sky-400 mb-2" />
+                      <div className="font-semibold text-sm">{f.label}</div>
+                      <div className="text-slate-400 text-xs">{f.desc}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  id="developers-section-cta-docs"
+                  onClick={() => setCurrentPage('developers')}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-sm transition-all"
+                >
+                  Read the API docs <ArrowRight className="w-4 h-4" />
+                </button>
+                <button
+                  id="developers-section-cta-signup"
+                  onClick={() => setCurrentPage('signup')}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition-all"
+                >
+                  Start free trial
+                </button>
+              </div>
+            </div>
+
+            {/* Code peek */}
+            <div className="bg-slate-950/70 border border-white/10 rounded-2xl p-5 shadow-2xl">
+              <div className="flex items-center gap-1.5 mb-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-400/70" />
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400/70" />
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/70" />
+                <span className="ml-2 text-[11px] font-mono text-slate-500">book an appointment</span>
+              </div>
+              <pre className="text-[12px] sm:text-[13px] leading-relaxed text-slate-100 overflow-x-auto font-mono">
+{`curl -X POST https://api.clinicbook.ai/api/v1/appointments \\
+  -H "Authorization: Bearer ck_test_..." \\
+  -H "Idempotency-Key: unique-123" \\
+  -d '{
+    "doctorId": "doc_a1b2",
+    "patientName": "Ankit Rai",
+    "patientPhone": "+919876543210",
+    "date": "2026-08-01",
+    "time": "10:00 AM"
+  }'
+
+`}<span className="text-emerald-400">{`→ 201  { "status": "PENDING", "id": "appt_x9" }`}</span>
+              </pre>
+            </div>
           </div>
         </div>
       </section>
