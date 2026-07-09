@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, CalendarCheck, LayoutDashboard, LayoutGrid, LogIn, LogOut, Menu, Stethoscope, UserPlus, X } from 'lucide-react';
+import { Activity, CalendarCheck, LayoutDashboard, LayoutGrid, LogIn, LogOut, Menu, Stethoscope, Terminal, UserPlus, X } from 'lucide-react';
 
 import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
@@ -112,6 +112,23 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               </button>
             )}
 
+            {/* Public API docs — surfaced to logged-out marketing visitors so a
+                partner's developer can find the API before signing up. */}
+            {!user && activeProduct !== 'novascribe' && (
+              <button
+                id="nav-item-developers"
+                onClick={() => handleNavClick('developers')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
+                  currentPage === 'developers'
+                    ? 'bg-sky-50 text-sky-700'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Terminal className="w-4 h-4" />
+                Developers
+              </button>
+            )}
+
             <div className="h-4 w-px bg-slate-200 mx-2" />
 
             {user ? (
@@ -190,6 +207,19 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
             >
               <LayoutDashboard className="w-5 h-5 text-slate-400" />
               Clinic Dashboard
+            </button>
+          )}
+
+          {!user && activeProduct !== 'novascribe' && (
+            <button
+              id="mobile-nav-item-developers"
+              onClick={() => handleNavClick('developers')}
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl text-base font-medium transition-colors ${
+                currentPage === 'developers' ? 'bg-sky-50 text-sky-700' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <Terminal className="w-5 h-5 text-slate-400" />
+              Developers
             </button>
           )}
 
