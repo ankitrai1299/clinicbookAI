@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   KeyRound, Plus, Copy, Check, Trash2, ShieldCheck, FlaskConical,
-  AlertTriangle, BookOpen, Webhook, Terminal, X, Sparkles, ArrowRight, Lock
+  AlertTriangle, BookOpen, Webhook, Terminal, X, Sparkles, ArrowRight, Lock,
+  Plug, CheckCircle2, XCircle
 } from 'lucide-react';
 
 import { API_BASE } from '../api/client';
@@ -87,6 +88,36 @@ const DeveloperApi: React.FC = () => {
   // Plaintext key, held in memory only until dismissed. Unrecoverable after —
   // the server stored only its hash.
   const [justIssued, setJustIssued] = useState<IssuedApiKey | null>(null);
+
+  // "Test connection" — paste a key, we hit the real public API's /me from the
+  // browser and report whether it authenticates. Gives a non-technical owner a
+  // one-click "is this key alive?" without a terminal.
+  const [testKey, setTestKey] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<
+    { ok: true; clinicName: string; mode: string; scopes: string[] } | { ok: false; error: string } | null
+  >(null);
+
+  const runTest = async () => {
+    const key = testKey.trim();
+    if (!key) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/me`, { headers: { Authorization: `Bearer ${key}` } });
+      const json = await res.json().catch(() => ({} as Record<string, unknown>));
+      if (res.ok && (json as { success?: boolean }).success) {
+        const data = (json as { data: { clinicName: string; mode: string; scopes: string[] } }).data;
+        setTestResult({ ok: true, clinicName: data.clinicName, mode: data.mode, scopes: data.scopes });
+      } else {
+        setTestResult({ ok: false, error: (json as { message?: string }).message || `HTTP ${res.status}` });
+      }
+    } catch (e) {
+      setTestResult({ ok: false, error: (e as Error).message || 'Could not reach the API' });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -289,6 +320,65 @@ const DeveloperApi: React.FC = () => {
         )}
       </div>
 
+      {/* ── Test connection ──────────────────────────────────────────────── */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-100">
+            <Plug className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-900 leading-tight">Test a key</h3>
+            <p className="text-xs text-slate-400">Paste a key to check it works — no terminal needed.</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2 mt-4">
+          <input
+            value={testKey}
+            onChange={(e) => { setTestKey(e.target.value); setTestResult(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') runTest(); }}
+            placeholder="Paste ck_test_… or ck_live_…"
+            className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
+          />
+          <button
+            onClick={runTest}
+            disabled={testing || !testKey.trim()}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold disabled:opacity-40 transition shrink-0"
+          >
+            {testing ? (
+              <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Testing…</>
+            ) : (
+              <><Plug className="w-4 h-4" /> Test connection</>
+            )}
+          </button>
+        </div>
+
+        {testResult && (
+          testResult.ok ? (
+            <div className="mt-4 flex items-start gap-3 px-4 py-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 animate-fadeIn">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <div className="font-bold text-emerald-800">This key works ✅</div>
+                <div className="text-emerald-700 text-xs mt-0.5">
+                  Connected to <strong>{testResult.clinicName}</strong> · mode{' '}
+                  <span className="font-mono">{testResult.mode}</span> · can{' '}
+                  <span className="font-mono">{testResult.scopes.join(' + ')}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 flex items-start gap-3 px-4 py-3.5 rounded-2xl bg-rose-50 border border-rose-200 animate-fadeIn">
+              <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <div className="font-bold text-rose-800">This key does not work</div>
+                <div className="text-rose-700 text-xs mt-0.5">{testResult.error}</div>
+                <div className="text-rose-400 text-[11px] mt-1">A revoked or mistyped key, or one from a different environment.</div>
+              </div>
+            </div>
+          )
+        )}
+      </div>
+
       {/* ── Quickstart ───────────────────────────────────────────────────── */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-1">
@@ -465,12 +555,20 @@ curl -X POST ${API_BASE}/api/v1/appointments \\
               <span className="text-slate-400">“{justIssued.name}”</span>
             </div>
 
-            <button
-              onClick={() => setJustIssued(null)}
-              className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition"
-            >
-              I&apos;ve saved it — done
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setTestKey(justIssued.plaintext); setJustIssued(null); setTimeout(runTest, 0); }}
+                className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-500 transition inline-flex items-center justify-center gap-2"
+              >
+                <Plug className="w-4 h-4" /> Test it now
+              </button>
+              <button
+                onClick={() => setJustIssued(null)}
+                className="flex-1 py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition"
+              >
+                I&apos;ve saved it — done
+              </button>
+            </div>
           </div>
         </div>
       )}
