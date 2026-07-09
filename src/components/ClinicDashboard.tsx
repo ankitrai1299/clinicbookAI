@@ -102,6 +102,9 @@ interface ClinicDashboardProps {
   setClinicConfig: React.Dispatch<React.SetStateAction<ClinicConfig>>;
   doctorsList: Doctor[];
   setDoctorsList: React.Dispatch<React.SetStateAction<Doctor[]>>;
+  // Which tab to land on. Lets the public docs page's "Get an API key" deep-link
+  // straight into Developers & API instead of the Overview tab.
+  initialTab?: DashboardTab;
 }
 
 export default function ClinicDashboard({
@@ -113,10 +116,11 @@ export default function ClinicDashboard({
   clinicConfig,
   setClinicConfig,
   doctorsList,
-  setDoctorsList
+  setDoctorsList,
+  initialTab
 }: ClinicDashboardProps) {
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab ?? 'overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
