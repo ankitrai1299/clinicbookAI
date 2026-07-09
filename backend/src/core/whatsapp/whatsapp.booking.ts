@@ -31,6 +31,7 @@
 // ===========================================================================
 
 import { forClinic } from '../../config/tenantPrisma.js';
+import { dataSourceFor } from '../datasource/index.js';
 import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
@@ -258,35 +259,22 @@ const dayLabel = (dateStr: string): string => {
 };
 
 // --- DB helpers -----------------------------------------------------------
-const distinctSpecialities = async (clinicId: string): Promise<string[]> => {
-  const db = forClinic(clinicId);
-  const docs = await db.doctor.findMany({ where: { clinicId }, select: { speciality: true } });
-  return [...new Set(docs.map((d) => d.speciality.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-};
+// Doctor reads now go through the clinic's data source (native Prisma today, an
+// EMR adapter later) instead of touching Prisma directly. The fuzzy name match
+// below stays here — it is pure business logic and must behave identically
+// regardless of where the doctor roster physically lives.
+const distinctSpecialities = (clinicId: string): Promise<string[]> =>
+  dataSourceFor(clinicId).doctors.listSpecialities();
 
-const doctorsForSpeciality = async (clinicId: string, speciality: string): Promise<DoctorOption[]> => {
-  const db = forClinic(clinicId);
-  const docs = await db.doctor.findMany({
-    where: { clinicId, speciality: { equals: speciality, mode: 'insensitive' } },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true, speciality: true }
-  });
-  return docs;
-};
+const doctorsForSpeciality = (clinicId: string, speciality: string): Promise<DoctorOption[]> =>
+  dataSourceFor(clinicId).doctors.listBySpeciality(speciality);
 
-const doctorNamesForClinic = async (clinicId: string): Promise<string[]> => {
-  const db = forClinic(clinicId);
-  const docs = await db.doctor.findMany({ where: { clinicId }, select: { name: true } });
-  return docs.map((d) => d.name);
-};
+const doctorNamesForClinic = (clinicId: string): Promise<string[]> =>
+  dataSourceFor(clinicId).doctors.listNames();
 
 // Resolve a free-text doctor mention ("Dr Ruchi", "ruchi") to a real doctor.
 const findDoctorByName = async (clinicId: string, name: string): Promise<DoctorOption | null> => {
-  const db = forClinic(clinicId);
-  const docs = await db.doctor.findMany({
-    where: { clinicId },
-    select: { id: true, name: true, speciality: true }
-  });
+  const docs = await dataSourceFor(clinicId).doctors.listRefs();
   const t = name.toLowerCase();
   return (
     docs.find((d) => {

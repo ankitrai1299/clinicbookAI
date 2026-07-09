@@ -52,6 +52,10 @@ const envSchema = z.object({
   // WhatsAppChannel.accessToken (AES-256-GCM; the key is SHA-256-derived from
   // this value). When unset, tokens are stored as plaintext (dev/back-compat).
   WA_CHANNEL_ENC_KEY: z.string().trim().optional(),
+  // Encrypts WebhookEndpoint.secret at rest (same AES-256-GCM helper). Unlike an
+  // API key — which we only ever hash — we must be able to DECRYPT this one:
+  // signing an outgoing webhook needs the plaintext. Unset => plaintext (dev).
+  WEBHOOK_ENC_KEY: z.string().trim().optional(),
   // --- Meta WhatsApp Embedded Signup (one-click clinic onboarding) ----------
   // Platform-level Meta app config (set ONCE, not per clinic). META_APP_ID is
   // the Facebook App id (public, used by the front-end SDK). META_APP_SECRET is

@@ -11,6 +11,8 @@ import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { registerNovaScribeSubscriptions } from './products/novascribe/novascribe.subscriptions.js';
 import { registerClinicBookCapabilities } from './products/clinicbook/clinicbook.capabilities.js';
+import { registerEmrIntegration } from './integrations/emr/index.js';
+import { registerWebhookSubscriptions } from './core/webhooks/webhook.subscriptions.js';
 import { registerClinicBookSkills } from './products/clinicbook/skills/booking.skill.js';
 import { registerNovaScribeSkills } from './products/novascribe/skills/prescription.skill.js';
 import { setIntentClassifier } from './core/mcp/index.js';
@@ -39,6 +41,13 @@ export const createApp = () => {
   registerNovaScribeSkills();
   setIntentClassifier(mcpIntentClassifier);
   registerNovaScribeSubscriptions();
+  // Bridge domain events to the outbound-webhook outbox. The handler only writes
+  // a delivery row; webhook.cron owns the HTTP, retries and giving up.
+  registerWebhookSubscriptions();
+  // Plug external-EMR data sources into the resolver (config-gated via
+  // EMR_MOCK_CLINICS; blank → every clinic stays native). Dependency inversion:
+  // core/datasource never imports integrations.
+  registerEmrIntegration();
 
   app.disable('x-powered-by');
   // Behind Railway's proxy: trust the first hop so express-rate-limit keys on the

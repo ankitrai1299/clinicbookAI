@@ -54,6 +54,17 @@ model Clinic {
   stripeCustomerId String?       @unique
   createdAt        DateTime      @default(now())
 
+  // A SANDBOX clinic is a throwaway twin of a real one, created the first time
+  // that clinic mints a TEST api key. Partners' developers book against it. It is
+  // a real Clinic row on purpose: every tenant-scoped query, the booking service
+  // and the webhook outbox then isolate it for free. The ONE thing that must be
+  // special-cased is outbound WhatsApp — see isSandboxClinic() in sandbox.service,
+  // which suppresses sends so a test booking can never message a real person.
+  isSandbox        Boolean       @default(false)
+  sandboxOfId      String?       @unique
+  sandboxOf        Clinic?       @relation("ClinicSandbox", fields: [sandboxOfId], references: [id], onDelete: Cascade)
+  sandbox          Clinic?       @relation("ClinicSandbox")
+
   users            User[]
   patients         Patient[]
   doctors          Doctor[]
@@ -65,6 +76,7 @@ model Clinic {
   whatsAppChannels WhatsAppChannel[]
 
   @@index([plan])
+  @@index([isSandbox])
 }
 
 // One WhatsApp Cloud API number per clinic. The `phoneNumberId` is the routing
@@ -544,5 +556,143 @@ model ConsultationNote {
   @@index([clinicId])
   @@index([clinicId, status])
   @@index([clinicId, appointmentId])
+  @@index([clinicId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// External identity mapping (EMR integration). Links a ClinicBook LOCAL id to
+// the id the same entity has in an external EMR/HMIS (OpenEMR/Epic/…), per
+// clinic + system. Lets the EMR adapters translate between our ids and the
+// EMR's for patients, doctors and appointments, so the rest of the app keeps
+// using LOCAL ids only. Clinic-scoped at the app layer (in TENANT_MODELS);
+// no FK relation kept, deliberately minimal.
+// ---------------------------------------------------------------------------
+model ExternalIdMap {
+  id         String   @id @default(cuid())
+  clinicId   String
+  system     String // e.g. "openemr"
+  entity     String // "patient" | "doctor" | "appointment"
+  localId    String
+  externalId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([clinicId, system, entity, localId])
+  @@unique([clinicId, system, entity, externalId])
+  @@index([clinicId, system, entity])
+}
+
+// ---------------------------------------------------------------------------
+// Public API keys. A partner system (hospital app / EMR / integrator) puts one
+// of these in its own env and calls our /api/v1 surface; the key is what tells
+// us WHICH clinic the request belongs to.
+//
+// Like WhatsAppChannel, this is a ROUTING/AUTH table looked up BEFORE a clinic
+// is known, so it is deliberately NOT in TENANT_MODELS — resolution uses the raw
+// prisma client. Management (list/revoke) filters by clinicId explicitly.
+//
+// Only the sha256 HASH of the key is stored; the plaintext is shown once at
+// creation and never again (same discipline as a password).
+// ---------------------------------------------------------------------------
+// LIVE keys act on the clinic itself. TEST keys are issued against that clinic's
+// paired SANDBOX clinic (Clinic.sandboxOfId), so a partner's developer books
+// against throwaway data. Isolation is then the tenant engine's job rather than
+// an `isTest` flag threaded through every appointment query.
+enum ApiKeyMode {
+  LIVE
+  TEST
+}
+
+model ApiKey {
+  id         String     @id @default(cuid())
+  clinicId   String
+  name       String
+  keyHash    String     @unique
+  prefix     String // e.g. "ck_live_a1b2c3" — safe to show in a UI list
+  mode       ApiKeyMode @default(LIVE)
+  // Coarse permissions: "read" gates GETs, "write" gates POST/PATCH. Defaults to
+  // both, so every key issued before scopes existed keeps working unchanged.
+  scopes     String[]   @default(["read", "write"])
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([clinicId])
+}
+
+// ---------------------------------------------------------------------------
+// Public-API idempotency. A partner retrying POST /api/v1/appointments after a
+// timeout must not create a second booking: it replays the first result instead.
+//
+// A row is CLAIMED before the work starts (the @@unique makes two concurrent
+// requests with the same key race for it — the loser gets 409 "in progress"),
+// then stamped with the resulting appointmentId on success, or deleted on
+// failure so the caller can legitimately retry.
+//
+// Clinic-scoped (in TENANT_MODELS): the key namespace belongs to the clinic, so
+// two partners can pick the same key string without colliding.
+// ---------------------------------------------------------------------------
+model IdempotencyKey {
+  id            String   @id @default(cuid())
+  clinicId      String
+  key           String
+  endpoint      String // e.g. "POST /v1/appointments"
+  appointmentId String? // set once the work succeeded; null while in flight
+  createdAt     DateTime @default(now())
+
+  @@unique([clinicId, key])
+  @@index([clinicId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Outbound webhooks. A partner registers a URL and we POST it every domain event
+// it subscribed to, signed so the partner can prove the request came from us.
+//
+// `secret` is encrypted at rest with the same AES-256-GCM helper as
+// WhatsAppChannel.accessToken (plaintext when no key is configured, dev only).
+// We must be able to DECRYPT it (unlike an API key, which we only ever hash),
+// because signing an outgoing request needs the plaintext.
+// ---------------------------------------------------------------------------
+model WebhookEndpoint {
+  id        String   @id @default(cuid())
+  clinicId  String
+  url       String
+  secret    String // encrypted at rest
+  events    String[] // domain event names this endpoint wants
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  deliveries WebhookDelivery[]
+
+  @@index([clinicId, enabled])
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+// A TRANSACTIONAL OUTBOX row, not a fire-and-forget HTTP call. The event handler
+// only writes this row; a cron drains it, so a partner being down (or a deploy
+// mid-emit) delays delivery instead of losing it. Retried with exponential
+// backoff, then parked as FAILED with the last error for support to inspect.
+model WebhookDelivery {
+  id            String                @id @default(cuid())
+  clinicId      String
+  endpointId    String
+  event         String
+  payload       Json
+  status        WebhookDeliveryStatus @default(PENDING)
+  attempts      Int                   @default(0)
+  nextAttemptAt DateTime              @default(now())
+  lastError     String?
+  deliveredAt   DateTime?
+  createdAt     DateTime              @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  // The cron scans across ALL clinics for what is due — this index is that query.
+  @@index([status, nextAttemptAt])
   @@index([clinicId, createdAt])
 }

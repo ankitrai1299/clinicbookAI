@@ -3,11 +3,12 @@ import {
   Users, Calendar, Clock, Bell, Settings, CreditCard, Activity,
   Search, Plus, CheckCircle, CheckCheck, XCircle,
   Mail, Phone, Globe, ExternalLink, ArrowRight, ShieldAlert,
-  QrCode, Copy, Check
+  QrCode, Copy, Check, Key
 } from 'lucide-react';
 import AiAssistant from './AiAssistant';
 import DoctorWorkflow from './DoctorWorkflow';
 import ConnectWhatsApp from './ConnectWhatsApp';
+import DeveloperApi from './DeveloperApi';
 import { getChannelStatus as getChannelStatusApi } from '../api/whatsapp';
 import { Appointment, Doctor, Patient, ReminderLog, WaitlistPatient, ClinicConfig, DashboardTab } from '../types';
 import {
@@ -520,6 +521,7 @@ export default function ClinicDashboard({
               { id: 'waitlist', label: 'Waitlist Patients', icon: Users },
               { id: 'patients', label: 'Clinic Patients', icon: Users },
               { id: 'settings', label: 'Bot Settings', icon: Settings },
+              { id: 'developers', label: 'Developers & API', icon: Key },
               { id: 'billing', label: 'Subscription Billing', icon: CreditCard }
             ].map((tab) => {
               const TabIcon = tab.icon;
@@ -1120,6 +1122,13 @@ export default function ClinicDashboard({
 
           {/* TAB 3: CALENDAR GRID */}
           {activeTab === 'calendar' && <DoctorWorkflow />}
+
+          {/* DEVELOPERS: issue/revoke public-API keys without a terminal */}
+          {activeTab === 'developers' && (
+            <div className="animate-fadeIn text-left" id="developers-tab-view">
+              <DeveloperApi />
+            </div>
+          )}
 
           {/* TAB 4: WAITLIST */}
           {activeTab === 'waitlist' && (

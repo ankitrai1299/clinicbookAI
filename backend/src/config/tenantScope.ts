@@ -32,7 +32,19 @@ export const TENANT_MODELS = new Set<string>([
   'ConsultationNote',
   // Healthcare MCP channel-agnostic conversation session — clinic-scoped so one
   // clinic can never read/overwrite another's patient conversation state.
-  'ConversationSession'
+  'ConversationSession',
+  // EMR integration: local↔external id map, clinic-scoped so one clinic's
+  // mapping can never be read/overwritten by another.
+  'ExternalIdMap',
+  // Public-API idempotency keys. Scoped so two partners may reuse the same key
+  // string without colliding. (ApiKey itself is NOT here — like WhatsAppChannel
+  // it is the routing table consulted BEFORE a clinic is known.)
+  'IdempotencyKey',
+  // Outbound webhooks. Management (register/list/disable) is clinic-scoped; the
+  // delivery cron sweeps across ALL clinics with the raw client and re-scopes per
+  // row, exactly like the reminder/waitlist crons.
+  'WebhookEndpoint',
+  'WebhookDelivery'
 ]);
 
 // Operations whose `where` we constrain with clinicId.

@@ -1,6 +1,5 @@
-import { Appointment, AppointmentStatus, Prisma } from '@prisma/client';
+import { AppointmentStatus } from '@prisma/client';
 
-import { forClinic } from '../../../config/tenantPrisma.js';
 import { AppError } from '../../../utils/AppError.js';
 import {
   notifyBookingConfirmation,
@@ -12,6 +11,20 @@ import { autoOfferFreedSlot } from '../waitlist/waitlist.service.js';
 import { canonicalizeTime, isPastSlot } from '../../../services/scheduling.service.js';
 import { runPostVisitWorkflow } from './postVisit.service.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
+import { appointmentSourceFor } from './appointmentSource.js';
+import type { AppointmentRecord } from './appointment.port.js';
+import { LOST_RACE } from './appointment.port.js';
+
+// Re-exported so existing importers (postVisit.service, etc.) are unaffected by
+// the type's move into appointment.port.
+export type { AppointmentRecord } from './appointment.port.js';
+
+// This service owns the ORCHESTRATION of appointments — lifecycle guards,
+// WhatsApp + dashboard notifications, cross-product events, waitlist recovery,
+// post-visit workflow. The raw persistence (atomic slot-lock, concurrency
+// semantics, reads) lives behind AppointmentPort (native Prisma today, an EMR
+// adapter later), reached via appointmentSourceFor(clinicId). No caller changes
+// when a clinic's bookings move to an external HMIS.
 
 // Store every appointment time in the one canonical "HH:MM AM/PM" shape so slot
 // generation, double-booking checks and reminders all compare like-for-like.
@@ -124,98 +137,12 @@ const onStatusTransition = (prev: AppointmentStatus, appt: AppointmentRecord): v
   }
 };
 
-const appointmentInclude = {
-  doctor: {
-    select: {
-      id: true,
-      name: true,
-      speciality: true
-    }
-  },
-  patient: {
-    select: {
-      id: true,
-      name: true,
-      phone: true,
-      language: true
-    }
-  },
-  clinic: {
-    select: {
-      id: true,
-      name: true,
-      plan: true
-    }
-  },
-  reminders: {
-    select: {
-      id: true,
-      type: true,
-      sent: true
-    }
-  }
-} as const;
-
-export type AppointmentRecord = Appointment & {
-  doctor?: {
-    id: string;
-    name: string;
-    speciality: string;
-  };
-  patient?: {
-    id: string;
-    name: string;
-    phone: string;
-    language: string;
-  };
-  clinic?: {
-    id: string;
-    name: string;
-    plan: string;
-  };
-  reminders?: Array<{
-    id: string;
-    type: string;
-    sent: boolean;
-  }>;
-};
-
 const normalizeDate = (appointmentDate: string) => {
   const date = new Date(appointmentDate);
-
   if (Number.isNaN(date.getTime())) {
     throw new AppError('Invalid appointment date', 400);
   }
-
   return date;
-};
-
-const ensureClinicDoctorPatient = async (clinicId: string, doctorId: string, patientId: string) => {
-  const db = forClinic(clinicId);
-  const [doctor, patient] = await Promise.all([
-    db.doctor.findFirst({ where: { id: doctorId, clinicId }, select: { id: true } }),
-    db.patient.findFirst({ where: { id: patientId, clinicId }, select: { id: true } })
-  ]);
-
-  if (!doctor) {
-    throw new AppError('Doctor not found', 404);
-  }
-
-  if (!patient) {
-    throw new AppError('Patient not found', 404);
-  }
-};
-
-const ensureAppointmentExists = async (clinicId: string, id: string) => {
-  const db = forClinic(clinicId);
-  const appointment = await db.appointment.findFirst({
-    where: { id, clinicId },
-    select: { id: true }
-  });
-
-  if (!appointment) {
-    throw new AppError('Appointment not found', 404);
-  }
 };
 
 export const createAppointment = async (
@@ -227,9 +154,13 @@ export const createAppointment = async (
   // notify:false because the conversational agent sends its own single reply —
   // a second auto-confirmation would be a duplicate message to the patient.
   const notify = options.notify ?? true;
-  const db = forClinic(clinicId);
+  const src = appointmentSourceFor(clinicId);
 
-  await ensureClinicDoctorPatient(clinicId, input.doctorId, input.patientId);
+  // Existence/tenant-membership check runs FIRST, before the date/time guards —
+  // an unknown doctor must surface as 404, not as a 400 about the slot. Doing it
+  // here (rather than inside the adapter's create) also means EVERY appointment
+  // source, including the EMR one, gets the check without re-implementing it.
+  await src.assertRefs(input.doctorId, input.patientId);
 
   const appointmentDate = normalizeDate(input.appointmentDate);
   const appointmentTime = normalizeTime(input.appointmentTime);
@@ -242,46 +173,14 @@ export const createAppointment = async (
     throw new AppError('That appointment time is in the past. Please pick a future slot.', 400);
   }
 
-  // Atomic slot lock. Re-check inside a transaction that no active (non-cancelled)
-  // appointment already holds this doctor/date/time, then create. The partial
-  // unique index "Appointment_active_slot_key" is the final backstop against a
-  // concurrent booking that slips between the check and the insert — it surfaces
-  // as a P2002, which we translate to a clean 409.
-  let appointment: AppointmentRecord;
-  try {
-    appointment = await db.$transaction(async (tx) => {
-      const clash = await tx.appointment.findFirst({
-        where: {
-          clinicId,
-          doctorId: input.doctorId,
-          appointmentDate,
-          appointmentTime,
-          status: { not: AppointmentStatus.CANCELLED }
-        },
-        select: { id: true }
-      });
-      if (clash) {
-        throw new AppError('That time slot is already booked for this doctor.', 409);
-      }
-
-      return tx.appointment.create({
-        data: {
-          clinicId,
-          doctorId: input.doctorId,
-          patientId: input.patientId,
-          appointmentDate,
-          appointmentTime,
-          status: input.status ?? AppointmentStatus.PENDING
-        },
-        include: appointmentInclude
-      });
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new AppError('That time slot is already booked for this doctor.', 409);
-    }
-    throw err;
-  }
+  // Existence checks + atomic slot lock live in the port (a clean 409 on clash).
+  const appointment = await src.create({
+    doctorId: input.doctorId,
+    patientId: input.patientId,
+    appointmentDate,
+    appointmentTime,
+    status: input.status ?? AppointmentStatus.PENDING
+  });
 
   // Fire-and-forget WhatsApp booking confirmation (no-op if WhatsApp unconfigured).
   if (notify && appointment.patient?.phone && appointment.doctor && appointment.clinic) {
@@ -325,26 +224,14 @@ export const createAppointment = async (
   return appointment;
 };
 
-export const getAppointments = async (clinicId: string): Promise<AppointmentRecord[]> => {
-  const db = forClinic(clinicId);
-  return db.appointment.findMany({
-    where: { clinicId },
-    orderBy: [{ appointmentDate: 'asc' }, { appointmentTime: 'asc' }],
-    include: appointmentInclude
-  });
-};
+export const getAppointments = (clinicId: string): Promise<AppointmentRecord[]> =>
+  appointmentSourceFor(clinicId).list();
 
 export const getSingleAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  const db = forClinic(clinicId);
-  const appointment = await db.appointment.findFirst({
-    where: { id, clinicId },
-    include: appointmentInclude
-  });
-
+  const appointment = await appointmentSourceFor(clinicId).findFull(id);
   if (!appointment) {
     throw new AppError('Appointment not found', 404);
   }
-
   return appointment;
 };
 
@@ -353,22 +240,14 @@ export const updateAppointment = async (
   id: string,
   input: UpdateAppointmentInput
 ): Promise<AppointmentRecord> => {
-  const db = forClinic(clinicId);
-  const current = await db.appointment.findFirst({
-    where: { id, clinicId },
-    select: { status: true, doctorId: true, patientId: true, appointmentDate: true, appointmentTime: true }
-  });
-
+  const src = appointmentSourceFor(clinicId);
+  const current = await src.findState(id);
   if (!current) {
     throw new AppError('Appointment not found', 404);
   }
 
   if (input.doctorId !== undefined || input.patientId !== undefined) {
-    await ensureClinicDoctorPatient(
-      clinicId,
-      input.doctorId ?? current.doctorId,
-      input.patientId ?? current.patientId
-    );
+    await src.assertRefs(input.doctorId ?? current.doctorId, input.patientId ?? current.patientId);
   }
 
   // P0 guard: a reschedule (date and/or time change) must land in the future.
@@ -382,12 +261,10 @@ export const updateAppointment = async (
     }
   }
 
-  // Race guard for status changes (e.g. a double-clicked "Confirm" on the
-  // dashboard). When the status is actually changing, scope the update to the
-  // status we just read: only ONE concurrent request can match and flip it, so
-  // onStatusTransition (which messages the patient) fires exactly once. The
-  // loser matches no row → Prisma throws P2025 → we return the current record
-  // with no duplicate WhatsApp confirmation.
+  // When the status is actually changing, guard the write on the status we just
+  // read so only ONE concurrent request flips it and onStatusTransition (which
+  // messages the patient) fires exactly once. The loser gets LOST_RACE → we
+  // return the current record with no duplicate WhatsApp confirmation.
   const statusChanging = input.status !== undefined && input.status !== current.status;
 
   // Lifecycle guard: reject illegal status jumps (e.g. reopening a completed or
@@ -396,33 +273,25 @@ export const updateAppointment = async (
     assertTransition(current.status, input.status as AppointmentStatus);
   }
 
-  let appointment: AppointmentRecord;
-  try {
-    appointment = await db.appointment.update({
-      // clinicId in the where makes the mutation itself tenant-scoped (an id from
-      // another clinic matches no row), not just the findFirst above.
-      where: statusChanging ? { id, clinicId, status: current.status } : { id, clinicId },
-      data: {
-        ...(input.doctorId !== undefined ? { doctorId: input.doctorId } : {}),
-        ...(input.patientId !== undefined ? { patientId: input.patientId } : {}),
-        ...(input.appointmentDate !== undefined ? { appointmentDate: normalizeDate(input.appointmentDate) } : {}),
-        ...(input.appointmentTime !== undefined ? { appointmentTime: normalizeTime(input.appointmentTime) } : {}),
-        ...(input.status !== undefined ? { status: input.status } : {})
-      },
-      include: appointmentInclude
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new AppError('That time slot is already booked for this doctor.', 409);
-    }
-    // Lost the concurrent status-change race: another request already applied
-    // this exact transition (and sent any patient notification). Return the
-    // current record instead of erroring or sending a duplicate message.
-    if (statusChanging && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
-      return getSingleAppointment(clinicId, id);
-    }
-    throw err;
+  const result = await src.applyUpdate(
+    id,
+    {
+      ...(input.doctorId !== undefined ? { doctorId: input.doctorId } : {}),
+      ...(input.patientId !== undefined ? { patientId: input.patientId } : {}),
+      ...(input.appointmentDate !== undefined ? { appointmentDate: normalizeDate(input.appointmentDate) } : {}),
+      ...(input.appointmentTime !== undefined ? { appointmentTime: normalizeTime(input.appointmentTime) } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {})
+    },
+    statusChanging ? { expectedStatus: current.status } : {}
+  );
+
+  // Lost the concurrent status-change race: another request already applied this
+  // exact transition (and sent any patient notification). Return the current
+  // record instead of erroring or sending a duplicate message.
+  if (result === LOST_RACE) {
+    return getSingleAppointment(clinicId, id);
   }
+  const appointment = result;
 
   // Status side-effects (approve → confirm WhatsApp; cancel → alternates).
   onStatusTransition(current.status, appointment);
@@ -471,11 +340,8 @@ export const updateAppointment = async (
 };
 
 export const cancelAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  const db = forClinic(clinicId);
-  const prev = await db.appointment.findFirst({
-    where: { id, clinicId },
-    select: { status: true }
-  });
+  const src = appointmentSourceFor(clinicId);
+  const prev = await src.findState(id);
   if (!prev) {
     throw new AppError('Appointment not found', 404);
   }
@@ -487,11 +353,20 @@ export const cancelAppointment = async (clinicId: string, id: string): Promise<A
   // Can't cancel a completed (or no-show) appointment.
   assertTransition(prev.status, AppointmentStatus.CANCELLED);
 
-  const appointment = await db.appointment.update({
-    where: { id, clinicId },
-    data: { status: AppointmentStatus.CANCELLED },
-    include: appointmentInclude
-  });
+  // Guard the write on the status we just read so only ONE concurrent cancel
+  // flips the row. Without this a double-clicked "Reject" fires onStatusTransition
+  // twice: two WhatsApp messages to the patient, two appointment.cancelled events,
+  // and autoOfferFreedSlot offering the same freed slot to two waitlisted patients.
+  const result = await src.applyUpdate(
+    id,
+    { status: AppointmentStatus.CANCELLED },
+    { expectedStatus: prev.status }
+  );
+  // Lost the race: another request already cancelled it (and messaged the patient).
+  if (result === LOST_RACE) {
+    return getSingleAppointment(clinicId, id);
+  }
+  const appointment = result;
 
   onStatusTransition(prev.status, appointment);
   return appointment;
@@ -502,11 +377,8 @@ export const completeAppointment = async (
   id: string,
   completedBy: string
 ): Promise<AppointmentRecord> => {
-  const db = forClinic(clinicId);
-  const current = await db.appointment.findFirst({
-    where: { id, clinicId },
-    select: { status: true }
-  });
+  const src = appointmentSourceFor(clinicId);
+  const current = await src.findState(id);
   if (!current) {
     throw new AppError('Appointment not found', 404);
   }
@@ -522,27 +394,18 @@ export const completeAppointment = async (
     throw new AppError('Only confirmed appointments can be marked completed', 409);
   }
 
-  // Race guard: scope the update to the CONFIRMED status we just read so two
-  // concurrent "Mark Completed" clicks flip the row exactly once. Only the
-  // winner runs the post-visit workflow (the thank-you WhatsApp); the loser
-  // matches no row (P2025) and returns the current record with no duplicate.
-  let appointment: AppointmentRecord;
-  try {
-    appointment = await db.appointment.update({
-      where: { id, clinicId, status: AppointmentStatus.CONFIRMED },
-      data: {
-        status: AppointmentStatus.COMPLETED,
-        completedAt: new Date(),
-        completedBy
-      },
-      include: appointmentInclude
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
-      return getSingleAppointment(clinicId, id);
-    }
-    throw err;
+  // Guard the write on CONFIRMED so two concurrent "Mark Completed" clicks flip
+  // the row exactly once. Only the winner runs the post-visit workflow; the
+  // loser gets LOST_RACE and returns the current record with no duplicate.
+  const result = await src.applyUpdate(
+    id,
+    { status: AppointmentStatus.COMPLETED, completedAt: new Date(), completedBy },
+    { expectedStatus: AppointmentStatus.CONFIRMED }
+  );
+  if (result === LOST_RACE) {
+    return getSingleAppointment(clinicId, id);
   }
+  const appointment = result;
 
   // Dashboard notification so staff see the completion in the feed.
   recordNotification({
@@ -561,11 +424,8 @@ export const completeAppointment = async (
 };
 
 export const markNoShowAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
-  const db = forClinic(clinicId);
-  const current = await db.appointment.findFirst({
-    where: { id, clinicId },
-    select: { status: true }
-  });
+  const src = appointmentSourceFor(clinicId);
+  const current = await src.findState(id);
   if (!current) {
     throw new AppError('Appointment not found', 404);
   }
@@ -576,9 +436,12 @@ export const markNoShowAppointment = async (clinicId: string, id: string): Promi
   // completed or cancelled one.
   assertTransition(current.status, AppointmentStatus.NO_SHOW);
 
-  return db.appointment.update({
-    where: { id, clinicId },
-    data: { status: AppointmentStatus.NO_SHOW },
-    include: appointmentInclude
-  });
+  // Same concurrency guard as the other transitions, so a double-click can't
+  // re-apply it (and the LOST_RACE branch below is actually reachable).
+  const result = await src.applyUpdate(
+    id,
+    { status: AppointmentStatus.NO_SHOW },
+    { expectedStatus: current.status }
+  );
+  return result === LOST_RACE ? getSingleAppointment(clinicId, id) : result;
 };

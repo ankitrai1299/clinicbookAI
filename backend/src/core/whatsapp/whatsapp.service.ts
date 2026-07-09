@@ -2,6 +2,7 @@ import axios, { AxiosResponse } from 'axios';
 
 import { prisma } from '../../config/prisma.js';
 import { forClinic } from '../../config/tenantPrisma.js';
+import { isSandboxClinic } from '../apikeys/sandbox.service.js';
 import { resolveSendContext } from './whatsapp.channel.js';
 import { noteSendFailure, noteSendSuccess } from './whatsapp.alerts.js';
 import { isTokenExpiredError, withRetry } from './whatsapp.retry.js';
@@ -40,6 +41,26 @@ const interceptSend = (label: string): AxiosResponse<WhatsAppSendMessageResponse
   }
   console.info(`[WhatsApp][test] WA_TEST_NO_SEND — synthetic ${label} success (no Graph call)`);
   return { data: { messages: [{ id: `TEST_${label}` }] } } as AxiosResponse<WhatsAppSendMessageResponse>;
+};
+
+// Sandbox clinics must never message a real phone. This is the ONE place that can
+// guarantee it, because it is the last fork before the Graph call and every path
+// converges here: the booking FSM, notifications, post-visit, waitlist offers and
+// — critically — reminder.service, which scans appointments across ALL clinics
+// with the raw client and has no per-clinic gate of its own.
+//
+// It must also run BEFORE resolveSendContext(). A sandbox clinic has no
+// WhatsAppChannel row, and resolveSendContext falls back to the PLATFORM's global
+// PHONE_NUMBER_ID — so "just don't configure WhatsApp for the sandbox" is not a
+// safeguard, it is the failure mode: a partner's test booking would text a real
+// person from the real business number.
+const sandboxIntercept = async (
+  clinicId: string | null | undefined,
+  label: string
+): Promise<AxiosResponse<WhatsAppSendMessageResponse> | null> => {
+  if (!(await isSandboxClinic(clinicId))) return null;
+  console.info(`[WhatsApp][sandbox] suppressed ${label} for sandbox clinic ${clinicId} (no Graph call)`);
+  return { data: { messages: [{ id: `SANDBOX_${label}` }] } } as AxiosResponse<WhatsAppSendMessageResponse>;
 };
 
 const describeError = (error: unknown): string => {
@@ -82,6 +103,9 @@ export const sendWhatsAppTextMessage = async (
 ): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
   const intercepted = interceptSend('text');
   if (intercepted) return intercepted;
+
+  const suppressed = await sandboxIntercept(input.clinicId, 'text');
+  if (suppressed) return suppressed;
 
   // Use THIS clinic's WhatsApp number + token (falls back to the env default
   // channel when the clinic has no WhatsAppChannel row).
@@ -192,6 +216,12 @@ export const sendWhatsAppInteractive = async (input: {
   messageType?: string;
   clinicId?: string | null;
 }): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
+  // NOTE: this path has no interceptSend() — WA_TEST_NO_SEND never covered it.
+  // The sandbox guard must not inherit that gap: a sandbox booking replies with
+  // interactive buttons, so this is a live send path like any other.
+  const suppressed = await sandboxIntercept(input.clinicId, 'interactive');
+  if (suppressed) return suppressed;
+
   const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
   const messageType = input.messageType ?? 'interactive';
   const bodyForLog = botReplyText(input.reply);
@@ -255,6 +285,13 @@ export const sendWhatsAppTemplateMessage = async (params: {
 }): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
   const intercepted = interceptSend('template');
   if (intercepted) return intercepted;
+
+  // reminder.service calls sendTemplatedOrSession directly (bypassing the
+  // isWhatsAppConfigured() guard in whatsapp.notifications), and its appointment
+  // scan is cross-tenant. Without this line a sandbox appointment sends a real
+  // T-1h reminder to whatever phone number the partner typed into their test.
+  const suppressed = await sandboxIntercept(params.clinicId, 'template');
+  if (suppressed) return suppressed;
 
   const { client, phoneNumberId } = await resolveSendContext(params.clinicId);
   const messageType = `template:${params.templateName}`;

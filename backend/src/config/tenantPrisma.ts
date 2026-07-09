@@ -32,12 +32,7 @@ import { TENANT_MODELS, scopeArgs } from './tenantScope.js';
 
 export { TENANT_MODELS, scopeArgs };
 
-/**
- * Build a Prisma client locked to a single clinic. Every tenant-model query made
- * through the returned client is automatically scoped to `clinicId` via
- * {@link scopeArgs}.
- */
-export const forClinic = (clinicId: string) =>
+const buildForClinic = (clinicId: string) =>
   prisma.$extends({
     name: 'tenant-scope',
     query: {
@@ -54,7 +49,28 @@ export const forClinic = (clinicId: string) =>
     }
   });
 
-export type TenantClient = ReturnType<typeof forClinic>;
+// `prisma.$extends` is NOT free — it clones the client's model delegates — and
+// the data-source seam calls forClinic several times per resolve, on a path the
+// WhatsApp FSM walks ~30x per inbound message (21-day slot scan + date picker).
+// The extension closure captures ONLY clinicId and the shared `prisma` instance
+// (same connection pool), so one client per clinic is safe to reuse for the
+// process lifetime. Bounded by the number of clinics, which is small.
+const clinicClients = new Map<string, ReturnType<typeof buildForClinic>>();
+
+/**
+ * A Prisma client locked to a single clinic. Every tenant-model query made
+ * through it is automatically scoped to `clinicId` via {@link scopeArgs}.
+ * Memoized per clinic — callers may hold or re-request it freely.
+ */
+export const forClinic = (clinicId: string) => {
+  const cached = clinicClients.get(clinicId);
+  if (cached) return cached;
+  const client = buildForClinic(clinicId);
+  clinicClients.set(clinicId, client);
+  return client;
+};
+
+export type TenantClient = ReturnType<typeof buildForClinic>;
 
 // Re-export the namespace so callers can type tenant clients without importing
 // Prisma separately.
