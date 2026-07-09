@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Key, Plus, Copy, Check, Trash2, ShieldCheck, FlaskConical,
-  AlertTriangle, Eye, BookOpen, Webhook
+  KeyRound, Plus, Copy, Check, Trash2, ShieldCheck, FlaskConical,
+  AlertTriangle, BookOpen, Webhook, Terminal, X, Sparkles, ArrowRight, Lock
 } from 'lucide-react';
 
 import { API_BASE } from '../api/client';
@@ -10,27 +10,34 @@ import {
   createApiKey, listApiKeys, revokeApiKey
 } from '../api/apiKeys';
 
-// The "Developers" tab. Its job is to let a clinic hand an integrator a key
-// WITHOUT anyone opening a terminal, and to make the live/test distinction
-// impossible to miss — a partner who tests against LIVE will send real WhatsApp
-// messages to real patients.
+// The "Developers & API" tab. Lets a clinic hand an integrator a key without a
+// terminal, and makes the live/test distinction impossible to miss — a partner
+// who tests against LIVE would message real patients. Presentation is premium on
+// purpose: this is a surface we sell on.
 
-const MODE_COPY: Record<ApiKeyMode, { title: string; blurb: string; tone: string; badge: string }> = {
+const MODE_META: Record<ApiKeyMode, {
+  title: string; blurb: string; ring: string; chip: string; icon: React.ElementType; glow: string;
+}> = {
   LIVE: {
     title: 'Live',
-    blurb: 'Books into your real clinic. Patients get real WhatsApp messages and reminders.',
-    tone: 'border-emerald-200 bg-emerald-50',
-    badge: 'bg-emerald-100 text-emerald-700'
+    blurb: 'Books into your real clinic. Patients receive real WhatsApp confirmations and reminders.',
+    ring: 'border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white',
+    chip: 'bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/20',
+    icon: ShieldCheck,
+    glow: 'shadow-emerald-100'
   },
   TEST: {
-    title: 'Test (Sandbox)',
-    blurb: 'Books into a private copy of your clinic with demo doctors. No WhatsApp message is ever sent. Safe for developers.',
-    tone: 'border-amber-200 bg-amber-50',
-    badge: 'bg-amber-100 text-amber-700'
+    title: 'Test · Sandbox',
+    blurb: 'A private copy of your clinic with demo doctors. No WhatsApp is ever sent — safe for developers.',
+    ring: 'border-amber-200/70 bg-gradient-to-br from-amber-50 to-white',
+    chip: 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/20',
+    icon: FlaskConical,
+    glow: 'shadow-amber-100'
   }
 };
 
-const CopyButton: React.FC<{ value: string; label?: string }> = ({ value, label = 'Copy' }) => {
+/** Inline copy control. `mono` renders the copied value; otherwise a labelled button. */
+const CopyChip: React.FC<{ value: string; label?: string; className?: string }> = ({ value, label = 'Copy', className = '' }) => {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     void navigator.clipboard.writeText(value).then(() => {
@@ -41,7 +48,7 @@ const CopyButton: React.FC<{ value: string; label?: string }> = ({ value, label 
   return (
     <button
       onClick={copy}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-700 transition"
+      className={`inline-flex items-center gap-1.5 rounded-lg font-semibold transition ${className}`}
     >
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
       {copied ? 'Copied' : label}
@@ -54,8 +61,8 @@ const ScopePills: React.FC<{ scopes: ApiScope[] }> = ({ scopes }) => (
     {(['read', 'write'] as ApiScope[]).map((s) => (
       <span
         key={s}
-        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
-          scopes.includes(s) ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-400 line-through'
+        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide ${
+          scopes.includes(s) ? 'bg-sky-500/10 text-sky-700 ring-1 ring-sky-500/20' : 'bg-slate-100 text-slate-300 line-through'
         }`}
       >
         {s}
@@ -70,15 +77,15 @@ const DeveloperApi: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Form
+  // Create form (rendered as a modal)
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [mode, setMode] = useState<ApiKeyMode>('TEST');
   const [canWrite, setCanWrite] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  // The plaintext key, held in memory only until the user dismisses it. It is
-  // genuinely unrecoverable afterwards — the server stored only its hash.
+  // Plaintext key, held in memory only until dismissed. Unrecoverable after —
+  // the server stored only its hash.
   const [justIssued, setJustIssued] = useState<IssuedApiKey | null>(null);
 
   const load = useCallback(() => {
@@ -121,203 +128,159 @@ const DeveloperApi: React.FC = () => {
   const test = keys.filter((k) => k.mode === 'TEST');
 
   const KeyRow: React.FC<{ k: ApiKeySummary }> = ({ k }) => (
-    <div className={`flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border ${k.revokedAt ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 bg-white'}`}>
+    <div className={`group flex flex-wrap items-center gap-3 px-4 py-3.5 rounded-2xl border transition-all ${
+      k.revokedAt ? 'border-slate-200 bg-slate-50/60 opacity-70' : 'border-slate-200/80 bg-white hover:border-sky-300 hover:shadow-md hover:shadow-sky-50'
+    }`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${k.mode === 'LIVE' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'}`}>
+        {k.mode === 'LIVE' ? <ShieldCheck className="w-4.5 h-4.5" /> : <FlaskConical className="w-4.5 h-4.5" />}
+      </div>
       <div className="flex-1 min-w-[180px]">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-slate-800">{k.name}</span>
-          {k.revokedAt && <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold">REVOKED</span>}
+          <span className="text-sm font-bold text-slate-800">{k.name}</span>
+          {k.revokedAt && <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/20 text-[10px] font-bold">REVOKED</span>}
         </div>
-        <code className="text-xs text-slate-500">{k.prefix}••••••••••••••••</code>
+        <code className="text-xs text-slate-400 font-mono">{k.prefix}{'•'.repeat(18)}</code>
       </div>
       <ScopePills scopes={k.scopes} />
-      <div className="text-xs text-slate-500 w-32">
+      <div className="text-xs text-slate-400 w-28 hidden sm:block">
         {k.lastUsedAt ? `Used ${new Date(k.lastUsedAt).toLocaleDateString()}` : 'Never used'}
       </div>
       {!k.revokedAt && (
-        <button
-          onClick={() => revoke(k)}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
-        >
-          <Trash2 className="w-3.5 h-3.5" /> Revoke
-        </button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+          <CopyChip value={k.prefix} label="ID" className="px-2.5 py-1.5 text-xs text-slate-500 hover:bg-slate-100" />
+          <button
+            onClick={() => revoke(k)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Revoke
+          </button>
+        </div>
       )}
     </div>
   );
 
   return (
-    <div className="space-y-6">
-      {/* What is this? Plain language, before any jargon. */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-sky-50"><Key className="w-5 h-5 text-sky-600" /></div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Developers &amp; API</h2>
-            <p className="text-sm text-slate-600 mt-1 max-w-3xl">
-              Give your hospital software, website or EMR an <strong>API key</strong>. They put it in their app,
-              and every appointment they book flows through ClinicBook — so reminders, WhatsApp confirmations
-              and your dashboard keep working exactly as they do today.
-            </p>
+    <div className="space-y-6 pb-10">
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white p-8">
+        <div className="absolute -top-24 -right-16 w-72 h-72 rounded-full bg-sky-500/20 blur-3xl" />
+        <div className="absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-indigo-500/20 blur-3xl" />
+        <div className="relative">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[11px] font-mono uppercase tracking-widest text-sky-300 mb-4">
+            <Terminal className="w-3.5 h-3.5" /> Developers &amp; API
+          </div>
+          <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight max-w-2xl leading-tight">
+            Connect your website, hospital software or EMR
+          </h2>
+          <p className="text-slate-300 text-sm mt-3 max-w-2xl leading-relaxed">
+            Issue an API key and every appointment they book flows through ClinicBook — reminders,
+            WhatsApp confirmations and this dashboard keep working untouched.
+          </p>
+          <div className="flex flex-wrap gap-3 mt-6">
+            <button
+              onClick={() => { setMode('TEST'); setCanWrite(true); setShowForm(true); }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-semibold text-sm transition shadow-lg shadow-sky-900/40"
+            >
+              <Plus className="w-4 h-4" /> Create API key
+            </button>
+            <a
+              href={`${API_BASE}/api/v1/me`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition"
+            >
+              API base <ArrowRight className="w-4 h-4" />
+            </a>
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
+        <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
           <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
         </div>
       )}
 
-      {/* The one-time reveal. Deliberately loud and modal-ish. */}
-      {justIssued && (
-        <div className="rounded-2xl border-2 border-sky-300 bg-sky-50 p-6">
-          <div className="flex items-center gap-2 mb-2">
-            <Eye className="w-5 h-5 text-sky-700" />
-            <h3 className="font-bold text-slate-900">Copy this key now — it will never be shown again</h3>
-          </div>
-          <p className="text-sm text-slate-600 mb-4">
-            We only store a fingerprint of it. If you lose it, revoke it and create a new one.
-          </p>
-          <div className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3">
-            <code className="flex-1 text-sm font-mono text-slate-800 break-all">{justIssued.plaintext}</code>
-            <CopyButton value={justIssued.plaintext} />
-          </div>
-          <div className="flex items-center justify-between mt-4">
-            <span className={`px-2 py-1 rounded text-[11px] font-bold ${MODE_COPY[justIssued.mode].badge}`}>
-              {MODE_COPY[justIssued.mode].title.toUpperCase()}
-            </span>
-            <button onClick={() => setJustIssued(null)} className="text-sm font-semibold text-slate-600 hover:text-slate-900">
-              I&apos;ve saved it — close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Live vs Test, explained side by side before they choose. */}
+      {/* ── Live vs Test explainer ───────────────────────────────────────── */}
       <div className="grid md:grid-cols-2 gap-4">
-        {(['LIVE', 'TEST'] as ApiKeyMode[]).map((m) => (
-          <div key={m} className={`rounded-2xl border p-5 ${MODE_COPY[m].tone}`}>
-            <div className="flex items-center gap-2 mb-1">
-              {m === 'LIVE' ? <ShieldCheck className="w-4 h-4 text-emerald-700" /> : <FlaskConical className="w-4 h-4 text-amber-700" />}
-              <span className="font-bold text-slate-900 text-sm">{MODE_COPY[m].title}</span>
-              <code className="text-[11px] text-slate-500">{m === 'LIVE' ? 'ck_live_…' : 'ck_test_…'}</code>
+        {(['LIVE', 'TEST'] as ApiKeyMode[]).map((m) => {
+          const meta = MODE_META[m];
+          const Icon = meta.icon;
+          return (
+            <div key={m} className={`rounded-2xl border p-5 shadow-sm ${meta.ring} ${meta.glow}`}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Icon className={`w-4 h-4 ${m === 'LIVE' ? 'text-emerald-600' : 'text-amber-600'}`} />
+                <span className="font-bold text-slate-900 text-sm">{meta.title}</span>
+                <code className={`text-[10px] px-1.5 py-0.5 rounded ${meta.chip}`}>{m === 'LIVE' ? 'ck_live_…' : 'ck_test_…'}</code>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">{meta.blurb}</p>
             </div>
-            <p className="text-xs text-slate-600 leading-relaxed">{MODE_COPY[m].blurb}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Create */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-slate-900">Your API keys</h3>
+      {/* ── Keys ─────────────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-sky-100">
+              <KeyRound className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 leading-tight">Your API keys</h3>
+              <p className="text-xs text-slate-400">Shown once at creation — store them safely.</p>
+            </div>
+          </div>
           <button
-            onClick={() => setShowForm((s) => !s)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 transition"
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition shadow-sm"
           >
             <Plus className="w-4 h-4" /> Create key
           </button>
         </div>
 
-        {showForm && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 mb-5 space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Who is this key for?
-              </label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Apollo hospital website"
-                maxLength={60}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200"
-              />
+        {loading ? (
+          <div className="py-12 flex justify-center">
+            <div className="w-6 h-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : keys.length === 0 ? (
+          <div className="py-12 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-4 ring-1 ring-slate-100">
+              <KeyRound className="w-6 h-6 text-slate-300" />
             </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-2">Environment</label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['TEST', 'LIVE'] as ApiKeyMode[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMode(m)}
-                    className={`px-3 py-2 rounded-lg text-xs font-semibold border transition text-left ${
-                      mode === m ? 'border-sky-500 bg-white ring-2 ring-sky-100' : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      {m === 'LIVE' ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> : <FlaskConical className="w-3.5 h-3.5 text-amber-600" />}
-                      {MODE_COPY[m].title}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              {mode === 'LIVE' && (
-                <p className="mt-2 text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">
-                  This key books real appointments and messages real patients. Give developers a Test key instead.
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-2">Permissions</label>
-              <label className="flex items-center gap-2 text-xs text-slate-700">
-                <input type="checkbox" checked readOnly className="rounded accent-sky-600" />
-                <span><strong>Read</strong> — see doctors, slots and appointments</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs text-slate-700 mt-1.5">
-                <input
-                  type="checkbox"
-                  checked={canWrite}
-                  onChange={(e) => setCanWrite(e.target.checked)}
-                  className="rounded accent-sky-600"
-                />
-                <span><strong>Write</strong> — book, reschedule and cancel appointments</span>
-              </label>
-              {!canWrite && (
-                <p className="mt-2 text-[11px] text-slate-600">
-                  Read-only. Useful for a website that only shows available slots.
-                </p>
-              )}
-            </div>
-
+            <p className="text-sm font-semibold text-slate-700">No keys yet</p>
+            <p className="text-xs text-slate-400 mt-1 mb-5 max-w-xs mx-auto">
+              Create a <strong className="text-amber-600">Test</strong> key to let a developer start integrating safely — no risk to real patients.
+            </p>
             <button
-              onClick={submit}
-              disabled={creating || !name.trim()}
-              className="w-full py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold disabled:opacity-40 hover:bg-slate-800 transition"
+              onClick={() => { setMode('TEST'); setCanWrite(true); setShowForm(true); }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition"
             >
-              {creating ? 'Creating…' : 'Create key'}
+              <Plus className="w-4 h-4" /> Create your first key
             </button>
           </div>
-        )}
-
-        {loading ? (
-          <p className="text-sm text-slate-500 py-6 text-center">Loading…</p>
-        ) : keys.length === 0 ? (
-          <p className="text-sm text-slate-500 py-6 text-center">
-            No keys yet. Create a <strong>Test</strong> key to let a developer start integrating safely.
-          </p>
         ) : (
           <div className="space-y-5">
             {test.length > 0 && (
               <div>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <FlaskConical className="w-3.5 h-3.5 text-amber-600" />
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Test keys</h4>
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <FlaskConical className="w-3.5 h-3.5 text-amber-500" />
+                  <h4 className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Test keys</h4>
                 </div>
                 <div className="space-y-2">{test.map((k) => <KeyRow key={k.id} k={k} />)}</div>
                 {sandboxClinicId && (
-                  <p className="text-[11px] text-slate-500 mt-2">
-                    Sandbox clinic <code className="text-slate-600">{sandboxClinicId}</code> — separate doctors,
-                    separate appointments, WhatsApp disabled.
-                  </p>
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-2.5 px-1">
+                    <Lock className="w-3 h-3" />
+                    Sandbox clinic <code className="text-slate-500">{sandboxClinicId}</code> — separate doctors &amp; appointments, WhatsApp disabled.
+                  </div>
                 )}
               </div>
             )}
             {live.length > 0 && (
               <div>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Live keys</h4>
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  <h4 className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Live keys</h4>
                 </div>
                 <div className="space-y-2">{live.map((k) => <KeyRow key={k.id} k={k} />)}</div>
               </div>
@@ -326,18 +289,31 @@ const DeveloperApi: React.FC = () => {
         )}
       </div>
 
-      {/* Quickstart — the exact thing to send the integrator. */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <div className="flex items-center gap-2 mb-3">
-          <BookOpen className="w-4 h-4 text-slate-500" />
-          <h3 className="font-bold text-slate-900 text-sm">Send this to your developer</h3>
+      {/* ── Quickstart ───────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <BookOpen className="w-4 h-4 text-slate-400" />
+          <h3 className="font-bold text-slate-900">Send this to your developer</h3>
         </div>
-        <p className="text-xs text-slate-600 mb-3">
-          Every request carries the key in an <code>Authorization</code> header. Start with <code>/me</code> —
-          it echoes back which clinic and which mode the key is bound to.
+        <p className="text-xs text-slate-500 mb-4">
+          Every request carries the key in an <code className="text-sky-700">Authorization</code> header.
+          Start with <code className="text-sky-700">/me</code> — it echoes back the clinic and the key&apos;s mode.
         </p>
-        <div className="relative">
-          <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 text-xs overflow-x-auto">
+        <div className="relative rounded-2xl overflow-hidden ring-1 ring-slate-800">
+          <div className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-950">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-400/70" />
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400/70" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/70" />
+            <span className="ml-2 text-[11px] font-mono text-slate-500">quickstart.sh</span>
+            <div className="ml-auto">
+              <CopyChip
+                value={`curl ${API_BASE}/api/v1/me -H "Authorization: Bearer YOUR_KEY"`}
+                label="Copy /me"
+                className="px-2.5 py-1 text-[11px] bg-white/10 text-slate-200 hover:bg-white/20"
+              />
+            </div>
+          </div>
+          <pre className="bg-slate-900 text-slate-100 p-4 text-xs overflow-x-auto leading-relaxed">
 {`# 1. Check the key works (and which mode it is)
 curl ${API_BASE}/api/v1/me \\
   -H "Authorization: Bearer ck_test_..."
@@ -347,7 +323,7 @@ curl ${API_BASE}/api/v1/doctors \\
   -H "Authorization: Bearer ck_test_..."
 
 # 3. Free slots for a doctor on a date
-curl "${API_BASE}/api/v1/doctors/DOCTOR_ID/slots?date=2026-07-20" \\
+curl "${API_BASE}/api/v1/doctors/DOCTOR_ID/slots?date=2026-08-01" \\
   -H "Authorization: Bearer ck_test_..."
 
 # 4. Book. Idempotency-Key makes a retry safe.
@@ -356,23 +332,148 @@ curl -X POST ${API_BASE}/api/v1/appointments \\
   -H "Idempotency-Key: any-unique-string" \\
   -H "Content-Type: application/json" \\
   -d '{"doctorId":"DOCTOR_ID","patientName":"Test Patient",
-       "patientPhone":"+919876543210","date":"2026-07-20",
+       "patientPhone":"+919876543210","date":"2026-08-01",
        "time":"10:00 AM"}'`}
           </pre>
-          <div className="absolute top-3 right-3">
-            <CopyButton value={`curl ${API_BASE}/api/v1/me -H "Authorization: Bearer YOUR_KEY"`} label="Copy /me" />
-          </div>
         </div>
 
-        <div className="flex items-start gap-2 mt-4 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200">
-          <Webhook className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 mt-4 px-3.5 py-3 rounded-2xl bg-slate-50 border border-slate-100">
+          <Webhook className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
           <p className="text-xs text-slate-600">
-            <strong>Want the other direction?</strong> Webhooks push every booking, cancellation and reschedule
-            back to your partner&apos;s server — including bookings made by patients over WhatsApp.
+            <strong>Want the other direction?</strong> Webhooks push every booking, cancellation and
+            reschedule to your partner&apos;s server — including bookings patients make over WhatsApp.
             Ask support to register an endpoint.
           </p>
         </div>
       </div>
+
+      {/* ═══ Create-key modal ════════════════════════════════════════════ */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn" onClick={() => !creating && setShowForm(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowForm(false)} className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition">
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2.5 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-sky-100">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900">Create an API key</h3>
+                <p className="text-xs text-slate-400">You&apos;ll see the full key once — copy it right away.</p>
+              </div>
+            </div>
+
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Who is this key for?</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Apollo hospital website"
+              maxLength={60}
+              autoFocus
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300 mb-5"
+            />
+
+            <label className="block text-xs font-semibold text-slate-700 mb-2">Environment</label>
+            <div className="grid grid-cols-2 gap-2.5 mb-5">
+              {(['TEST', 'LIVE'] as ApiKeyMode[]).map((m) => {
+                const meta = MODE_META[m];
+                const Icon = meta.icon;
+                const selected = mode === m;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    className={`text-left px-3.5 py-3 rounded-2xl border-2 transition ${
+                      selected ? 'border-sky-500 bg-sky-50/50 ring-2 ring-sky-100' : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-sm text-slate-800">
+                      <Icon className={`w-4 h-4 ${m === 'LIVE' ? 'text-emerald-600' : 'text-amber-600'}`} />
+                      {meta.title}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      {m === 'TEST' ? 'Sandbox. No real messages.' : 'Real clinic. Real patients.'}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+            {mode === 'LIVE' && (
+              <div className="flex items-start gap-2 -mt-2 mb-5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                This key books real appointments and messages real patients. Give developers a Test key.
+              </div>
+            )}
+
+            <label className="block text-xs font-semibold text-slate-700 mb-2">Permissions</label>
+            <div className="space-y-2 mb-6">
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
+                <input type="checkbox" checked readOnly className="rounded accent-sky-600" />
+                <span className="text-xs text-slate-700"><strong>Read</strong> — doctors, slots, appointments</span>
+              </div>
+              <label className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer">
+                <input type="checkbox" checked={canWrite} onChange={(e) => setCanWrite(e.target.checked)} className="rounded accent-sky-600" />
+                <span className="text-xs text-slate-700"><strong>Write</strong> — book, reschedule, cancel</span>
+              </label>
+            </div>
+
+            <button
+              onClick={submit}
+              disabled={creating || !name.trim()}
+              className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-bold disabled:opacity-40 hover:bg-slate-800 transition"
+            >
+              {creating ? 'Creating…' : 'Create key'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ One-time reveal modal ═══════════════════════════════════════ */}
+      {justIssued && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl p-7 relative">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-100">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-lg">Your key is ready</h3>
+                <p className="text-xs text-rose-500 font-semibold">Copy it now — it will never be shown again.</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mb-4 mt-2">
+              We only keep a fingerprint of it. If you lose it, revoke and create a new one.
+            </p>
+
+            <div className="flex items-center gap-2 bg-slate-900 rounded-2xl px-4 py-3.5 mb-4">
+              <code className="flex-1 text-sm font-mono text-emerald-300 break-all">{justIssued.plaintext}</code>
+              <CopyChip
+                value={justIssued.plaintext}
+                label="Copy key"
+                className="px-3.5 py-2 text-xs bg-white text-slate-900 hover:bg-slate-100 shrink-0"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap mb-6 text-[11px]">
+              <span className={`px-2 py-1 rounded-lg font-bold ${MODE_META[justIssued.mode].chip}`}>
+                {MODE_META[justIssued.mode].title.toUpperCase()}
+              </span>
+              <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-600 font-semibold">
+                {justIssued.scopes.join(' + ')}
+              </span>
+              <span className="text-slate-400">“{justIssued.name}”</span>
+            </div>
+
+            <button
+              onClick={() => setJustIssued(null)}
+              className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition"
+            >
+              I&apos;ve saved it — done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
