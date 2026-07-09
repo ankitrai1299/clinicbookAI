@@ -15,6 +15,10 @@ import { PageType } from '../types';
 
 interface DeveloperDocsProps {
   setCurrentPage: (page: PageType) => void;
+  // Logged-in → open the dashboard's Developers & API tab directly; logged-out →
+  // signup (a key always belongs to a clinic, so there's nothing to issue without one).
+  onGetApiKey: () => void;
+  isLoggedIn: boolean;
 }
 
 const Code: React.FC<{ children: string }> = ({ children }) => {
@@ -60,7 +64,7 @@ const Endpoint: React.FC<{ method: string; path: string; scope: string; children
   );
 };
 
-export default function DeveloperDocs({ setCurrentPage }: DeveloperDocsProps) {
+export default function DeveloperDocs({ setCurrentPage, onGetApiKey, isLoggedIn }: DeveloperDocsProps) {
   return (
     <div className="bg-white min-h-screen" id="developer-docs-root">
       {/* Hero */}
@@ -85,10 +89,10 @@ export default function DeveloperDocs({ setCurrentPage }: DeveloperDocsProps) {
           </p>
           <div className="flex flex-wrap gap-3 mt-8">
             <button
-              onClick={() => setCurrentPage('signup')}
+              onClick={onGetApiKey}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-sm transition"
             >
-              Get an API key <ArrowRight className="w-4 h-4" />
+              {isLoggedIn ? 'Open Developers & API' : 'Get an API key'} <ArrowRight className="w-4 h-4" />
             </button>
             <a
               href="#quickstart"
@@ -277,13 +281,15 @@ curl -X POST ${API_BASE}/api/v1/appointments \\
           <KeyRound className="w-8 h-8 text-sky-400 mx-auto mb-3" />
           <h3 className="font-display text-2xl font-bold mb-2">Ready to integrate?</h3>
           <p className="text-slate-300 text-sm mb-6 max-w-md mx-auto">
-            Start a free trial, open the <em>Developers &amp; API</em> tab, and mint a test key in seconds.
+            {isLoggedIn
+              ? 'Open the Developers & API tab and mint a test key in seconds.'
+              : 'Start a free trial, open the Developers & API tab, and mint a test key in seconds.'}
           </p>
           <button
-            onClick={() => setCurrentPage('signup')}
+            onClick={onGetApiKey}
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-sm transition"
           >
-            Start free trial <ArrowRight className="w-4 h-4" />
+            {isLoggedIn ? 'Open Developers & API' : 'Start free trial'} <ArrowRight className="w-4 h-4" />
           </button>
         </section>
       </div>

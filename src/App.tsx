@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { PageType, Appointment, WaitlistPatient, ReminderLog, ClinicConfig, Doctor } from './types';
+import { PageType, DashboardTab, Appointment, WaitlistPatient, ReminderLog, ClinicConfig, Doctor } from './types';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
@@ -25,6 +25,9 @@ function AppShell() {
   const [currentPage, setCurrentPage] = useState<PageType>('hub');
   // Which product's app to land on after a successful login.
   const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>('dashboard');
+  // Deep-link a specific dashboard tab (e.g. the docs page's "Get an API key"
+  // jumps a logged-in clinic straight to Developers & API, not the Overview).
+  const [dashboardTab, setDashboardTab] = useState<DashboardTab | undefined>(undefined);
   // Self-service onboarding hand-off: email pending OTP verification, and the
   // clinic config captured at signup to apply once verified.
   const [pendingEmail, setPendingEmail] = useState('');
@@ -59,6 +62,23 @@ function AppShell() {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // "Get an API key" on the public docs page: a logged-in clinic goes straight to
+  // its Developers & API tab; a visitor is sent to sign up (a key needs a clinic).
+  const openDeveloperKeys = () => {
+    if (user) {
+      setDashboardTab('developers');
+      handleSetPage('dashboard');
+    } else {
+      handleSetPage('signup');
+    }
+  };
+
+  // Clear the deep-link once we've left the dashboard, so the NEXT normal entry
+  // (via "Clinic Dashboard") opens on Overview rather than stale Developers.
+  useEffect(() => {
+    if (currentPage !== 'dashboard' && dashboardTab) setDashboardTab(undefined);
+  }, [currentPage, dashboardTab]);
 
   // Platform launcher handlers — open a product (straight to its app when logged
   // in, otherwise its landing / login).
@@ -188,7 +208,7 @@ function AppShell() {
         {/* Public API docs — reachable without a login so a partner's developer
             can evaluate the integration before signing up. */}
         {currentPage === 'developers' && (
-          <DeveloperDocs setCurrentPage={handleSetPage} />
+          <DeveloperDocs setCurrentPage={handleSetPage} onGetApiKey={openDeveloperKeys} isLoggedIn={!!user} />
         )}
 
         {currentPage === 'login' && (
@@ -234,6 +254,7 @@ function AppShell() {
             setClinicConfig={setClinicConfig}
             doctorsList={doctorsList}
             setDoctorsList={setDoctorsList}
+            initialTab={dashboardTab}
           />
         )}
 
