@@ -54,6 +54,17 @@ model Clinic {
   stripeCustomerId String?       @unique
   createdAt        DateTime      @default(now())
 
+  // A SANDBOX clinic is a throwaway twin of a real one, created the first time
+  // that clinic mints a TEST api key. Partners' developers book against it. It is
+  // a real Clinic row on purpose: every tenant-scoped query, the booking service
+  // and the webhook outbox then isolate it for free. The ONE thing that must be
+  // special-cased is outbound WhatsApp — see isSandboxClinic() in sandbox.service,
+  // which suppresses sends so a test booking can never message a real person.
+  isSandbox        Boolean       @default(false)
+  sandboxOfId      String?       @unique
+  sandboxOf        Clinic?       @relation("ClinicSandbox", fields: [sandboxOfId], references: [id], onDelete: Cascade)
+  sandbox          Clinic?       @relation("ClinicSandbox")
+
   users            User[]
   patients         Patient[]
   doctors          Doctor[]
@@ -65,6 +76,7 @@ model Clinic {
   whatsAppChannels WhatsAppChannel[]
 
   @@index([plan])
+  @@index([isSandbox])
 }
 
 // One WhatsApp Cloud API number per clinic. The `phoneNumberId` is the routing
@@ -582,15 +594,28 @@ model ExternalIdMap {
 // Only the sha256 HASH of the key is stored; the plaintext is shown once at
 // creation and never again (same discipline as a password).
 // ---------------------------------------------------------------------------
+// LIVE keys act on the clinic itself. TEST keys are issued against that clinic's
+// paired SANDBOX clinic (Clinic.sandboxOfId), so a partner's developer books
+// against throwaway data. Isolation is then the tenant engine's job rather than
+// an `isTest` flag threaded through every appointment query.
+enum ApiKeyMode {
+  LIVE
+  TEST
+}
+
 model ApiKey {
-  id         String    @id @default(cuid())
+  id         String     @id @default(cuid())
   clinicId   String
   name       String
-  keyHash    String    @unique
+  keyHash    String     @unique
   prefix     String // e.g. "ck_live_a1b2c3" — safe to show in a UI list
+  mode       ApiKeyMode @default(LIVE)
+  // Coarse permissions: "read" gates GETs, "write" gates POST/PATCH. Defaults to
+  // both, so every key issued before scopes existed keeps working unchanged.
+  scopes     String[]   @default(["read", "write"])
   lastUsedAt DateTime?
   revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime   @default(now())
 
   @@index([clinicId])
 }

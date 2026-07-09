@@ -5,9 +5,10 @@
 //
 // Accepts either `Authorization: Bearer ck_live_…` (preferred) or `X-API-Key`.
 
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import { forClinic } from '../config/tenantPrisma.js';
+import type { ApiScope } from '../core/apikeys/apiKey.service.js';
 import { resolveApiKey, touchApiKey } from '../core/apikeys/apiKey.service.js';
 import { AppError } from '../utils/AppError.js';
 
@@ -45,3 +46,23 @@ export const requireApiKey = (req: Request, _res: Response, next: NextFunction):
     next();
   }, next);
 };
+
+/**
+ * Gate a route on a scope. Mount AFTER requireApiKey, per-route (not `.use`), so
+ * a read-only key can still reach every GET.
+ *
+ * 403, not 401: the key is valid and we know who it is — it simply may not do
+ * this. A 401 would tell an integrator to go re-check their credentials.
+ */
+export const requireScope =
+  (scope: ApiScope): RequestHandler =>
+  (req: Request, _res: Response, next: NextFunction): void => {
+    // requireApiKey always runs first and 401s without a key, so a missing
+    // req.apiKey here means the route was mis-wired. Fail closed rather than
+    // silently allowing the call through.
+    if (!req.apiKey?.scopes.includes(scope)) {
+      next(new AppError(`This API key does not have the "${scope}" scope.`, 403));
+      return;
+    }
+    next();
+  };

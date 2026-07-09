@@ -20,9 +20,13 @@ declare global {
       db?: TenantClient;
       // Set by requireApiKey on the PUBLIC /api/v1 channel — the partner key
       // that resolved this request's tenant (same clinic/db shape as above).
+      // For a TEST key, `clinicId` is the SANDBOX clinic's id, which is what makes
+      // tenant scoping do the isolation work.
       apiKey?: {
         id: string;
         clinicId: string;
+        mode: 'LIVE' | 'TEST';
+        scopes: Array<'read' | 'write'>;
       };
     }
   }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import aiRouter from '../core/ai/ai.routes.js';
 import analyticsRouter from '../core/analytics/analytics.routes.js';
+import apiKeyRouter from '../core/apikeys/apiKey.routes.js';
 import appointmentRouter from '../products/clinicbook/appointments/appointment.routes.js';
 import authRouter from '../core/auth/auth.routes.js';
 import billingRouter from '../core/billing/billing.routes.js';
@@ -30,6 +31,8 @@ apiRouter.use('/api/patients', patientRouter);
 apiRouter.use('/api/public', publicPatientRouter);
 // Partner-facing PUBLIC API, authenticated by an ApiKey (not a JWT). Versioned.
 apiRouter.use('/api/v1', publicApiV1Router);
+// Managing those keys, by contrast, is a dashboard (JWT) action — never key-authed.
+apiRouter.use('/api/api-keys', apiKeyRouter);
 apiRouter.use('/api/appointments', appointmentRouter);
 apiRouter.use('/api/waitlist', waitlistRouter);
 apiRouter.use('/api/novascribe', novascribeRouter);

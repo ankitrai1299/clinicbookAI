@@ -15,7 +15,7 @@ import { Router } from 'express';
 
 import { prisma } from '../../config/prisma.js';
 import type { TenantClient } from '../../config/tenantPrisma.js';
-import { requireApiKey } from '../../middleware/apiKeyAuth.js';
+import { requireApiKey, requireScope } from '../../middleware/apiKeyAuth.js';
 import { apiKeyLimiter } from '../../middleware/rateLimiters.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -58,13 +58,25 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  */
 router.get(
   '/me',
+  requireScope('read'),
   asyncHandler(async (req, res) => {
     const clinic = await prisma.clinic.findUnique({
       where: { id: clinicId(req) },
-      select: { id: true, name: true }
+      select: { id: true, name: true, isSandbox: true }
     });
     if (!clinic) throw new AppError('Clinic not found', 404);
-    res.status(200).json({ success: true, data: { clinicId: clinic.id, clinicName: clinic.name } });
+    // Echo mode + scopes: the single most common integration bug is "I'm hitting
+    // prod with my test key" (or the reverse), and this is where they'd find out.
+    res.status(200).json({
+      success: true,
+      data: {
+        clinicId: clinic.id,
+        clinicName: clinic.name,
+        mode: req.apiKey!.mode,
+        scopes: req.apiKey!.scopes,
+        sandbox: clinic.isSandbox
+      }
+    });
   })
 );
 
@@ -75,6 +87,7 @@ router.get(
  */
 router.get(
   '/doctors',
+  requireScope('read'),
   asyncHandler(async (req, res) => {
     const doctors = await dataSourceFor(clinicId(req)).doctors.listRefs();
     res.status(200).json({ success: true, data: doctors });
@@ -88,6 +101,7 @@ router.get(
  */
 router.get(
   '/doctors/:id/slots',
+  requireScope('read'),
   asyncHandler(async (req, res) => {
     const date = String(req.query.date ?? '');
     if (!DATE_RE.test(date)) {
@@ -108,6 +122,7 @@ router.get(
  */
 router.post(
   '/appointments',
+  requireScope('write'),
   validate(bookAppointmentSchema),
   asyncHandler(async (req, res) => {
     const cid = clinicId(req);
@@ -169,6 +184,7 @@ router.post(
 /** GET /api/v1/appointments/:id — read one booking. */
 router.get(
   '/appointments/:id',
+  requireScope('read'),
   validate(appointmentIdParamsSchema, 'params'),
   asyncHandler(async (req, res) => {
     const appointment = await getSingleAppointment(clinicId(req), req.params.id);
@@ -183,6 +199,7 @@ router.get(
  */
 router.patch(
   '/appointments/:id',
+  requireScope('write'),
   validate(appointmentIdParamsSchema, 'params'),
   validate(updateAppointmentSchema),
   asyncHandler(async (req, res) => {

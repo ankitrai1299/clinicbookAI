@@ -13,6 +13,36 @@ Your key identifies your clinic. Every request is scoped to it; you cannot read 
 write another clinic's data, and you never handle our internal ids for anything
 except the appointment id we hand back.
 
+### Test vs live keys
+
+| prefix | acts on | WhatsApp |
+|---|---|---|
+| `ck_test_…` | a private **sandbox clinic**, pre-seeded with demo doctors | **never sent** |
+| `ck_live_…` | the real clinic | real messages to real patients |
+
+**Build against a test key.** A sandbox clinic is a genuinely separate clinic in
+our system, so its doctors, patients and appointments are its own — nothing you do
+there can touch production data, and no confirmation or reminder can reach a real
+phone. Webhooks *do* fire for a sandbox clinic, so the full round trip is testable.
+
+`GET /me` echoes back the key's `mode` and `scopes`. If you are ever unsure which
+world you are in, call it.
+
+### Scopes
+
+A key carries `read`, `write`, or both.
+
+| scope | unlocks |
+|---|---|
+| `read` | `GET /me`, `GET /doctors`, `GET /doctors/:id/slots`, `GET /appointments/:id` |
+| `write` | `POST /appointments`, `PATCH /appointments/:id` |
+
+Calling an endpoint without its scope returns **`403`** — not `401`. The key is
+valid and identified; it simply may not do that. A website that only *displays*
+available slots should hold a read-only key.
+
+Keys are created in the clinic dashboard under **Developers &amp; API**.
+
 > **Where does the doctor/slot data come from?**
 > Wherever you keep it. If your clinic runs on our system, from our database. If it
 > runs on an EMR (OpenEMR/Epic/any FHIR server), we read it live from there. The
@@ -29,7 +59,16 @@ Confirm a key works before you wire anything else up.
 curl https://HOST/api/v1/me -H "Authorization: Bearer $CLINICBOOK_API_KEY"
 ```
 ```json
-{ "success": true, "data": { "clinicId": "cmr0h…", "clinicName": "Demo Clinic" } }
+{
+  "success": true,
+  "data": {
+    "clinicId": "cmr0h…",
+    "clinicName": "Demo Clinic (Sandbox)",
+    "mode": "TEST",
+    "scopes": ["read", "write"],
+    "sandbox": true
+  }
+}
 ```
 
 ### `GET /doctors`
@@ -187,6 +226,7 @@ any other status (or a timeout) makes us retry.
 |---|---|
 | `400` | validation — the message names the field, e.g. `date: date must be YYYY-MM-DD` |
 | `401` | missing, unknown, or revoked API key |
+| `403` | the key is valid but lacks the scope this endpoint needs |
 | `404` | the doctor/appointment does not exist **at your clinic** |
 | `409` | slot unavailable, or an idempotent request is in flight |
 | `429` | per-key rate limit — see the `RateLimit-*` headers |
@@ -195,6 +235,9 @@ any other status (or a timeout) makes us retry.
 
 ## Keys
 
-Issued per clinic; we store only a SHA-256 hash, so the key is shown **once**. Treat
-it as a password: server-side only, never in a browser or mobile app. Revoking takes
-effect on the next request.
+Issued per clinic from the dashboard's **Developers &amp; API** tab; we store only a
+SHA-256 hash, so the key is shown **once**. Treat it as a password: server-side
+only, never in a browser or mobile app. Revoking takes effect on the next request.
+
+To rotate without downtime: issue the new key, switch your app over, then revoke
+the old one. A clinic may hold any number of live and test keys at once.
