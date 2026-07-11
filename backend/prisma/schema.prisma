@@ -331,6 +331,31 @@ model Reminder {
   @@index([type, sent])
 }
 
+// Scheduled WhatsApp medicine reminders, created from a MediScribe prescription.
+// One row per (patient, drug) course; `times` are the clinic-local HH:MM slots it
+// fires each day, `nextRunAt` is the next UTC instant to send. The cron claims a
+// row via nextRunAt so overlapping runs never double-send. Owned by clinicId.
+model MedicineReminder {
+  id             String    @id @default(cuid())
+  clinicId       String
+  patientId      String
+  phone          String
+  consultationId String? // source MediScribe consultation (for regeneration)
+  drug           String // human label, e.g. "Paracetamol 500mg — 1 tab after food"
+  times          String[] // clinic-local HH:MM slots per day, e.g. ["09:00","21:00"]
+  startDate      DateTime  @db.Date
+  endDate        DateTime? @db.Date // null = open-ended
+  nextRunAt      DateTime // next scheduled fire (true UTC instant)
+  lastSentAt     DateTime?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([active, nextRunAt])
+  @@index([clinicId, patientId])
+  @@index([consultationId])
+}
+
 enum AiMessageRole {
   USER
   ASSISTANT

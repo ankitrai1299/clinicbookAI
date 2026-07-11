@@ -13,7 +13,8 @@ export const WhatsAppTemplate = {
   APPOINTMENT_COMPLETED: 'appointment_completed',
   WAITLIST_OFFER: 'waitlist_offer',
   PATIENT_REGISTRATION: 'patient_registration',
-  REGISTRATION_WELCOME: 'registration_welcome'
+  REGISTRATION_WELCOME: 'registration_welcome',
+  MEDICINE_REMINDER: 'medicine_reminder'
 } as const;
 
 export type WhatsAppTemplateName = (typeof WhatsAppTemplate)[keyof typeof WhatsAppTemplate];
@@ -97,3 +98,18 @@ export const patientRegistrationComponents = (
 export const registrationWelcomeComponents = (
   d: RegistrationWelcomeTemplateData
 ): TemplateComponent[] => bodyParams(d.patientName, d.clinicName, d.patientCode);
+
+export interface MedicineReminderTemplateData {
+  patientName: string;
+  medicine: string; // one-line label, e.g. "Paracetamol 500mg — 1 tab after food"
+  clinicName: string;
+}
+
+// medicine_reminder:
+//   {{1}} patient · {{2}} medicine line · {{3}} clinic
+// Suggested approved body (submit via scripts/registerWhatsAppTemplates.ts):
+//   "Hi {{1}}, medicine reminder from {{3}} 💊\n\nPlease take: {{2}}\n\nStay
+//    healthy! Reply STOP to pause reminders."
+export const medicineReminderComponents = (
+  d: MedicineReminderTemplateData
+): TemplateComponent[] => bodyParams(d.patientName, d.medicine, d.clinicName);

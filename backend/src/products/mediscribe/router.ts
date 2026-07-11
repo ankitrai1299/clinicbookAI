@@ -30,6 +30,7 @@ import {
   listClinicDoctors,
   listUpcomingAppointments
 } from './clinicData.js';
+import { syncFromScribeConsultation } from '../../services/medicineReminder.service.js';
 
 // 25 MB ceiling — matches the client-side limit for uploaded audio files.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -252,6 +253,11 @@ mediscribeRouter.post('/save-consultation', async (req: Request, res: Response) 
     const isNew = !(await consultationsRepo.findById(consultation.id));
     await consultationsRepo.upsert(consultation);
     if (isNew) pushNotification('new_consultation', 'New consultation', `Session started for ${consultation.patientName || 'a patient'}`, { consultationId: consultation.id });
+    // Schedule WhatsApp medicine reminders from a finalized prescription
+    // (fire-and-forget — a reminder failure must never fail the save).
+    void syncFromScribeConsultation(currentClinicId(), consultation).catch((e) =>
+      console.error('[mediscribe:save-consultation] reminder sync failed:', e)
+    );
     return res.json({ success: true });
   } catch (error) {
     console.error('[mediscribe:save-consultation]', error);

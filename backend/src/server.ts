@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { ensureSlotUniqueIndex } from './config/ensureIndexes.js';
 import { connectDatabase, disconnectDatabase } from './config/prisma.js';
 import { startReminderCron } from './cron/reminder.cron.js';
+import { startMedicineReminderCron } from './cron/medicineReminder.cron.js';
 import { startWaitlistCron } from './cron/waitlist.cron.js';
 import { startWebhookCron } from './cron/webhook.cron.js';
 import { logWhatsAppStartupInfo } from './core/whatsapp/whatsapp.diagnostics.js';
@@ -42,6 +43,7 @@ const startServer = async () => {
   });
 
   startReminderCron();
+  startMedicineReminderCron();
   startWaitlistCron();
   startWebhookCron();
 

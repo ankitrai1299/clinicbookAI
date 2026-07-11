@@ -77,6 +77,15 @@ const templates: TemplateDefinition[] = [
     bodyText:
       'Hi {{1}},\n\nWelcome to {{2}}.\n\nYour registration has been completed successfully.\n\nPatient ID: {{3}}\n\nReply:\n1 - Book Appointment\n2 - My Appointments\n3 - Cancel Appointment\n4 - Reschedule Appointment',
     example: ['Asha Verma', 'Sunrise Medical Center', 'PT-7K4Q9D']
+  },
+  {
+    // Medicine reminder — {{1}} patient · {{2}} medicine line · {{3}} clinic.
+    // Must stay in sync with medicineReminderComponents in whatsapp.templates.ts.
+    name: 'medicine_reminder',
+    category: 'UTILITY',
+    bodyText:
+      'Hi {{1}}, medicine reminder from {{3}}.\n\nPlease take: {{2}}\n\nStay healthy! Reply here if you have any questions.',
+    example: ['Asha', 'Paracetamol 500mg — 1 tablet after food', 'Sunrise Medical Center']
   }
 ];
 
