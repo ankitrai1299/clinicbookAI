@@ -202,3 +202,16 @@ export interface ReportData {
   chiefComplaint: string[];
 }
 
+
+// A clinic appointment (from ClinicBook) shown on the scribe dashboard so the
+// doctor can start a consultation for that visit in one click.
+export interface UpcomingAppointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  doctorId: string;
+  doctorName: string;
+  speciality?: string;
+  date: string; // YYYY-MM-DD
+  time: string; // "HH:MM AM/PM"
+}

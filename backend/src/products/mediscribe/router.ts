@@ -13,6 +13,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import multer from 'multer';
 
 import { bridgeAuth } from './middleware/auth.js';
+import { currentClinicId } from './context.js';
 import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
 import {
@@ -23,6 +24,12 @@ import {
   prescriptionsRepo
 } from './repositories/index.js';
 import { logUsage, pushNotification } from './services/events.js';
+import {
+  listClinicPatients,
+  createClinicPatient,
+  listClinicDoctors,
+  listUpcomingAppointments
+} from './clinicData.js';
 
 // 25 MB ceiling — matches the client-side limit for uploaded audio files.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -181,24 +188,42 @@ mediscribeRouter.post('/generate-report', async (req: Request, res: Response) =>
   }
 });
 
-// ── Patients ─────────────────────────────────────────────────
+// ── Patients (SHARED with ClinicBook — its Patient table is the source) ──
 mediscribeRouter.get('/patients', async (_req: Request, res: Response) => {
-  try { return res.json(await patientsRepo.findAll()); }
+  try { return res.json(await listClinicPatients(currentClinicId())); }
   catch (error) { console.error('[mediscribe:patients]', error); return res.json([]); }
 });
 
+// Adding a patient in the scribe creates a REAL ClinicBook patient (shared both
+// ways) and returns it with the ClinicBook id so the consultation links to it.
 mediscribeRouter.post('/patients', async (req: Request, res: Response) => {
   try {
-    const patient = req.body;
-    if (!patient?.id) return res.status(400).json({ error: 'patient.id is required' });
-    const isNew = !(await patientsRepo.findById(patient.id));
-    await patientsRepo.upsert(patient, true);
-    if (isNew) pushNotification('new_patient', 'New patient', `${patient.name || 'A patient'} was added`, { patientId: patient.id });
-    return res.json({ success: true });
+    const { name, phone, age, gender } = req.body ?? {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+    const patient = await createClinicPatient(currentClinicId(), {
+      name: String(name).trim(),
+      phone: typeof phone === 'string' ? phone : undefined,
+      age: typeof age === 'number' ? age : undefined,
+      gender: typeof gender === 'string' ? gender : undefined
+    });
+    pushNotification('new_patient', 'New patient', `${patient.name} was added`, { patientId: patient.id });
+    return res.json({ success: true, patient });
   } catch (error) {
     console.error('[mediscribe:save-patient]', error);
     return res.status(500).json({ error: 'Failed to save patient' });
   }
+});
+
+// ── Doctors (SHARED — the clinic's doctors from ClinicBook) ──────────────
+mediscribeRouter.get('/doctors', async (req: Request, res: Response) => {
+  try { return res.json(await listClinicDoctors(currentClinicId())); }
+  catch (error) { console.error('[mediscribe:doctors]', error); return res.json([]); }
+});
+
+// ── Upcoming appointments (from ClinicBook) — start a scribe session per visit ─
+mediscribeRouter.get('/appointments/upcoming', async (req: Request, res: Response) => {
+  try { return res.json(await listUpcomingAppointments(currentClinicId())); }
+  catch (error) { console.error('[mediscribe:upcoming]', error); return res.json([]); }
 });
 
 mediscribeRouter.get('/patients/:patientId/history', async (req: Request, res: Response) => {

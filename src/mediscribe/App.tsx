@@ -7,6 +7,7 @@ import {
   ReportRecord,
   PrescriptionRecord,
   TranscriptRecord,
+  UpcomingAppointment,
 } from './types';
 import { Menu, X } from 'lucide-react';
 // Eagerly loaded shell — the only chunks on the first-paint critical path.
@@ -30,6 +31,7 @@ import {
   getReports,
   getPrescriptions,
   getTranscripts,
+  getUpcomingAppointments,
   savePatient,
   saveConsultation,
 } from './services/api';
@@ -117,6 +119,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [prescriptions, setPrescriptions] = useState<PrescriptionRecord[]>([]);
   const [transcripts, setTranscripts] = useState<TranscriptRecord[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<UpcomingAppointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
@@ -163,13 +166,15 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   const loadData = async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
     try {
-      const [p, c, r, pr, t] = await Promise.all([
+      const [p, c, r, pr, t, ua] = await Promise.all([
         getPatients().catch(() => null), // null = fetch failed (vs. [] = no patients)
         getConsultations().catch(() => []),
         getReports().catch(() => []),
         getPrescriptions().catch(() => []),
         getTranscripts().catch(() => []),
+        getUpcomingAppointments().catch(() => []),
       ]);
+      setUpcomingAppointments(Array.isArray(ua) ? ua : []);
 
       const patientsData = (Array.isArray(p) ? p : []).map(normalizePatient);
       setPatients(patientsData);
@@ -266,17 +271,20 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
     });
   };
 
-  const handleAddPatient = (name: string, age: number, gender: string, phone: string) => {
-    const newPat: Patient = {
-      id: `pat-${Date.now()}`,
-      name,
-      age,
-      gender,
-      phone
-    };
-    setPatients(prev => [newPat, ...prev]);
-    savePatient(newPat).catch(err => console.error('Save patient error:', err));
-    handleSelectPatientForNewConsultation(newPat);
+  const handleAddPatient = async (name: string, age: number, gender: string, phone: string) => {
+    const draft: Patient = { id: `pat-${Date.now()}`, name, age, gender, phone };
+    try {
+      // Persist to ClinicBook (shared) and use the REAL patient id it returns so
+      // the consultation links to the same patient the whole clinic sees.
+      const saved = await savePatient(draft);
+      setPatients(prev => [saved, ...prev]);
+      handleSelectPatientForNewConsultation(saved);
+    } catch (err) {
+      console.error('Save patient error:', err);
+      // Don't block the doctor — fall back to the local draft.
+      setPatients(prev => [draft, ...prev]);
+      handleSelectPatientForNewConsultation(draft);
+    }
   };
 
   const handleSelectExistingConsultation = (con: Consultation) => {
@@ -327,8 +335,10 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             patientsCount={patients.length}
             reportsCount={reports.length}
             prescriptionsCount={prescriptions.length}
+            upcomingAppointments={upcomingAppointments}
             onStartNew={handleStartNewConsultation}
             onSelectConsultation={handleSelectExistingConsultation}
+            onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName)}
           />
         );
       case 'patients':

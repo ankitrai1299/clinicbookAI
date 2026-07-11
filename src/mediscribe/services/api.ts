@@ -6,6 +6,7 @@ import {
   PrescriptionRecord,
   TranscriptRecord,
   ConsultationHistoryItem,
+  UpcomingAppointment,
 } from '../types';
 import {
   AuthUser,
@@ -223,6 +224,18 @@ export async function saveConsultation(consultation: Consultation): Promise<void
   if (!res.ok) throw new Error('Failed to save consultation');
 }
 
+// The clinic's still-upcoming appointments (from ClinicBook) — shown on the
+// dashboard so the doctor can start a scribe session for a booked visit.
+export async function getUpcomingAppointments(): Promise<UpcomingAppointment[]> {
+  try {
+    const res = await fetch(`${BASE}/appointments/upcoming`, { cache: 'no-store', headers: authHeader() });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
 export async function getPatients(): Promise<Patient[]> {
   const res = await fetch(`${BASE}/patients`, { cache: 'no-store', headers: authHeader() });
   if (!res.ok) throw new Error('Failed to fetch patients');
@@ -249,13 +262,17 @@ export async function getPatientHistory(
   return res.json();
 }
 
-export async function savePatient(patient: Patient): Promise<void> {
+// Creates a REAL ClinicBook patient (shared across the clinic) and returns it
+// with the ClinicBook id, so the caller can link the consultation to it.
+export async function savePatient(patient: Patient): Promise<Patient> {
   const res = await fetch(`${BASE}/patients`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeader() },
     body: JSON.stringify(patient),
   });
   if (!res.ok) throw new Error('Failed to save patient');
+  const data = await res.json().catch(() => ({}));
+  return (data?.patient as Patient) ?? patient;
 }
 
 // ── Reports ──────────────────────────────────────────────────

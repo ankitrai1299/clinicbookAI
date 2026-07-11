@@ -1,24 +1,36 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Consultation } from '../types';
-import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill } from 'lucide-react';
+import { Consultation, UpcomingAppointment } from '../types';
+import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill, CalendarClock, Stethoscope } from 'lucide-react';
 
 interface DashboardViewProps {
   consultations: Consultation[];
   patientsCount?: number;
   reportsCount?: number;
   prescriptionsCount?: number;
+  upcomingAppointments?: UpcomingAppointment[];
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
+  onScribeAppointment?: (appt: UpcomingAppointment) => void;
 }
+
+// "12 Jul" for a YYYY-MM-DD string (rendered in UTC so the day never slips).
+const prettyDate = (ymd: string): string => {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return Number.isNaN(d.getTime())
+    ? ymd
+    : new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d);
+};
 
 export default function DashboardView({
   consultations,
   patientsCount,
   reportsCount,
   prescriptionsCount,
+  upcomingAppointments = [],
   onStartNew,
   onSelectConsultation,
+  onScribeAppointment,
 }: DashboardViewProps) {
   const [searchQuery, setSearchQuery] = React.useState('');
 
@@ -103,6 +115,38 @@ export default function DashboardView({
           );
         })}
       </div>
+
+      {/* Upcoming Appointments (from ClinicBook) — start a scribe session per visit */}
+      {upcomingAppointments.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
+          <div className="p-5 border-b border-slate-100 flex items-center gap-2 bg-slate-50/50">
+            <CalendarClock size={18} className="text-blue-500" />
+            <h2 className="font-semibold text-lg text-slate-800">Upcoming Appointments</h2>
+            <span className="ml-auto text-xs font-medium text-slate-500">{upcomingAppointments.length} scheduled</span>
+          </div>
+          <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto custom-scrollbar">
+            {upcomingAppointments.map((a) => (
+              <div key={a.id} className="p-4 sm:px-5 flex items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-900 truncate">{a.patientName}</div>
+                  <div className="text-sm text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    <span className="flex items-center gap-1"><CalendarClock size={14} /> {prettyDate(a.date)}, {a.time}</span>
+                    <span className="hidden sm:inline w-1 h-1 rounded-full bg-slate-300" />
+                    <span className="flex items-center gap-1"><Stethoscope size={14} /> Dr. {a.doctorName.replace(/^dr\.?\s*/i, '')}{a.speciality ? ` · ${a.speciality}` : ''}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => onScribeAppointment?.(a)}
+                  className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors flex items-center gap-2"
+                >
+                  <Mic size={15} />
+                  <span className="hidden sm:inline">Start Scribe</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Consultations List */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex-1 flex flex-col">
