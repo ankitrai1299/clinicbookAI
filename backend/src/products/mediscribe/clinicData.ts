@@ -46,6 +46,19 @@ export const createClinicPatient = async (
   clinicId: string,
   input: { name: string; phone?: string; age?: number; gender?: string }
 ): Promise<ScribePatient> => {
+  // DEDUPE by phone: if the clinic already has this patient, reuse them so a scribe
+  // note links to the SAME patient the rest of the clinic (and their WhatsApp)
+  // sees — never a duplicate. Match on the last 10 digits (ignores +91 / spacing).
+  const digits = (input.phone || '').replace(/\D/g, '');
+  if (digits.length >= 10) {
+    const tail = digits.slice(-10);
+    const existing = await forClinic(clinicId).patient.findFirst({
+      where: { phone: { contains: tail } },
+      select: { id: true, name: true, phone: true, age: true, gender: true }
+    });
+    if (existing) return toScribePatient(existing);
+  }
+
   const created = await createPatient(clinicId, {
     name: input.name,
     phone: input.phone && input.phone.trim() ? input.phone.trim() : '0000000000',

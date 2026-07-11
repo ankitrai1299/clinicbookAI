@@ -52,6 +52,14 @@ export function parseFrequencyTimes(frequency: string): string[] {
   if (/\b(bd|bid|twice|two times|2 times)\b/.test(f)) return TIMES_BY_COUNT[2];
   if (/\b(od|qd|once|one time|1 time|daily|every day)\b/.test(f)) return TIMES_BY_COUNT[1];
 
+  // Natural time-of-day words ("night only", "morning and night", "subah shaam").
+  const tod: string[] = [];
+  if (/\b(morning|subah)\b/.test(f)) tod.push('08:00');
+  if (/\b(afternoon|noon|dopahar)\b/.test(f)) tod.push('14:00');
+  if (/\b(evening|shaam)\b/.test(f)) tod.push('18:00');
+  if (/\b(night|raat)\b/.test(f)) tod.push('20:00');
+  if (tod.length) return [...new Set(tod)].sort();
+
   return []; // unknown → schedule nothing rather than guess
 }
 
