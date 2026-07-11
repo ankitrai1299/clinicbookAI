@@ -80,9 +80,14 @@ export const createApp = () => {
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
-      limit: 200,
+      // A single dashboard load fires ~10 API calls (ClinicBook + MediScribe both
+      // fan out), so 200/15min tripped 429s for normal active users. 1500 keeps
+      // comfortable headroom while still blocking real abuse. Override via
+      // RATE_LIMIT_MAX. Health checks are exempt so uptime pings never count.
+      limit: Number(process.env.RATE_LIMIT_MAX) || 1500,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
+      skip: (req) => req.path === '/health'
     })
   );
 
