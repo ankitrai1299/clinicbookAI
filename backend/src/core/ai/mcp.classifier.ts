@@ -27,6 +27,12 @@ const DOCUMENT =
 const STATUS =
   /\b(status)\b|(meri|my|next|agli)\s*appointment\s*(kab|kitne|kaunsi|status|details?|confirm|hai\??$)|appointment\s*(kab|kitne baje|status|confirm hui)|kab\s*(hai\s*)?meri\s*appointment|when\s*is\s*my\s*appointment|appointment\s*kab\s*(hai|ki)/i;
 
+// Patient wants their FULL record / history — the 360 summary (bookings +
+// medicines + last visit). Broad "everything about me" ask; checked AFTER the
+// specific intents so "meri parchi"/"meri report"/"appointment kab" still win.
+const RECORD =
+  /\b(record|history)\b|meri\s*(saari|poori|puri)\s*(jankari|history|details)|poori\s*jankari|puri\s*jankari|full\s*(record|history|details|info)|sab\s*kuch\s*(batao|dikhao|bhejo)/i;
+
 export const mcpIntentClassifier: IntentClassifier = (
   _ctx: McpContext,
   text: string
@@ -34,10 +40,12 @@ export const mcpIntentClassifier: IntentClassifier = (
   const t = (text || '').toLowerCase();
   // Order matters: the more SPECIFIC intents win before the broader ones. Both
   // NovaScribe intents (prescription/document) are checked before STATUS so a
-  // "report" request never lands on appointment-status.
+  // "report" request never lands on appointment-status; RECORD (the "everything"
+  // ask) is last so a specific request is never swallowed by it.
   if (PRESCRIPTION.test(t)) return { intent: 'prescription' };
   if (DOCUMENT.test(t)) return { intent: 'document' };
   if (STATUS.test(t)) return { intent: 'status' };
+  if (RECORD.test(t)) return { intent: 'record' };
   // Everything else → fallback booking skill (the FSM understands it internally).
   return { intent: 'unknown' };
 };

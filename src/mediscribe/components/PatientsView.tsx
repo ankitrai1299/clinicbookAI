@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Patient, Consultation } from '../types';
-import { Search, ChevronRight } from 'lucide-react';
+import { Search, ChevronRight, FileText } from 'lucide-react';
 import PreviousConsultationHistory from './PreviousConsultationHistory';
+import PatientRecordModal from '../../components/PatientRecordModal';
 
 interface PatientsViewProps {
   patients: Patient[];
@@ -13,6 +14,8 @@ interface PatientsViewProps {
 export default function PatientsView({ patients, consultations = [], onOpenConsultation }: PatientsViewProps) {
   const [query, setQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Full 360 record modal (bookings + medicines + notes) for a patient.
+  const [recordId, setRecordId] = useState<string | null>(null);
 
   const filtered = patients.filter(p =>
     (p.name || '').toLowerCase().includes(query.trim().toLowerCase()),
@@ -78,8 +81,15 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm text-slate-400">{p.phone || 'No phone'}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-400 hidden sm:inline">{p.phone || 'No phone'}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRecordId(p.id); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-semibold transition-colors"
+                        title="Full record — bookings, medicines & notes"
+                      >
+                        <FileText size={14} /> Record
+                      </button>
                       <ChevronRight
                         size={18}
                         className={`text-slate-300 transition-transform ${isOpen ? 'rotate-90' : ''}`}
@@ -106,6 +116,8 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
           )}
         </div>
       </div>
+
+      {recordId && <PatientRecordModal patientId={recordId} onClose={() => setRecordId(null)} />}
     </motion.div>
   );
 }

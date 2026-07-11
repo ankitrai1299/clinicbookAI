@@ -19,6 +19,7 @@ import {
   ApiAppointment
 } from '../api/appointments';
 import { getPatients as getPatientsApi, createPatient as createPatientApi, ApiPatient } from '../api/patients';
+import PatientRecordModal from './PatientRecordModal';
 import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
 import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, convertWaitlistEntry as convertWaitlistEntryApi, ApiWaitlistEntry } from '../api/waitlist';
 import { getMyClinic as getMyClinicApi, updateMyClinic as updateMyClinicApi } from '../api/clinic';
@@ -131,6 +132,8 @@ export default function ClinicDashboard({
   const [linkCopied, setLinkCopied] = useState(false);
   // Raw API data for lookups
   const [apiPatients, setApiPatients] = useState<ApiPatient[]>([]);
+  // Patient 360 record modal — the patient whose full record is open (id/code).
+  const [recordPatientId, setRecordPatientId] = useState<string | null>(null);
   const [apiDoctors, setApiDoctors] = useState<ApiDoctor[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
@@ -1362,8 +1365,11 @@ export default function ClinicDashboard({
                           </span>
                         </td>
                         <td className="py-3 px-2 text-right">
-                          <button className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-600 rounded text-[9px] cursor-pointer hover:bg-slate-200">
-                            View Logs
+                          <button
+                            onClick={() => setRecordPatientId(p.id)}
+                            className="px-2.5 py-1 bg-sky-600 border border-sky-600 text-white rounded text-[9px] cursor-pointer hover:bg-sky-700 font-bold"
+                          >
+                            View Record
                           </button>
                         </td>
                       </tr>
@@ -1609,6 +1615,10 @@ export default function ClinicDashboard({
       </main>
 
       <AiAssistant />
+
+      {recordPatientId && (
+        <PatientRecordModal patientId={recordPatientId} onClose={() => setRecordPatientId(null)} />
+      )}
 
     </div>
   );

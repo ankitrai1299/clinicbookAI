@@ -14,6 +14,7 @@ import { registerEmrIntegration } from './integrations/emr/index.js';
 import { registerWebhookSubscriptions } from './core/webhooks/webhook.subscriptions.js';
 import { registerClinicBookSkills } from './products/clinicbook/skills/booking.skill.js';
 import { registerClinicBookStatusSkill } from './products/clinicbook/skills/status.skill.js';
+import { registerClinicBookRecordSkill } from './products/clinicbook/skills/record.skill.js';
 import { registerNovaScribeSkills } from './products/novascribe/skills/prescription.skill.js';
 import { registerNovaScribeDocumentsSkill } from './products/novascribe/skills/documents.skill.js';
 import { setIntentClassifier } from './core/mcp/index.js';
@@ -41,6 +42,7 @@ export const createApp = () => {
   registerClinicBookCapabilities();
   registerClinicBookSkills();
   registerClinicBookStatusSkill();
+  registerClinicBookRecordSkill();
   registerNovaScribeSkills();
   registerNovaScribeDocumentsSkill();
   setIntentClassifier(mcpIntentClassifier);

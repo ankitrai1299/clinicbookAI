@@ -29,6 +29,13 @@ describe('mcpIntentClassifier (brain router)', () => {
     expect(intent('agli appointment kab hai')).toBe('status');
   });
 
+  it('routes full-record / history requests to the record intent', () => {
+    expect(intent('mera record bhejo')).toBe('record');
+    expect(intent('meri poori jankari do')).toBe('record');
+    expect(intent('my history')).toBe('record');
+    expect(intent('full details chahiye')).toBe('record');
+  });
+
   it('leaves booking-family messages as unknown (→ fallback FSM, no double AI)', () => {
     expect(intent('book appointment')).toBe('unknown');
     expect(intent('appointment chahiye')).toBe('unknown');
