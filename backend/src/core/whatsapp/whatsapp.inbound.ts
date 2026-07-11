@@ -33,6 +33,14 @@ import {
 } from './whatsapp.service.js';
 import { type BotReply, botReplyText } from './whatsapp.reply.js';
 import { recordOutbound } from './whatsapp.diagnostics.js';
+import {
+  detectLang,
+  storedLangToCode,
+  codeToLangName,
+  isTranslateEnabledFor,
+  translateReply
+} from './whatsapp.language.js';
+import { translateText } from '../ai/translate.js';
 
 // Last-resort reply so the assistant is NEVER silent, even if OpenAI, the DB, or
 // a tool fails. A patient message must always be answered.
@@ -202,6 +210,9 @@ const processOne = async (
   // A BotReply is either a plain string or an interactive (buttons/list) reply.
   let reply: BotReply | null = SAFE_FALLBACK;
   let patientCode: string | null = null;
+  // Language to reply in ('en' = unchanged behaviour). Set by the multilingual
+  // gate below from the script the patient wrote in (or their stored language).
+  let replyLang = 'en';
 
   try {
     clinicId = await resolveInboundClinicId(phoneNumberId);
@@ -215,6 +226,27 @@ const processOne = async (
     if (clinicId) {
       const patient = await findOrCreatePatient(clinicId, from);
       patientCode = patient.patientCode;
+
+      // MULTILINGUAL (gated, strangler-fig): reply in whatever language the patient
+      // wrote in. Detect the script of a free-text message; translate it INTO
+      // English so the FSM/brain understand it unchanged; remember the language so
+      // later button-tap turns (which carry no text) still reply in it. Gate is OFF
+      // by default (WHATSAPP_TRANSLATE_NUMBERS) → production byte-for-byte unchanged.
+      if (isTranslateEnabledFor(to)) {
+        const detected = text && !interactiveId ? detectLang(text) : 'en';
+        if (detected !== 'en') {
+          replyLang = detected;
+          if (detected !== storedLangToCode(patient.language)) {
+            prisma.patient
+              .update({ where: { id: patient.id }, data: { language: codeToLangName(detected) } })
+              .catch(() => undefined);
+          }
+          text = await translateText(text, 'en', detected);
+        } else if (interactiveId || !text) {
+          // No text to detect (button/list tap) → use the patient's stored language.
+          replyLang = storedLangToCode(patient.language);
+        }
+      }
 
       // ROLLOUT (strangler-fig): opted-in senders route through the Healthcare MCP
       // brain (understand → route → skill); everyone else takes the unchanged FSM
@@ -282,6 +314,13 @@ const processOne = async (
       phone: to
     });
     return;
+  }
+
+  // MULTILINGUAL (gated): translate the outgoing reply into the patient's language
+  // before it's recorded/sent. IDs on interactive options are preserved so taps
+  // still route correctly; on any failure the original English text is kept.
+  if (replyLang !== 'en' && reply !== null) {
+    reply = await translateReply(reply, replyLang);
   }
 
   // Record the reply for diagnostics before sending (so /debug reflects it even
