@@ -1313,10 +1313,13 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotR
           reply = await handleWaitlistOffer(params, t);
           break;
         case S.HANDOFF:
-          // After a handoff stay quiet until a greeting/menu re-engages (handled
-          // by the isReset branch above). Any other chatter → no reply.
-          why(params, 'in HANDOFF, non-reset message → STAY SILENT (no reply)');
-          reply = null;
+          // A handoff must NEVER trap the patient. Treat their next message as a
+          // fresh top-level request and re-engage — the AI understanding decides
+          // what they want (book / cancel / status / …). If they genuinely still
+          // want a person, handleTopLevel routes back to a handoff on its own. This
+          // is what makes "100 patients say it 100 ways" all get a reply.
+          why(params, 'in HANDOFF → re-engage as a fresh top-level request');
+          reply = await handleTopLevel(params, t);
           break;
 
         // IDLE / MENU / BOOKED — interpret as a fresh top-level choice.
