@@ -4,10 +4,10 @@ import { CalendarCheck, Stethoscope, HeartPulse, ArrowRight, Sparkles } from 'lu
 interface ProductHubProps {
   userName?: string | null;
   onOpenClinicBook: () => void;
-  onOpenNovaScribe: () => void;
+  onOpenMediScribe: () => void;
 }
 
-export default function ProductHub({ userName, onOpenClinicBook, onOpenNovaScribe }: ProductHubProps) {
+export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScribe }: ProductHubProps) {
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-[#f3fbfa] to-[#fafcff] px-4 sm:px-6 lg:px-8 py-14">
       <div className="max-w-5xl mx-auto">
@@ -33,7 +33,7 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenNovaScrib
             accent="from-sky-500 to-sky-700"
           />
           <ProductCard
-            onClick={onOpenNovaScribe}
+            onClick={onOpenMediScribe}
             icon={<Stethoscope className="w-7 h-7" />}
             name={<>Nova<span className="text-sky-600">Scribe</span></>}
             tagline="AI Medical Scribe"

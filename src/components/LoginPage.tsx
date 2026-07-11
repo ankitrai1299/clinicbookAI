@@ -31,7 +31,7 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
       setAuth(accessToken, user);
       // Do NOT navigate here — the host App routes to the intended product
       // (dashboard or novascribe) once the user is set. Hardcoding 'dashboard'
-      // would send NovaScribe sign-ins to the wrong app.
+      // would send MediScribe sign-ins to the wrong app.
     } catch (err: unknown) {
       // Unverified account → the backend re-sent an OTP; take them to verify.
       if (err instanceof Error && err.message === 'EMAIL_NOT_VERIFIED') {
@@ -63,10 +63,10 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
             {isNova ? <Stethoscope className="w-7 h-7" /> : <CalendarCheck className="w-7 h-7" />}
           </div>
           <h1 className="font-display text-2xl font-bold text-slate-900">
-            {isNova ? 'Sign in to NovaScribe' : 'Sign in to your clinic'}
+            {isNova ? 'Sign in to MediScribe' : 'Sign in to your clinic'}
           </h1>
           <p className="text-slate-400 text-sm text-center">
-            {isNova ? 'Access your NovaScribe AI medical scribe' : 'Access your ClinicBook AI dashboard'}
+            {isNova ? 'Access your MediScribe AI medical scribe' : 'Access your ClinicBook AI dashboard'}
           </p>
         </div>
 

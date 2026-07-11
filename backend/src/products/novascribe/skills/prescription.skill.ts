@@ -1,73 +1,51 @@
-// NovaScribe patient-facing skill for the Healthcare MCP brain: a patient asks
-// (on WhatsApp/Voice/…) for their prescription / doctor's notes, and we send back
-// the doctor's FINALIZED record. Read-only, patient-scoped, single-shot — no
-// business logic beyond formatting the record NovaScribe already produced.
-//
-// Delivered as a REPLY to a patient's own request, so it is inside the WhatsApp
-// 24h window (no template needed). Scoped strictly to ctx.actor.patientId — a
-// patient can only ever see their OWN record.
+// Patient-facing WhatsApp skill: a patient asks for their prescription and we
+// send back the MEDICINES from their latest MediScribe consultation report.
+// Read-only, single-shot, linked to the patient by their WhatsApp phone (see
+// mediscribeData.ts). Delivered as a reply to the patient's own request (inside
+// the WhatsApp 24h window, no template needed).
 
-import { ConsultationNoteStatus } from '@prisma/client';
-
-import { forClinic } from '../../../config/tenantPrisma.js';
 import { skillRegistry } from '../../../core/mcp/skillRegistry.js';
 import type { McpContext } from '../../../core/mcp/index.js';
 import type { Skill } from '../../../core/mcp/skill.types.js';
+import { latestScribeConsultation, type MedRow } from './mediscribeData.js';
 
-interface PrescriptionItem {
-  drug?: string;
-  dose?: string;
-  frequency?: string;
-  duration?: string;
-  notes?: string;
-}
-
-const formatItems = (items: PrescriptionItem[]): string =>
+const formatMeds = (items: MedRow[]): string =>
   items
     .map((it, i) => {
-      const parts = [it.dose, it.frequency, it.duration].filter(Boolean).join(', ');
-      const notes = it.notes ? ` (${it.notes})` : '';
-      return `${i + 1}. ${it.drug ?? 'Medicine'}${parts ? ` — ${parts}` : ''}${notes}`;
+      const parts = [it.dose || it.dosage, it.strength, it.frequency, it.duration].filter(Boolean).join(', ');
+      const notes = it.instructions ? ` (${it.instructions})` : '';
+      return `${i + 1}. ${it.medicine ?? 'Medicine'}${parts ? ` — ${parts}` : ''}${notes}`;
     })
     .join('\n');
+
+const phoneOf = (ctx: McpContext): string | undefined =>
+  (typeof ctx.meta?.phone === 'string' ? (ctx.meta.phone as string) : undefined) ?? ctx.actor.externalId ?? undefined;
 
 const prescriptionSkill: Skill = {
   name: 'novascribe.prescription',
   product: 'novascribe',
   intents: ['prescription'],
   handle: async (ctx: McpContext) => {
-    const patientId = ctx.actor.patientId;
-    if (!patientId) return { reply: null, done: true };
+    if (!ctx.actor.patientId) return { reply: null, done: true };
 
-    const db = forClinic(ctx.clinicId);
-    // Latest FINALIZED (doctor-approved & locked) note for THIS patient only.
-    const note = await db.consultationNote.findFirst({
-      where: { clinicId: ctx.clinicId, patientId, status: ConsultationNoteStatus.FINALIZED },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    if (!note) {
+    const consult = await latestScribeConsultation(ctx.clinicId, phoneOf(ctx));
+    if (!consult) {
       return {
         reply:
-          'Aapke naam pe abhi koi finalized prescription record nahi hai. 🙏 ' +
+          'Aapke naam pe abhi koi prescription record nahi hai. 🙏 ' +
           'Doctor ke visit ke baad wo yahan available ho jayegi.',
         done: true
       };
     }
 
-    const items = Array.isArray(note.prescription) ? (note.prescription as PrescriptionItem[]) : [];
-    const doctor = note.doctorName ? `Dr. ${note.doctorName.replace(/^dr\.?\s*/i, '')}` : 'your doctor';
+    const meds = Array.isArray(consult.report.prescribedMedications) ? consult.report.prescribedMedications : [];
+    const advice = Array.isArray(consult.report.advice) ? consult.report.advice.filter(Boolean) : [];
+    const doctor = consult.doctorName ? `Dr. ${consult.doctorName.replace(/^dr\.?\s*/i, '')}` : 'your doctor';
 
     const lines: string[] = [`📋 *Your prescription* — ${doctor}`];
-    if (items.length) {
-      lines.push('', '*Medicines:*', formatItems(items));
-    }
-    if (note.plan && note.plan.trim()) {
-      lines.push('', `*Advice:* ${note.plan.trim()}`);
-    }
-    if (items.length === 0 && !(note.plan && note.plan.trim())) {
-      lines.push('', 'Is visit ke liye koi dawai record nahi hui.');
-    }
+    if (meds.length) lines.push('', '*Medicines:*', formatMeds(meds));
+    if (advice.length) lines.push('', `*Advice:* ${advice.join('; ')}`);
+    if (meds.length === 0 && advice.length === 0) lines.push('', 'Is visit ke liye koi dawai record nahi hui.');
     lines.push('', 'ℹ️ Kisi bhi dawai ko lekar sawaal ho to clinic se poochein. Ye medical advice ka replacement nahi hai.');
 
     return { reply: lines.join('\n'), done: true };

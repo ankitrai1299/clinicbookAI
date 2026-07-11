@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm install *)",
-      "Skill(run)"
+      "Skill(run)",
+      "Bash(npm run *)",
+      "Bash(grep -vE '^\\\\s*$')"
     ]
   }
 }

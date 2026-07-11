@@ -12,10 +12,10 @@ import notificationRouter from '../core/notifications/notification.routes.js';
 import patientRouter from '../core/patients/patient.routes.js';
 import publicPatientRouter from '../core/patients/public.routes.js';
 import publicApiV1Router from '../core/publicapi/v1.routes.js';
-import novascribeRouter from '../products/novascribe/novascribe.routes.js';
-import { novaRouter } from '../products/novascribe/v2/router.js';
+import { mediscribeRouter } from '../products/mediscribe/router.js';
 import waitlistRouter from '../products/clinicbook/waitlist/waitlist.routes.js';
 import whatsappRouter from '../core/whatsapp/whatsapp.routes.js';
+import { requireAuth } from '../middleware/auth.js';
 import healthRouter from './health.routes.js';
 
 const apiRouter = Router();
@@ -35,8 +35,9 @@ apiRouter.use('/api/v1', publicApiV1Router);
 apiRouter.use('/api/api-keys', apiKeyRouter);
 apiRouter.use('/api/appointments', appointmentRouter);
 apiRouter.use('/api/waitlist', waitlistRouter);
-apiRouter.use('/api/novascribe', novascribeRouter);
-apiRouter.use('/api/nova', novaRouter);
+// MediScribe (the new AI scribe) — ClinicBook requireAuth first so the bridge has
+// req.user; then the ported router scopes everything to that clinic.
+apiRouter.use('/api/mediscribe', requireAuth, mediscribeRouter);
 apiRouter.use('/api/whatsapp', whatsappRouter);
 apiRouter.use('/api/analytics', analyticsRouter);
 

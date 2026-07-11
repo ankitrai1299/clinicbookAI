@@ -16,3 +16,6 @@ verify-shots/
 # NovaScribe local audio storage (runtime)
 backend/.novascribe-data/
 .novascribe-data/
+
+# Reference source of the MediScribe app (already ported into backend/src/products/mediscribe + src/mediscribe)
+AI_medical_scribe/

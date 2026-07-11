@@ -64,7 +64,7 @@ h1, h2, h3, .font-display {
   background: #94a3b8;
 }
 
-/* ── NovaScribe (ported reference) ─────────────────────────────── */
+/* ── MediScribe (ported reference) ─────────────────────────────── */
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }

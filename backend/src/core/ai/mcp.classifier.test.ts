@@ -15,8 +15,23 @@ describe('mcpIntentClassifier (brain router)', () => {
     expect(intent('send me the scribe')).toBe('prescription');
   });
 
+  it('routes report / document requests to the document intent', () => {
+    expect(intent('meri report bhejo')).toBe('document');
+    expect(intent('mujhe apna document chahiye')).toBe('document');
+    expect(intent('lab report chahiye')).toBe('document');
+    expect(intent('consultation summary bhejo')).toBe('document');
+  });
+
+  it('routes existing-appointment queries to the status intent', () => {
+    expect(intent('meri appointment kab hai')).toBe('status');
+    expect(intent('when is my appointment')).toBe('status');
+    expect(intent('appointment ka status batao')).toBe('status');
+    expect(intent('agli appointment kab hai')).toBe('status');
+  });
+
   it('leaves booking-family messages as unknown (→ fallback FSM, no double AI)', () => {
     expect(intent('book appointment')).toBe('unknown');
+    expect(intent('appointment chahiye')).toBe('unknown');
     expect(intent('kal cardiologist se milna hai')).toBe('unknown');
     expect(intent('Hii')).toBe('unknown');
     expect(intent('10:00 AM')).toBe('unknown');

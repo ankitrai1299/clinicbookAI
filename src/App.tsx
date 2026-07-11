@@ -6,9 +6,9 @@ import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
 import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
-import NovaScribeApp from './novascribe/NovaScribeApp';
+import MediscribeApp from './mediscribe/MediscribeApp';
 import ProductHub from './components/ProductHub';
-import NovaScribeLanding from './components/NovaScribeLanding';
+import MediScribeLanding from './components/MediScribeLanding';
 import type { ActiveProduct } from './components/Navigation';
 import SignupPage from './components/SignupPage';
 import LoginPage from './components/LoginPage';
@@ -87,7 +87,7 @@ function AppShell() {
     setIntendedApp('dashboard');
     handleSetPage(user ? 'dashboard' : 'landing');
   };
-  const openNovaScribe = () => {
+  const openMediScribe = () => {
     if (user) {
       handleSetPage('novascribe');
     } else {
@@ -96,7 +96,7 @@ function AppShell() {
     }
   };
   // The login/signup/verify screens belong to whichever product the user is
-  // entering, so the navbar brands them as NovaScribe when that's the intent.
+  // entering, so the navbar brands them as MediScribe when that's the intent.
   const onNovaAuthFlow =
     (currentPage === 'login' || currentPage === 'signup' || currentPage === 'verify-email') &&
     intendedApp === 'novascribe';
@@ -158,10 +158,10 @@ function AppShell() {
     );
   }
 
-  // NovaScribe is a full-screen app (own sidebar). Render it as a takeover — the
+  // MediScribe is a full-screen app (own sidebar). Render it as a takeover — the
   // "All Apps" item in its sidebar returns to the platform hub.
   if (user && currentPage === 'novascribe') {
-    return <NovaScribeApp onExitToHub={openHub} doctorName={user.name} />;
+    return <MediscribeApp onExitToHub={openHub} doctorName={user.name} />;
   }
 
   return (
@@ -189,12 +189,12 @@ function AppShell() {
           <ProductHub
             userName={user?.name}
             onOpenClinicBook={openClinicBook}
-            onOpenNovaScribe={openNovaScribe}
+            onOpenMediScribe={openMediScribe}
           />
         )}
 
         {currentPage === 'novascribe-landing' && (
-          <NovaScribeLanding
+          <MediScribeLanding
             isLoggedIn={!!user}
             onOpen={() => handleSetPage('novascribe')}
             onBack={openHub}

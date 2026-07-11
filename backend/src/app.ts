@@ -9,15 +9,16 @@ import { stripeWebhookHandler } from './core/billing/billing.controller.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
-import { registerNovaScribeSubscriptions } from './products/novascribe/novascribe.subscriptions.js';
 import { registerClinicBookCapabilities } from './products/clinicbook/clinicbook.capabilities.js';
 import { registerEmrIntegration } from './integrations/emr/index.js';
 import { registerWebhookSubscriptions } from './core/webhooks/webhook.subscriptions.js';
 import { registerClinicBookSkills } from './products/clinicbook/skills/booking.skill.js';
+import { registerClinicBookStatusSkill } from './products/clinicbook/skills/status.skill.js';
 import { registerNovaScribeSkills } from './products/novascribe/skills/prescription.skill.js';
+import { registerNovaScribeDocumentsSkill } from './products/novascribe/skills/documents.skill.js';
 import { setIntentClassifier } from './core/mcp/index.js';
 import { mcpIntentClassifier } from './core/ai/mcp.classifier.js';
-import { NOVA_UPLOADS_DIR } from './products/novascribe/v2/router.js';
+import { MEDISCRIBE_UPLOADS_DIR } from './products/mediscribe/router.js';
 
 const parseCorsOrigins = () => {
   if (env.CORS_ORIGIN.trim() === '*') {
@@ -35,12 +36,14 @@ export const createApp = () => {
   //  - Products register their MCP capabilities (ClinicBook: appointment.*).
   //  - Products register their conversational skills (ClinicBook: booking).
   //  - The brain's NL understanding is backed by core/ai.
-  //  - NovaScribe subscribes to ClinicBook's appointment.completed event.
+  //  - The patient-facing MediScribe skills (prescription/documents) answer
+  //    WhatsApp requests for a patient's scribe records.
   registerClinicBookCapabilities();
   registerClinicBookSkills();
+  registerClinicBookStatusSkill();
   registerNovaScribeSkills();
+  registerNovaScribeDocumentsSkill();
   setIntentClassifier(mcpIntentClassifier);
-  registerNovaScribeSubscriptions();
   // Bridge domain events to the outbound-webhook outbox. The handler only writes
   // a delivery row; webhook.cron owns the HTTP, retries and giving up.
   registerWebhookSubscriptions();
@@ -89,9 +92,11 @@ export const createApp = () => {
   // the cross-origin <audio> element (frontend on a different domain than this API)
   // from loading these files (net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin). Override
   // CORP to cross-origin for just this static route so playback/download works.
+  // MediScribe's persisted audio (unauthenticated static so <audio> can load it;
+  // filenames are unguessable timestamps).
   app.use(
-    '/api/nova/uploads',
-    express.static(NOVA_UPLOADS_DIR, {
+    '/api/mediscribe/uploads',
+    express.static(MEDISCRIBE_UPLOADS_DIR, {
       maxAge: '1y',
       immutable: true,
       setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
