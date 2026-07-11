@@ -6,6 +6,7 @@
 import { prisma } from '../config/prisma.js';
 import { runWithClinic } from '../products/mediscribe/context.js';
 import { buildPatientHistory, type ConsultationHistoryItem } from '../products/mediscribe/services/patientHistory.js';
+import { clinicNow, labelToMinutes, slotIsFuture } from './slotMath.js';
 
 export interface PatientRecordBooking {
   id: string; date: string; time: string; status: string;
@@ -119,10 +120,26 @@ export const formatRecordForWhatsApp = (r: PatientRecord): string => {
   const code = r.patient.patientCode ? ` (${r.patient.patientCode})` : '';
   lines.push(`👤 *Your record* — ${r.patient.name}${code}`);
 
-  const liveBookings = r.bookings.filter((b) => b.status === 'PENDING' || b.status === 'CONFIRMED').slice(0, 3);
-  if (liveBookings.length) {
+  // Upcoming = live status AND actually in the future (clinic-local). A confirmed
+  // slot that already passed is NOT upcoming — it becomes a recent visit.
+  const now = clinicNow();
+  const isFuture = (b: PatientRecordBooking) =>
+    slotIsFuture(labelToMinutes(b.time) ?? 0, b.date, now);
+  const upcoming = r.bookings
+    .filter((b) => (b.status === 'PENDING' || b.status === 'CONFIRMED') && isFuture(b))
+    .slice(0, 3);
+  const recent = r.bookings.filter((b) => !isFuture(b) && b.status !== 'CANCELLED').slice(0, 2);
+
+  if (upcoming.length) {
     lines.push('', '📅 *Upcoming appointments:*');
-    for (const b of liveBookings) {
+    for (const b of upcoming) {
+      const doc = b.doctorName ? ` — ${b.doctorName.replace(/^dr\.?\s*/i, 'Dr. ')}` : '';
+      lines.push(`• ${prettyDate(b.date)}, ${b.time}${doc}`);
+    }
+  }
+  if (recent.length) {
+    lines.push('', '🗓️ *Recent visits:*');
+    for (const b of recent) {
       const doc = b.doctorName ? ` — ${b.doctorName.replace(/^dr\.?\s*/i, 'Dr. ')}` : '';
       lines.push(`• ${prettyDate(b.date)}, ${b.time}${doc}`);
     }
