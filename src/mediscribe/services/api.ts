@@ -119,7 +119,13 @@ export function uploadConsultationAudio(
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${BASE}/transcribe`);
-    // Whisper can take a while — match the fetch-based timeout (3 minutes).
+    // Attach the shared ClinicBook JWT — this endpoint is auth-gated. (Without it
+    // the server rejects with 401 before reading the body, which surfaces in the
+    // browser as net::ERR_HTTP2_PROTOCOL_ERROR.) Do NOT set Content-Type; the
+    // browser sets the multipart boundary for the FormData body automatically.
+    const token = localStorage.getItem('auth_token');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    // STT can take a while — match the fetch-based timeout (3 minutes).
     xhr.timeout = 180000;
 
     xhr.upload.onprogress = (e) => {
