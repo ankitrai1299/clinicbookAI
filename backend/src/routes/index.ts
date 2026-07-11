@@ -16,6 +16,7 @@ import { mediscribeRouter } from '../products/mediscribe/router.js';
 import waitlistRouter from '../products/clinicbook/waitlist/waitlist.routes.js';
 import whatsappRouter from '../core/whatsapp/whatsapp.routes.js';
 import { requireAuth } from '../middleware/auth.js';
+import patient360Router from './patient360.routes.js';
 import healthRouter from './health.routes.js';
 
 const apiRouter = Router();
@@ -40,5 +41,7 @@ apiRouter.use('/api/waitlist', waitlistRouter);
 apiRouter.use('/api/mediscribe', requireAuth, mediscribeRouter);
 apiRouter.use('/api/whatsapp', whatsappRouter);
 apiRouter.use('/api/analytics', analyticsRouter);
+// Patient 360 — one patient id/code → their complete cross-product record.
+apiRouter.use('/api/patient-record', patient360Router);
 
 export default apiRouter;
