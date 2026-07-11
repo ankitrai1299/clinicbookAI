@@ -34,6 +34,9 @@ describe('mcpIntentClassifier (brain router)', () => {
     expect(intent('meri poori jankari do')).toBe('record');
     expect(intent('my history')).toBe('record');
     expect(intent('full details chahiye')).toBe('record');
+    expect(intent('Give me my records')).toBe('record'); // plural + phrasing
+    expect(intent('give me my record')).toBe('record');
+    expect(intent('show my records')).toBe('record');
   });
 
   it('leaves booking-family messages as unknown (→ fallback FSM, no double AI)', () => {

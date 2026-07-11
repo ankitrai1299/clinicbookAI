@@ -31,7 +31,7 @@ const STATUS =
 // medicines + last visit). Broad "everything about me" ask; checked AFTER the
 // specific intents so "meri parchi"/"meri report"/"appointment kab" still win.
 const RECORD =
-  /\b(record|history)\b|meri\s*(saari|poori|puri)\s*(jankari|history|details)|poori\s*jankari|puri\s*jankari|full\s*(record|history|details|info)|sab\s*kuch\s*(batao|dikhao|bhejo)/i;
+  /\b(records?|history)\b|(give|send|show)\s*(me\s*)?(my\s*)?(records?|history|details|full\s*detail)|meri\s*(saari|poori|puri)\s*(jankari|history|details)|poori\s*jankari|puri\s*jankari|full\s*(record|records|history|details|info)|sab\s*kuch\s*(batao|dikhao|bhejo)/i;
 
 export const mcpIntentClassifier: IntentClassifier = (
   _ctx: McpContext,
