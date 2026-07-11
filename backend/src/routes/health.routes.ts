@@ -18,6 +18,9 @@ healthRouter.get(
         status: 'ok',
         database: 'connected',
         environment: env.NODE_ENV,
+        // Public capability flag so the MediScribe STT dependency can be verified
+        // from outside without a token (true only when SARVAM_API_KEY is set).
+        sarvam: !!(process.env.SARVAM_API_KEY || '').trim(),
         uptime: process.uptime(),
         timestamp: new Date().toISOString()
       }
