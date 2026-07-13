@@ -111,12 +111,18 @@ export const decideClinicBinding = (params: {
 // platform multi-tenant: a message to clinic A's number can only ever bind to
 // clinic A. Production refuses to guess; only dev/demo falls back to the most
 // set-up clinic so local works without channel configuration.
+// The resolved clinic PLUS, when a join code just (re)connected the patient on the
+// shared number, that clinic's name — so the caller can confirm WHICH clinic they
+// were switched to. A single phone can be registered with many clinics; the binding
+// is the ACTIVE one, and sending another clinic's code switches to it (their data in
+// every other clinic stays intact and separate).
+type InboundClinic = { clinicId: string | null; joinedClinicName?: string };
 let cachedFallbackClinicId: string | null = null;
 const resolveInboundClinicId = async (
   phoneNumberId?: string | null,
   phone?: string | null,
   text?: string | null
-): Promise<string | null> => {
+): Promise<InboundClinic> => {
   const byChannel = await resolveClinicIdByPhoneNumberId(phoneNumberId);
 
   // SHARED PLATFORM NUMBER multi-tenancy: the shared number resolves (by channel)
@@ -128,33 +134,33 @@ const resolveInboundClinicId = async (
   const onSharedNumber = !byChannel || isPlatformChannel;
   if (onSharedNumber && phone) {
     const shared = await resolveSharedClinic(phone, text || '');
-    if (shared.clinicId) return shared.clinicId;
+    if (shared.clinicId) return { clinicId: shared.clinicId, joinedClinicName: shared.justBoundName };
     // On the SHARED platform number an unidentified patient must NEVER fall through
     // to the platform clinic's booking — that would show ITS doctors to another
     // clinic's patient (the exact cross-clinic leak we're preventing). Return null
     // so the caller asks them for their clinic code instead.
-    if (isPlatformChannel) return null;
+    if (isPlatformChannel) return { clinicId: null };
   }
 
   // A clinic's OWN connected number (not the shared platform number) — route to it.
-  if (byChannel && !isPlatformChannel) return byChannel;
+  if (byChannel && !isPlatformChannel) return { clinicId: byChannel };
 
   if (env.NODE_ENV === 'production') {
     console.error(
       '[WhatsApp] No clinic for inbound phone_number_id — create a WhatsAppChannel for this number (or set WHATSAPP_CLINIC_ID for the env default).',
       { phoneNumberId: phoneNumberId ?? null }
     );
-    return null;
+    return { clinicId: null };
   }
 
-  if (cachedFallbackClinicId) return cachedFallbackClinicId;
+  if (cachedFallbackClinicId) return { clinicId: cachedFallbackClinicId };
   const clinic = await prisma.clinic.findFirst({
     where: { email: { not: PLATFORM_CLINIC_EMAIL } },
     orderBy: { doctors: { _count: 'desc' } },
     select: { id: true }
   });
   cachedFallbackClinicId = clinic?.id ?? null;
-  return cachedFallbackClinicId;
+  return { clinicId: cachedFallbackClinicId };
 };
 
 // Find the patient for this number WITHIN the bound clinic, or onboard them.
@@ -239,7 +245,8 @@ const processOne = async (
   let replyLang = 'en';
 
   try {
-    clinicId = await resolveInboundClinicId(phoneNumberId, to, text);
+    const resolved = await resolveInboundClinicId(phoneNumberId, to, text);
+    clinicId = resolved.clinicId;
     await logInboundMessage({ from: to, body: text, waMessageId: inboundWamid, clinicId }).catch(() => undefined);
     // Refresh the 24h WhatsApp session window (per clinic) on every processed
     // inbound, keyed on the same digits-only number the send path checks. Uses
@@ -279,7 +286,19 @@ const processOne = async (
       // brain's fallback skill delegates to this SAME FSM, so the reply is
       // identical while the pipeline is exercised end-to-end.
       let botReply: BotReply | null;
-      if (isBrainEnabledFor(to)) {
+      if (resolved.joinedClinicName) {
+        // A join code just (re)connected this patient to a clinic on the SHARED
+        // number. Confirm WHICH clinic — so a patient registered with several always
+        // knows who they're talking to — and show the menu. We do NOT feed the raw
+        // code to the booking brain (it isn't a command), and their data in every
+        // other clinic they joined stays untouched; sending that clinic's code
+        // switches back to it.
+        botReply =
+          `✅ You're now connected to *${resolved.joinedClinicName}*.\n\n` +
+          `How can I help you today?\n\n` +
+          `1. Book Appointment\n2. My Appointments\n3. Cancel Appointment\n4. Reschedule Appointment\n\n` +
+          `Reply with a number (1-4).`;
+      } else if (isBrainEnabledFor(to)) {
         const ctx: McpContext = {
           clinicId,
           channel: 'whatsapp',
