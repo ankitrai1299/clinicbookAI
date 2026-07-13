@@ -19,6 +19,7 @@ import { registerNovaScribeSkills } from './products/novascribe/skills/prescript
 import { registerNovaScribeDocumentsSkill } from './products/novascribe/skills/documents.skill.js';
 import { setIntentClassifier } from './core/mcp/index.js';
 import { mcpIntentClassifier } from './core/ai/mcp.classifier.js';
+import { registerAutoCompleteActions } from './services/autoCompleteVisits.service.js';
 import { MEDISCRIBE_UPLOADS_DIR } from './products/mediscribe/router.js';
 
 const parseCorsOrigins = () => {
@@ -45,6 +46,8 @@ export const createApp = () => {
   registerClinicBookRecordSkill();
   registerNovaScribeSkills();
   registerNovaScribeDocumentsSkill();
+  // Post-visit: after ANY completion, send the patient their scribe prescription.
+  registerAutoCompleteActions();
   setIntentClassifier(mcpIntentClassifier);
   // Bridge domain events to the outbound-webhook outbox. The handler only writes
   // a delivery row; webhook.cron owns the HTTP, retries and giving up.

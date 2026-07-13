@@ -73,3 +73,34 @@ export async function latestScribeConsultation(
   }
   return null;
 }
+
+/**
+ * The patient's latest FINALIZED (status 'Completed') MediScribe consultation,
+ * matched directly by their ClinicBook patient id (consultations link to it after
+ * the clinic-data-sharing change). Used to detect that a doctor actually saw the
+ * patient (→ auto-complete the visit) and to fetch what was prescribed. Returns
+ * null when the scribe was not used / not finalized for this patient.
+ */
+export async function finalizedScribeForPatient(
+  clinicId: string,
+  patientId: string | undefined | null
+): Promise<ScribeConsultation | null> {
+  if (!patientId) return null;
+  const rows = await prisma.novaDoc.findMany({
+    where: { clinicId, collection: 'consultations', patientId },
+    orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+    select: { data: true }
+  });
+  for (const r of rows) {
+    const d = r.data as Record<string, unknown> & { report?: ScribeReport; status?: string };
+    if (d?.status === 'Completed' && d?.report) {
+      return {
+        report: d.report,
+        patientName: d.patientName as string | undefined,
+        doctorName: d.doctorName as string | undefined,
+        date: d.date as string | undefined
+      };
+    }
+  }
+  return null;
+}
