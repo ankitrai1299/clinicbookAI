@@ -52,6 +52,10 @@ model Clinic {
   phone            String        @unique
   plan             ClinicPlan    @default(STARTER)
   stripeCustomerId String?       @unique
+  // Short human-friendly code a patient sends (or a QR pre-fills) to reach THIS
+  // clinic on the shared platform WhatsApp number. Lets every clinic onboard with
+  // zero Meta setup — they just share their code/QR. Unique across clinics.
+  joinCode         String?       @unique
   createdAt        DateTime      @default(now())
 
   // A SANDBOX clinic is a throwaway twin of a real one, created the first time
@@ -74,6 +78,7 @@ model Clinic {
   whatsAppLogs     WhatsAppLog[]
   notifications    Notification[]
   whatsAppChannels WhatsAppChannel[]
+  whatsAppBindings WhatsAppPatientBinding[]
 
   @@index([plan])
   @@index([isSandbox])
@@ -107,6 +112,21 @@ model WhatsAppChannel {
 
   @@index([clinicId])
   @@index([phoneNumberId])
+}
+
+// Binds a patient's WhatsApp phone to the clinic they belong to, so that ONE
+// shared platform number can serve many clinics: the patient's first message
+// carries a clinic join code (from a QR/link), we record the binding here, and
+// every later message routes to that clinic. All data stays clinic-scoped.
+model WhatsAppPatientBinding {
+  phone     String   @id // digits-only WhatsApp number
+  clinicId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
 }
 
 model User {

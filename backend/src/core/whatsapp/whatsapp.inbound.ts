@@ -23,6 +23,7 @@ import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { handleWhatsAppMessage } from './whatsapp.booking.js';
 import { resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
+import { resolveSharedClinic } from './whatsapp.binding.js';
 import { isBrainEnabledFor, runConversation } from '../mcp/index.js';
 import type { McpContext } from '../mcp/index.js';
 import {
@@ -111,8 +112,24 @@ export const decideClinicBinding = (params: {
 // clinic A. Production refuses to guess; only dev/demo falls back to the most
 // set-up clinic so local works without channel configuration.
 let cachedFallbackClinicId: string | null = null;
-const resolveInboundClinicId = async (phoneNumberId?: string | null): Promise<string | null> => {
+const resolveInboundClinicId = async (
+  phoneNumberId?: string | null,
+  phone?: string | null,
+  text?: string | null
+): Promise<string | null> => {
   const byChannel = await resolveClinicIdByPhoneNumberId(phoneNumberId);
+
+  // SHARED PLATFORM NUMBER multi-tenancy: the shared number resolves (by channel)
+  // to the platform/default clinic. On that number, a patient who sent a join code
+  // or is already bound is routed to THEIR clinic instead; everyone else stays on
+  // the platform clinic. A clinic's OWN connected number is unaffected. All data
+  // stays clinic-scoped, so clinics never mix.
+  const onSharedNumber = !byChannel || (env.WHATSAPP_CLINIC_ID && byChannel === env.WHATSAPP_CLINIC_ID);
+  if (onSharedNumber && phone) {
+    const shared = await resolveSharedClinic(phone, text || '');
+    if (shared.clinicId) return shared.clinicId;
+  }
+
   if (byChannel) return byChannel;
 
   if (env.NODE_ENV === 'production') {
@@ -215,7 +232,7 @@ const processOne = async (
   let replyLang = 'en';
 
   try {
-    clinicId = await resolveInboundClinicId(phoneNumberId);
+    clinicId = await resolveInboundClinicId(phoneNumberId, to, text);
     await logInboundMessage({ from: to, body: text, waMessageId: inboundWamid, clinicId }).catch(() => undefined);
     // Refresh the 24h WhatsApp session window (per clinic) on every processed
     // inbound, keyed on the same digits-only number the send path checks. Uses
