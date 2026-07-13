@@ -8,6 +8,7 @@ import {
 import AiAssistant from './AiAssistant';
 import DoctorWorkflow from './DoctorWorkflow';
 import ConnectWhatsApp from './ConnectWhatsApp';
+import WhatsAppShareCard from './WhatsAppShareCard';
 import DeveloperApi from './DeveloperApi';
 import { getChannelStatus as getChannelStatusApi } from '../api/whatsapp';
 import { Appointment, Doctor, Patient, ReminderLog, WaitlistPatient, ClinicConfig, DashboardTab } from '../types';
@@ -1392,6 +1393,8 @@ export default function ClinicDashboard({
               <div className="text-left">
                 <h3 className="font-display font-black text-sm text-slate-950 mb-3">WhatsApp Connection</h3>
                 <ConnectWhatsApp onConnected={() => setWaConnected(true)} />
+                {/* Zero-Meta-setup alternative: share the clinic's join QR/link. */}
+                <WhatsAppShareCard />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
