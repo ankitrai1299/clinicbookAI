@@ -124,13 +124,20 @@ const resolveInboundClinicId = async (
   // or is already bound is routed to THEIR clinic instead; everyone else stays on
   // the platform clinic. A clinic's OWN connected number is unaffected. All data
   // stays clinic-scoped, so clinics never mix.
-  const onSharedNumber = !byChannel || (env.WHATSAPP_CLINIC_ID && byChannel === env.WHATSAPP_CLINIC_ID);
+  const isPlatformChannel = !!(env.WHATSAPP_CLINIC_ID && byChannel === env.WHATSAPP_CLINIC_ID);
+  const onSharedNumber = !byChannel || isPlatformChannel;
   if (onSharedNumber && phone) {
     const shared = await resolveSharedClinic(phone, text || '');
     if (shared.clinicId) return shared.clinicId;
+    // On the SHARED platform number an unidentified patient must NEVER fall through
+    // to the platform clinic's booking — that would show ITS doctors to another
+    // clinic's patient (the exact cross-clinic leak we're preventing). Return null
+    // so the caller asks them for their clinic code instead.
+    if (isPlatformChannel) return null;
   }
 
-  if (byChannel) return byChannel;
+  // A clinic's OWN connected number (not the shared platform number) — route to it.
+  if (byChannel && !isPlatformChannel) return byChannel;
 
   if (env.NODE_ENV === 'production') {
     console.error(
@@ -312,12 +319,14 @@ const processOne = async (
             ? botReply.trim() || SAFE_FALLBACK
             : botReply;
     } else {
-      // No clinic bound → cannot run the FSM (it needs a clinic's doctors). Send a
-      // FIXED deterministic message. Never fall back to an AI responder.
-      console.warn('[WhatsApp] No clinic bound for inbound — set WHATSAPP_CLINIC_ID.');
+      // No clinic bound → this is the SHARED platform number and we couldn't
+      // identify the patient's clinic (no join code, no binding, not an existing
+      // patient). Ask for the clinic code instead of guessing — this is what keeps
+      // clinics separate. Never fall back to the platform clinic or an AI responder.
+      console.warn('[WhatsApp] Unidentified patient on shared number — asking for clinic code.');
       reply =
-        'Thanks for your message! 🙏 Our booking line is being set up right now. ' +
-        'Please try again shortly.';
+        "👋 Welcome! To connect you to your clinic, please reply with your clinic's code " +
+        '(for example: US2QNF). You\'ll find it on your clinic\'s WhatsApp QR poster or link.';
     }
   } catch (err) {
     console.error('[WhatsApp] Reply generation failed — sending safe fallback:', err);

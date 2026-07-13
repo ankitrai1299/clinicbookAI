@@ -4,8 +4,18 @@
 // the resolved clinicId — clinics never mix.
 
 import { prisma } from '../../config/prisma.js';
+import { env } from '../../config/env.js';
 
 const digitsOf = (s: string | null | undefined): string => (s || '').replace(/\D/g, '');
+
+// Canonical phone key. WhatsApp delivers numbers with a country code (91…) while
+// some records were stored national (10 digits). Key everything by the LAST 10
+// digits so "917903884686" and "7903884686" are the SAME patient — otherwise a
+// binding made in one format never matches the other and clinics silently mix.
+export const phoneKey = (s: string | null | undefined): string => {
+  const d = digitsOf(s);
+  return d.length > 10 ? d.slice(-10) : d;
+};
 
 /**
  * Pull a clinic join code out of a patient's message. Accepts "join ABC123",
@@ -33,7 +43,7 @@ export const clinicByJoinCode = async (
 
 /** The clinic a phone is already bound to (or null). */
 export const getBoundClinic = async (phone: string): Promise<string | null> => {
-  const d = digitsOf(phone);
+  const d = phoneKey(phone);
   if (!d) return null;
   const b = await prisma.whatsAppPatientBinding.findUnique({
     where: { phone: d },
@@ -65,13 +75,39 @@ export const ensureClinicJoinCode = async (clinicId: string): Promise<string> =>
 
 /** Bind (or re-bind) a phone to a clinic. Idempotent. */
 export const bindPatient = async (phone: string, clinicId: string): Promise<void> => {
-  const d = digitsOf(phone);
+  const d = phoneKey(phone);
   if (!d) return;
   await prisma.whatsAppPatientBinding.upsert({
     where: { phone: d },
     create: { phone: d, clinicId },
     update: { clinicId }
   });
+};
+
+/**
+ * SELF-HEAL: a phone that isn't bound yet but is ALREADY a patient of exactly one
+ * real (non-platform) clinic → re-bind them to that clinic. This recovers patients
+ * whose binding was lost/never written (or was stored in a different phone format)
+ * without dumping them onto the shared platform clinic and leaking ITS doctors.
+ * Returns the recovered clinicId, or null when the patient is unknown or ambiguous.
+ */
+const recoverClinicByExistingPatient = async (phone: string): Promise<string | null> => {
+  const last10 = phoneKey(phone);
+  if (last10.length < 10) return null;
+  const platformId = env.WHATSAPP_CLINIC_ID || null;
+  const rows = await prisma.patient.findMany({
+    where: {
+      phone: { endsWith: last10 },
+      ...(platformId ? { clinicId: { not: platformId } } : {})
+    },
+    select: { clinicId: true },
+    distinct: ['clinicId']
+  });
+  if (rows.length === 1) {
+    await bindPatient(phone, rows[0].clinicId);
+    return rows[0].clinicId;
+  }
+  return null;
 };
 
 /**
@@ -95,5 +131,11 @@ export const resolveSharedClinic = async (
   }
   const bound = await getBoundClinic(phone);
   if (bound) return { clinicId: bound };
+
+  // Not bound and no code — before giving up (and asking for a code), see if this
+  // phone is already a known patient of exactly one clinic and re-bind them.
+  const recovered = await recoverClinicByExistingPatient(phone);
+  if (recovered) return { clinicId: recovered };
+
   return { clinicId: null };
 };
