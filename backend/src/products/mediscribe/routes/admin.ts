@@ -12,7 +12,13 @@ import { hashPassword, sanitizeUser, newId } from '../services/auth.js';
 import { requirePermission } from '../middleware/auth.js';
 import type { AdminSettings, SearchResult } from '../contracts/index.js';
 import { currentClinicId } from '../context.js';
-import { listClinicDoctorsAdmin, listClinicPatientsAdmin } from '../clinicData.js';
+import {
+  listClinicDoctorsAdmin,
+  listClinicPatientsAdmin,
+  createClinicDoctor,
+  updateClinicDoctor,
+  deleteClinicDoctor
+} from '../clinicData.js';
 
 const router = Router();
 
@@ -75,83 +81,52 @@ router.get('/doctors', requirePermission('doctors.view'), async (req, res) => {
   }
 });
 
+// Add a doctor from the scribe → creates a REAL ClinicBook doctor (shows in both
+// apps). ClinicBook doctors are bookable resources with no login, so password/
+// licenseNumber/hospital from the scribe form are ignored (not part of the model).
 router.post('/doctors', requirePermission('doctors.manage'), async (req, res) => {
   try {
-    const { name, email, password, specialization, licenseNumber, hospital, experience, phone } = req.body ?? {};
-    if (!email) return res.status(400).json({ error: 'email is required' });
-    const normalized = String(email).toLowerCase().trim();
-    if ((await usersRepo.findBy({ email: normalized })).length) {
-      return res.status(409).json({ error: 'A user with that email already exists' });
-    }
-    const doctor = {
-      id: newId('usr'),
-      name: name || normalized.split('@')[0],
-      email: normalized,
-      passwordHash: password ? await hashPassword(String(password)) : '',
-      role: 'doctor' as const,
-      status: 'active' as const,
-      hospitalId: '',
-      specialization: specialization || '',
-      licenseNumber: licenseNumber || '',
-      hospital: hospital || '',
-      experience: Number(experience) || 0,
-      phone: phone || '',
-    };
-    await usersRepo.upsert(doctor);
-    return res.json(sanitizeUser(doctor));
-  } catch (error) {
+    const { name, specialization, experience, email, phone } = req.body ?? {};
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Doctor name is required' });
+    const doctor = await createClinicDoctor(currentClinicId(), { name, specialization, experience, email, phone });
+    return res.json(doctor);
+  } catch (error: any) {
     console.error('[admin:doctor:create]', error);
-    return res.status(500).json({ error: 'Failed to create doctor' });
+    return res.status(400).json({ error: error?.message || 'Failed to create doctor' });
   }
 });
 
 router.put('/doctors/:id', requirePermission('doctors.manage'), async (req, res) => {
   try {
-    const record = await usersRepo.findById(req.params.id);
-    if (!record) return res.status(404).json({ error: 'Doctor not found' });
-    const allowed = ['name', 'specialization', 'licenseNumber', 'hospital', 'experience', 'phone', 'email'];
-    const patch: Record<string, unknown> = { id: req.params.id };
-    for (const key of allowed) if (key in (req.body ?? {})) patch[key] = req.body[key];
-    if (typeof patch.experience !== 'undefined') patch.experience = Number(patch.experience) || 0;
-    if (req.body?.password) patch.passwordHash = await hashPassword(String(req.body.password));
-    await usersRepo.upsert(patch as any);
-    const updated = await usersRepo.findById(req.params.id);
-    return res.json(sanitizeUser(updated as any));
-  } catch (error) {
+    const { name, specialization, experience, email, phone } = req.body ?? {};
+    const doctor = await updateClinicDoctor(currentClinicId(), req.params.id, { name, specialization, experience, email, phone });
+    return res.json(doctor);
+  } catch (error: any) {
     console.error('[admin:doctor:update]', error);
-    return res.status(500).json({ error: 'Failed to update doctor' });
+    const status = /not found/i.test(error?.message || '') ? 404 : 400;
+    return res.status(status).json({ error: error?.message || 'Failed to update doctor' });
   }
 });
 
 router.delete('/doctors/:id', requirePermission('doctors.manage'), async (req, res) => {
   try {
-    const ok = await usersRepo.remove(req.params.id);
-    return res.json({ success: ok });
-  } catch (error) {
+    await deleteClinicDoctor(currentClinicId(), req.params.id);
+    return res.json({ success: true });
+  } catch (error: any) {
     console.error('[admin:doctor:delete]', error);
-    return res.status(500).json({ error: 'Failed to delete doctor' });
+    // ClinicBook blocks deleting a doctor with existing appointments — surface that.
+    return res.status(409).json({ error: error?.message || 'Failed to delete doctor' });
   }
 });
 
-router.post('/doctors/:id/suspend', requirePermission('doctors.manage'), async (req, res) => {
-  try {
-    await usersRepo.upsert({ id: req.params.id, status: 'suspended' } as any);
-    return res.json({ success: true });
-  } catch (error) {
-    console.error('[admin:doctor:suspend]', error);
-    return res.status(500).json({ error: 'Failed to suspend doctor' });
-  }
-});
-
-router.post('/doctors/:id/activate', requirePermission('doctors.manage'), async (req, res) => {
-  try {
-    await usersRepo.upsert({ id: req.params.id, status: 'active' } as any);
-    return res.json({ success: true });
-  } catch (error) {
-    console.error('[admin:doctor:activate]', error);
-    return res.status(500).json({ error: 'Failed to activate doctor' });
-  }
-});
+// ClinicBook doctors have no suspend/active state (they're always bookable) — accept
+// the call so the scribe UI doesn't error, but there's nothing to toggle.
+router.post('/doctors/:id/suspend', requirePermission('doctors.manage'), async (_req, res) =>
+  res.json({ success: true, note: 'ClinicBook doctors have no suspended state' })
+);
+router.post('/doctors/:id/activate', requirePermission('doctors.manage'), async (_req, res) =>
+  res.json({ success: true })
+);
 
 // ── Users & Roles (Super Admin) ──────────────────────────────
 router.get('/users', requirePermission('users.manage'), async (_req, res) => {

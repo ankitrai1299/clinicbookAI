@@ -7,7 +7,7 @@
 
 import { forClinic } from '../../config/tenantPrisma.js';
 import { getPatients, createPatient } from '../../core/patients/patient.service.js';
-import { getDoctors } from '../../core/doctors/doctor.service.js';
+import { getDoctors, createDoctor, updateDoctor, deleteDoctor } from '../../core/doctors/doctor.service.js';
 import { getAppointments } from '../../products/clinicbook/appointments/appointment.service.js';
 import { clinicNow, labelToMinutes, slotIsFuture } from '../../services/slotMath.js';
 import { AppointmentStatus } from '@prisma/client';
@@ -122,23 +122,72 @@ export interface ScribeAdminDoctor {
   createdAt?: string;
 }
 
+/** Map one ClinicBook doctor into MediScribe's admin Doctors-page shape. */
+export const toScribeAdminDoctor = (d: any): ScribeAdminDoctor => ({
+  id: d.id,
+  name: d.name,
+  email: d.email || '',
+  role: 'doctor',
+  status: 'active',
+  specialization: d.speciality || '',
+  experience: d.experienceYears ?? 0,
+  licenseNumber: '',
+  hospital: '',
+  phone: d.phone || '',
+  createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : undefined
+});
+
 /** Every doctor in the clinic (ClinicBook), in the admin Doctors-page shape. */
 export const listClinicDoctorsAdmin = async (clinicId: string): Promise<ScribeAdminDoctor[]> => {
   const doctors = await getDoctors(clinicId);
-  return doctors.map((d: any) => ({
-    id: d.id,
-    name: d.name,
-    email: d.email || '',
-    role: 'doctor',
-    status: 'active',
-    specialization: d.speciality || '',
-    experience: d.experienceYears ?? 0,
-    licenseNumber: '',
-    hospital: '',
-    phone: d.phone || '',
-    createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : undefined
-  }));
+  return doctors.map(toScribeAdminDoctor);
 };
+
+// Create/update/delete a REAL ClinicBook doctor from the scribe admin, so a doctor
+// added/edited in EITHER app shows up in both. The scribe's Add-Doctor form fields
+// (specialization/experience/…) map onto ClinicBook's Doctor.
+export interface ScribeDoctorInput {
+  name?: string;
+  specialization?: string;
+  experience?: number | string;
+  email?: string;
+  phone?: string;
+}
+
+const toClinicDoctorInput = (b: ScribeDoctorInput) => {
+  const exp = b.experience === undefined || b.experience === '' ? undefined : Number(b.experience);
+  const phone = (b.phone || '').trim();
+  const email = (b.email || '').trim();
+  return {
+    ...(b.name !== undefined ? { name: String(b.name).trim() } : {}),
+    ...(b.specialization !== undefined ? { speciality: String(b.specialization).trim() || 'General Physician' } : {}),
+    ...(exp !== undefined && !Number.isNaN(exp) ? { experienceYears: exp } : {}),
+    // ClinicBook validates these — only send when they look valid, else omit.
+    ...(email && /.+@.+\..+/.test(email) ? { email } : {}),
+    ...(phone.length >= 6 ? { phone } : {})
+  };
+};
+
+export const createClinicDoctor = async (clinicId: string, b: ScribeDoctorInput): Promise<ScribeAdminDoctor> => {
+  const input = toClinicDoctorInput(b);
+  if (!input.name || input.name.length < 2) throw new Error('Doctor name is required');
+  if (!input.speciality) input.speciality = 'General Physician';
+  const created = await createDoctor(clinicId, input as any);
+  return toScribeAdminDoctor(created);
+};
+
+export const updateClinicDoctor = async (
+  clinicId: string,
+  id: string,
+  b: ScribeDoctorInput
+): Promise<ScribeAdminDoctor> => {
+  const input = toClinicDoctorInput(b);
+  const updated = await updateDoctor(clinicId, id, input as any);
+  return toScribeAdminDoctor(updated);
+};
+
+export const deleteClinicDoctor = (clinicId: string, id: string): Promise<unknown> =>
+  deleteDoctor(clinicId, id);
 
 // MediScribe ADMIN patient shape (its Patients page + growth analytics need
 // createdAt + language, which the lean ScribePatient drops).
