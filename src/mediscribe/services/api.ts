@@ -33,6 +33,18 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Render report/transcript HTML to a real (selectable-text) PDF via the backend's
+// headless-Chrome renderer. Same HTML the client prints → identical layout.
+export async function renderReportPdf(html: string, filename: string): Promise<Blob> {
+  const res = await fetch(`${BASE}/render-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ html, filename }),
+  });
+  if (!res.ok) throw new Error('Failed to generate PDF');
+  return res.blob();
+}
+
 // Extract a server-provided error message ({ error: "..." }) when available,
 // falling back to a sensible default.
 async function errorMessage(res: Response, fallback: string): Promise<string> {

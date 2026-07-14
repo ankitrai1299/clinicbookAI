@@ -1,17 +1,16 @@
-// The SINGLE PDF service for MediScribe. Print and Download share ONE rendering
-// pipeline: the exact HTML built by report.ts (buildReportHtml / buildTranscriptHtml)
-// is what the browser prints AND what we rasterise into the downloaded PDF. There is
-// no second, jsPDF-hand-drawn report — so the downloaded PDF is the same document as
-// the print preview (same logo, tables, spacing, margins, colours, fonts, page
-// layout), and multilingual transcripts stay readable because the BROWSER renders the
-// Unicode fonts (no glyph mapping into a Latin-only PDF font = no corrupted symbols).
+// The SINGLE PDF service for MediScribe. Print and Download share ONE template and
+// ONE pipeline: the exact HTML built by report.ts (buildReportHtml /
+// buildTranscriptHtml) is what the browser PRINTS and what the backend renders (via
+// headless Chrome) into the DOWNLOADED PDF. So the downloaded PDF is layout-identical
+// to the print preview — same logo, CSS, fonts, tables, spacing, margins, page breaks,
+// headers/footers — and it is a REAL selectable-text PDF (no screenshots, no jsPDF
+// re-layout). Multilingual text stays readable because Chrome renders the Unicode fonts.
+
+import { saveAs } from 'file-saver';
 
 import { buildReportHtml, buildTranscriptHtml, type ReportMeta } from './report.js';
+import { renderReportPdf } from '../services/api';
 import type { ReportData } from '../types';
-
-// A4 content box at 96dpi. We render the HTML at this width so line breaks/tables
-// match the print layout, then slice the tall capture across A4 PDF pages.
-const A4_WIDTH_PX = 794; // 210mm @ 96dpi
 
 // Make a safe, readable file name like "report_jane-doe_2026-06-17".
 function fileName(kind: string, meta: ReportMeta, ext: string): string {
@@ -23,86 +22,13 @@ function fileName(kind: string, meta: ReportMeta, ext: string): string {
   return [kind, name, date].filter(Boolean).join('_') + '.' + ext;
 }
 
-// Render a full HTML document (offscreen, style-isolated in an iframe) to a canvas.
-// Isolating in an iframe means the report's global CSS never leaks into the app, and
-// html2canvas captures exactly what the browser painted — including Unicode glyphs.
-async function renderHtmlToCanvas(html: string): Promise<HTMLCanvasElement> {
-  const iframe = document.createElement('iframe');
-  Object.assign(iframe.style, {
-    position: 'fixed',
-    left: '-10000px',
-    top: '0',
-    width: `${A4_WIDTH_PX}px`,
-    height: '100px',
-    border: '0',
-    background: '#ffffff',
-  });
-  document.body.appendChild(iframe);
-  try {
-    const idoc = iframe.contentWindow!.document;
-    idoc.open();
-    idoc.write(html);
-    idoc.close();
-
-    // Wait for the embedded (Noto) web fonts to load and one paint tick, so the
-    // capture has the final, correctly-shaped multilingual glyphs.
-    try {
-      await (idoc as Document & { fonts?: FontFaceSet }).fonts?.ready;
-    } catch {
-      /* fonts API unavailable — system fonts still render the scripts */
-    }
-    await new Promise((r) => setTimeout(r, 80));
-
-    const fullHeight = Math.max(idoc.documentElement.scrollHeight, idoc.body.scrollHeight, 200);
-    iframe.style.height = `${fullHeight}px`;
-
-    // Crisp text at scale 2, but keep the rasterised canvas height under the browser's
-    // per-canvas limit (~32767px in Safari/Firefox) so LONG (10+ page) reports still
-    // render instead of coming out blank.
-    const MAX_CANVAS_PX = 30000;
-    const scale = Math.min(2, Math.max(1, MAX_CANVAS_PX / fullHeight));
-
-    const html2canvas = (await import('html2canvas')).default;
-    return await html2canvas(idoc.body, {
-      scale,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      windowWidth: A4_WIDTH_PX,
-      width: A4_WIDTH_PX,
-      height: fullHeight,
-    });
-  } finally {
-    document.body.removeChild(iframe);
-  }
+// Send the HTML to the backend's Chrome renderer and save the returned PDF file.
+async function htmlToPdf(html: string, filename: string): Promise<void> {
+  const blob = await renderReportPdf(html, filename);
+  saveAs(blob, filename);
 }
 
-// Rasterise an HTML document to a multi-page A4 PDF and save it. Handles long
-// (10+ page) reports by slicing the single tall capture across pages.
-export async function htmlToPdf(html: string, filename: string): Promise<void> {
-  const canvas = await renderHtmlToCanvas(html);
-  const { jsPDF } = await import('jspdf');
-  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
-
-  const imgW = pageW;
-  const imgH = (canvas.height * imgW) / canvas.width;
-  const dataUrl = canvas.toDataURL('image/png');
-
-  let heightLeft = imgH;
-  let position = 0;
-  pdf.addImage(dataUrl, 'PNG', 0, position, imgW, imgH, undefined, 'FAST');
-  heightLeft -= pageH;
-  while (heightLeft > 0) {
-    position -= pageH;
-    pdf.addPage();
-    pdf.addImage(dataUrl, 'PNG', 0, position, imgW, imgH, undefined, 'FAST');
-    heightLeft -= pageH;
-  }
-  pdf.save(filename);
-}
-
-// Open the shared report/transcript HTML in a print window. Same HTML the PDF is
+// Open the SAME report/transcript HTML in a print window. Same HTML the PDF is
 // built from → the print preview and the downloaded PDF are the same document.
 function printHtml(html: string): void {
   const w = window.open('', '_blank');

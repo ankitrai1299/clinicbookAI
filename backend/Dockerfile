@@ -30,9 +30,16 @@ FROM node:22-bookworm-slim AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
+# openssl/ca-certs for Prisma; chromium + Noto fonts for the headless-Chrome PDF
+# renderer (real selectable-text PDFs, incl. Hindi/Tamil/… via fonts-noto-core).
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends \
+     openssl ca-certificates \
+     chromium fonts-noto-core fonts-noto-color-emoji \
   && rm -rf /var/lib/apt/lists/*
+
+# puppeteer-core does NOT bundle Chromium — point it at the apt-installed one.
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 COPY package.json package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules

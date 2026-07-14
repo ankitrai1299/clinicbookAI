@@ -9,7 +9,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import express, { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 
 import { bridgeAuth } from './middleware/auth.js';
@@ -314,6 +314,30 @@ mediscribeRouter.get('/stats', async (_req: Request, res: Response) => {
   } catch (error) {
     console.error('[mediscribe:stats]', error);
     return res.status(500).json({ error: 'Failed to load stats' });
+  }
+});
+
+// ── PDF rendering ────────────────────────────────────────────
+// The client posts the SAME report/transcript HTML it prints; headless Chrome
+// renders it to a real, selectable-text PDF (identical layout to the print preview).
+// Larger JSON body limit (reports can be a few hundred KB of HTML).
+mediscribeRouter.post('/render-pdf', express.json({ limit: '8mb' }), async (req: Request, res: Response) => {
+  try {
+    const html = req.body?.html;
+    if (typeof html !== 'string' || !html.trim()) {
+      return res.status(400).json({ error: 'html is required' });
+    }
+    const { renderHtmlToPdf } = await import('./pdf.render.js');
+    const pdf = await renderHtmlToPdf(html);
+    const raw = typeof req.body?.filename === 'string' ? req.body.filename : 'report.pdf';
+    const filename = raw.replace(/[^a-z0-9._-]/gi, '_') || 'report.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    return res.end(pdf);
+  } catch (error) {
+    console.error('[mediscribe:render-pdf]', error);
+    return res.status(500).json({ error: 'Failed to render PDF' });
   }
 });
 
