@@ -45,6 +45,8 @@ import {
   buildVisitComparison,
   reportHasClinicalContent,
   buildVisitSummary,
+  buildComparisonBullets,
+  buildPreviousVisitPdf,
   type PreviousMedicine,
 } from '../utils/compareVisits';
 import { createVAD, VADController } from '../utils/vad';
@@ -1110,6 +1112,7 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
       patientName: consultation.patientName,
       date: consultation.date,
       doctorName: doctorName.trim() || undefined,
+      previousVisit: previousVisitPdf,
     });
     const w = window.open('', '_blank');
     if (!w) {
@@ -1567,11 +1570,21 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
       ? buildVisitComparison(normalizeReport(previousVisit.report as ReportData), reportData)
       : null;
 
-  // Structured summary of the previous visit (diagnosis, complaints, meds,
-  // investigations, follow-up, allergies, chronic) shown at the top of the card.
-  const previousSummary = previousVisit
-    ? buildVisitSummary(normalizeReport(previousVisit.report as ReportData))
-    : null;
+  // Structured summary of the previous visit (used for the Previous Medications
+  // carry-forward list + the PDF section).
+  const previousReport = previousVisit ? normalizeReport(previousVisit.report as ReportData) : null;
+  const previousSummary = previousReport ? buildVisitSummary(previousReport) : null;
+
+  // CONCISE clinical comparison (max 8 bullets) — the on-screen "Compare Previous
+  // Visit" card and the PDF section both use these, so they stay short and identical.
+  const comparisonBullets =
+    previousReport && currentHasReport ? buildComparisonBullets(previousReport, reportData) : [];
+
+  // Structured previous-visit block baked into the report HTML (print + PDF).
+  const previousVisitPdf =
+    previousReport && previousVisit
+      ? buildPreviousVisitPdf(previousReport, reportData, previousVisit.date)
+      : null;
 
   // Key for a previous medicine (case-insensitive name).
   const medKey = (m: PreviousMedicine) => m.medicine.trim().toLowerCase();
@@ -1765,118 +1778,26 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
           <p className="text-sm text-slate-500">No previous visit available for comparison.</p>
         ) : (
           <>
-            {/* Previous Visit Summary + Previous Medications — always shown once a
-                previous completed visit exists (independent of the current report). */}
-            {renderPreviousSummary()}
-            {renderPreviousMeds()}
-
-            {/* Current-vs-previous changes — needs the current report generated. */}
+            {/* CONCISE clinical comparison — only meaningful differences (max 8). */}
             {!currentHasReport ? (
               <p className="text-sm text-slate-500">
                 Generate the current report to compare it with the previous visit.
               </p>
-            ) : !visitComparison?.hasAny ? (
-              <p className="text-sm text-slate-500">No comparable changes between these two visits.</p>
+            ) : comparisonBullets.length === 0 ? (
+              <p className="text-sm text-slate-500">No significant clinical changes since the previous visit.</p>
             ) : (
-              <div className="space-y-4">
-            {/* Symptom changes */}
-            {renderCompareSection(
-              'Symptom Changes',
-              visitComparison.symptoms.resolved.length ||
-                visitComparison.symptoms.added.length ||
-                visitComparison.symptoms.continuing.length ? (
-                <div className="space-y-2">
-                  {renderChangeGroup('New', visitComparison.symptoms.added, 'warn')}
-                  {renderChangeGroup('Resolved', visitComparison.symptoms.resolved, 'good')}
-                  {renderChangeGroup('Continuing', visitComparison.symptoms.continuing, 'neutral')}
-                </div>
-              ) : null,
+              <ul className="space-y-1.5">
+                {comparisonBullets.map((b, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-slate-700">
+                    <span className="text-blue-500 leading-5">•</span>
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
             )}
 
-            {/* Diagnosis changes */}
-            {renderCompareSection(
-              'Diagnosis Changes',
-              visitComparison.diagnoses.added.length ||
-                visitComparison.diagnoses.removed.length ||
-                visitComparison.diagnoses.continuing.length ? (
-                <div className="space-y-2">
-                  {renderChangeGroup('New', visitComparison.diagnoses.added, 'warn')}
-                  {renderChangeGroup('Resolved', visitComparison.diagnoses.removed, 'good')}
-                  {renderChangeGroup('Continuing', visitComparison.diagnoses.continuing, 'neutral')}
-                </div>
-              ) : null,
-            )}
-
-            {/* Vital changes */}
-            {renderCompareSection(
-              'Vital Changes',
-              visitComparison.vitals.length ? (
-                <div className="space-y-1.5">
-                  {visitComparison.vitals.map((v, i) => (
-                    <div key={i} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="text-slate-500 text-xs font-semibold uppercase tracking-wide">{v.label}</span>
-                      <span className="flex items-center gap-1.5 text-slate-700">
-                        <span className="text-slate-500">{v.previous}</span>
-                        {v.direction === 'up' ? (
-                          <ArrowUp size={13} className="text-slate-400" />
-                        ) : v.direction === 'down' ? (
-                          <ArrowDown size={13} className="text-slate-400" />
-                        ) : (
-                          <ArrowRight size={13} className="text-slate-400" />
-                        )}
-                        <span className="font-semibold">{v.current}</span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : null,
-            )}
-
-            {/* Medicine changes */}
-            {renderCompareSection(
-              'Medicine Changes',
-              visitComparison.medicines.started.length ||
-                visitComparison.medicines.stopped.length ||
-                visitComparison.medicines.continued.length ? (
-                <div className="space-y-2">
-                  {renderChangeGroup('Started', visitComparison.medicines.started, 'info')}
-                  {renderChangeGroup('Stopped', visitComparison.medicines.stopped, 'warn')}
-                  {renderChangeGroup('Continued', visitComparison.medicines.continued, 'neutral')}
-                </div>
-              ) : null,
-            )}
-
-            {/* Test result changes */}
-            {renderCompareSection(
-              'Test Result Changes',
-              visitComparison.tests.added.length ||
-                visitComparison.tests.removed.length ||
-                visitComparison.tests.continuing.length ? (
-                <div className="space-y-2">
-                  {renderChangeGroup('New', visitComparison.tests.added, 'info')}
-                  {renderChangeGroup('No longer noted', visitComparison.tests.removed, 'neutral')}
-                  {renderChangeGroup('Continuing', visitComparison.tests.continuing, 'neutral')}
-                </div>
-              ) : null,
-            )}
-
-            {/* Overall health progress */}
-            {visitComparison.progress &&
-              renderCompareSection(
-                'Overall Health Progress',
-                <div className="flex items-start gap-2">
-                  <span
-                    className={`text-xs font-bold px-2 py-0.5 rounded-md whitespace-nowrap ${progressBadgeCls(
-                      visitComparison.progress.label,
-                    )}`}
-                  >
-                    {visitComparison.progress.label}
-                  </span>
-                  <p className="text-sm text-slate-600">{visitComparison.progress.summary}</p>
-                </div>,
-              )}
-              </div>
-            )}
+            {/* Previous Medications — compact carry-forward (Continue / Modify / Stop). */}
+            {renderPreviousMeds()}
           </>
         )}
       </div>
@@ -2241,7 +2162,7 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
                       <div className="my-1 border-t border-slate-100" />
                       <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Medical Report</div>
                       <button
-                        onClick={() => runDownload(m => m.downloadReportPdf(reportData, exportMeta))}
+                        onClick={() => runDownload(m => m.downloadReportPdf(reportData, { ...exportMeta, previousVisit: previousVisitPdf }))}
                         className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
                       >
                         <FileText size={15} /> Report (.pdf)
@@ -2329,7 +2250,7 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
                   </button>
                   <button
                     type="button"
-                    onClick={() => runDownload(m => m.downloadReportPdf(reportData, exportMeta))}
+                    onClick={() => runDownload(m => m.downloadReportPdf(reportData, { ...exportMeta, previousVisit: previousVisitPdf }))}
                     className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
                   >
                     <Download size={14} /> Export PDF

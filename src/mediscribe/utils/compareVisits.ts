@@ -299,6 +299,57 @@ export function buildVisitSummary(report: ReportData): VisitSummary {
   return { diagnosis, complaints, medications, investigations, followUp, allergies, chronic };
 }
 
+// A CONCISE clinical comparison (max 8 bullets) — only meaningful differences, not
+// a copy of the previous report. Used both on-screen and in the PDF.
+export function buildComparisonBullets(prev: ReportData, curr: ReportData): string[] {
+  const out: string[] = [];
+  const dxPrev = diagnosisNames(prev);
+  const dxCurr = diagnosisNames(curr);
+  if (dxPrev.length) out.push(`Previous diagnosis: ${dxPrev.slice(0, 3).join(', ')}`);
+  if (dxCurr.length) out.push(`Current diagnosis: ${dxCurr.slice(0, 3).join(', ')}`);
+
+  const sym = compareSymptoms(prev, curr);
+  if (sym.resolved.length) out.push(`Resolved: ${sym.resolved.slice(0, 3).join(', ')}`);
+  if (sym.added.length) out.push(`New symptoms: ${sym.added.slice(0, 3).join(', ')}`);
+
+  for (const v of compareVitals(prev, curr)) {
+    if (out.length >= 8) break;
+    if (v.direction && v.direction !== 'same') out.push(`${v.label}: ${v.previous} → ${v.current}`);
+  }
+
+  const meds = compareMedicines(prev, curr);
+  if (meds.started.length) out.push(`Medication added: ${meds.started.slice(0, 3).join(', ')}`);
+  if (meds.stopped.length) out.push(`Medication stopped: ${meds.stopped.slice(0, 3).join(', ')}`);
+
+  const tests = compareTests(prev, curr);
+  if (tests.added.length) out.push(`New investigations: ${tests.added.slice(0, 3).join(', ')}`);
+
+  const fu = curr.followUp;
+  const fuText = fu ? (clean(fu.duration) ? `review after ${clean(fu.duration)}` : clean(fu.instructions)) : '';
+  if (fuText) out.push(`Follow-up: ${fuText}`);
+
+  return out.slice(0, 8);
+}
+
+// Structured previous-visit block for the PDF "Previous Visit Comparison" section.
+export interface PreviousVisitPdf {
+  date: string;
+  diagnosis: string[];
+  medicines: string[];
+  investigations: string[];
+  bullets: string[];
+}
+
+export function buildPreviousVisitPdf(prev: ReportData, curr: ReportData, date: string): PreviousVisitPdf {
+  return {
+    date,
+    diagnosis: diagnosisNames(prev),
+    medicines: previousMedicines(prev).map(m => [m.medicine, m.dose].filter(Boolean).join(' ')).filter(Boolean),
+    investigations: testFindings(prev),
+    bullets: buildComparisonBullets(prev, curr),
+  };
+}
+
 export function buildVisitComparison(prev: ReportData, curr: ReportData): VisitComparison {
   const symptoms = compareSymptoms(prev, curr);
   const vitals = compareVitals(prev, curr);

@@ -362,6 +362,35 @@ export interface ReportMeta {
   patientName?: string;
   date?: string;
   doctorName?: string;
+  // Concise previous-visit comparison baked into the report (print + PDF). Shape
+  // matches compareVisits.PreviousVisitPdf (kept structural to avoid an import
+  // cycle). null/undefined → the section prints "No previous consultation available."
+  previousVisit?: {
+    date: string;
+    diagnosis: string[];
+    medicines: string[];
+    investigations: string[];
+    bullets: string[];
+  } | null;
+}
+
+// The "Previous Visit Comparison" section — printed right after Patient Clinical
+// Overview, in both the print preview and the downloaded PDF (same HTML).
+function previousVisitSectionHtml(pv: ReportMeta['previousVisit']): string {
+  const row = (label: string, items?: string[]): string =>
+    items && items.length
+      ? `<div class="pv-row"><span class="pv-label">${escapeHtml(label)}:</span> ${items.map(escapeHtml).join(', ')}</div>`
+      : '';
+  const body = !pv
+    ? `<p class="overview">No previous consultation available.</p>`
+    : `${pv.date ? `<div class="pv-row"><span class="pv-label">Previous visit</span> ${escapeHtml(pv.date)}</div>` : ''}` +
+      row('Previous diagnosis', pv.diagnosis) +
+      row('Previous medicines', pv.medicines) +
+      row('Previous investigations', pv.investigations) +
+      (pv.bullets.length
+        ? `<ul class="pv-bullets">${pv.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`
+        : '');
+  return `<section class="previous-visit"><h2>Previous Visit Comparison</h2>${body}</section>`;
 }
 
 // ONE font stack for BOTH print and PDF so multilingual text (Hindi, Tamil, Telugu,
@@ -396,7 +425,7 @@ export function buildTranscriptHtml(text: string, meta: ReportMeta = {}): string
 ${FONT_LINK}
 <title>Consultation Transcript</title>
 <style>
-  @page { size: A4; margin: 16mm 14mm; }
+  @page { size: A4; margin: 20mm; }
   * { box-sizing: border-box; }
   body { font-family: ${FONT_STACK}; color: #1e293b; font-size: 12.5px; line-height: 1.65; background: #fff; margin: 0; }
   .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 10px; margin-bottom: 16px; }
@@ -474,15 +503,19 @@ function sectionBodyHtml(report: ReportData, s: ReportSectionDef): string {
 /** Build a clean, paginating A4 HTML document for the report (print / PDF export). */
 export function buildReportHtml(report: ReportData, meta: ReportMeta = {}): string {
   let n = 0;
-  const sectionsHtml = REPORT_SECTIONS.filter(s => sectionHasContent(report, s))
-    .map(s => {
-      n += 1;
-      return `<section>
+  const sections = REPORT_SECTIONS.filter(s => sectionHasContent(report, s));
+  const pvHtml = previousVisitSectionHtml(meta.previousVisit);
+  const parts = sections.map((s, idx) => {
+    n += 1;
+    const sec = `<section>
         <h2>${n}. ${escapeHtml(s.title)}</h2>
         ${sectionBodyHtml(report, s)}
       </section>`;
-    })
-    .join('');
+    // Previous Visit Comparison goes immediately AFTER Patient Clinical Overview
+    // (the first section). If the report has no sections, it stands alone below.
+    return idx === 0 ? sec + pvHtml : sec;
+  });
+  const sectionsHtml = (sections.length ? parts.join('') : pvHtml);
 
   const sub = [meta.patientName, meta.date].filter(Boolean).map(escapeHtml).join('  •  ');
 
@@ -493,9 +526,13 @@ export function buildReportHtml(report: ReportData, meta: ReportMeta = {}): stri
 ${FONT_LINK}
 <title>Clinical Report</title>
 <style>
-  @page { size: A4; margin: 16mm 14mm; }
+  @page { size: A4; margin: 20mm; }
   * { box-sizing: border-box; }
   body { font-family: ${FONT_STACK}; color: #1e293b; font-size: 12px; line-height: 1.5; background: #fff; margin: 0; }
+  .previous-visit .pv-row { font-size: 11px; margin: 2px 0; }
+  .previous-visit .pv-label { font-weight: 700; color: #334155; }
+  .previous-visit .pv-bullets { margin: 5px 0 0; padding-left: 18px; }
+  .previous-visit .pv-bullets li { padding: 1px 0; font-size: 11px; }
   .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 10px; margin-bottom: 16px; }
   h1 { font-size: 19px; margin: 0 0 3px; letter-spacing: 0.5px; color: #0f172a; }
   .brand { color: #1d4ed8; font-weight: 700; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
