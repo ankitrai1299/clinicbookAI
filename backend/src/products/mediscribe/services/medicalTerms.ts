@@ -1,31 +1,48 @@
-// Uses the editable glossary (data/medicalTerms.ts) two ways:
-//   1) correctMedicalTerms(text) — conservatively fixes near-miss single-word terms
-//      that STT mis-heard (e.g. "azithromicin" → "Azithromycin").
-//   2) glossaryForPrompt() — the exact spellings, handed to the report AI so it
-//      normalises whatever the transcript approximates.
+// Corrects medical terms that Sarvam STT mis-hears by pronunciation, using two
+// sources:
+//   • MEDICAL_TERMS  — a small, CURATED list of everyday drugs/diagnoses/tests
+//                      (data/medicalTerms.ts). Drives BOTH the report-AI glossary
+//                      and correction (edit-distance up to 2 → catches common typos).
+//   • MASTER_TERMS   — ~5k single-word generic-drug names extracted from the
+//                      client's MasterMedicalTerms PDFs (data/medicalTermsMaster.ts).
+//                      Correction ONLY, and only at edit-distance 1 (tested to make
+//                      zero false-corrections on ordinary words) → adds rare-drug
+//                      coverage without touching normal language.
 
 import { MEDICAL_TERMS } from '../data/medicalTerms.js';
+import { MASTER_TERMS } from '../data/medicalTermsMaster.js';
 
-// De-duplicated canonical terms.
-const TERMS = [...new Set(MEDICAL_TERMS.map(t => t.trim()).filter(Boolean))];
+// Curated canonical terms (de-duplicated).
+const CURATED = [...new Set(MEDICAL_TERMS.map(t => t.trim()).filter(Boolean))];
 
-// Single-word tokens from the glossary (only distinctive ones, length >= 5), mapped
-// lower-case → canonical casing. Multi-word terms are left to the report AI.
-const WORD_MAP = new Map<string, string>();
-for (const term of TERMS) {
+// Curated single-words (length >= 5) lower-case → canonical.
+const CURATED_WORDS = new Map<string, string>();
+for (const term of CURATED) {
   for (const w of term.split(/\s+/)) {
     const key = w.toLowerCase().replace(/[^a-z0-9]/gi, '');
-    if (key.length >= 5 && !WORD_MAP.has(key)) WORD_MAP.set(key, w);
+    if (key.length >= 5 && !CURATED_WORDS.has(key)) CURATED_WORDS.set(key, w);
   }
 }
-const WORD_KEYS = [...WORD_MAP.keys()];
 
-/** The glossary as a compact string for the report-generation prompt. */
+// Master words bucketed by first letter for fast lookup (5k+ terms).
+const MASTER_BY_FIRST = new Map<string, Array<[string, string]>>();
+for (const raw of MASTER_TERMS) {
+  const disp = raw.trim();
+  const key = disp.toLowerCase();
+  if (key.length < 6) continue;
+  const bucket = key[0];
+  if (!MASTER_BY_FIRST.has(bucket)) MASTER_BY_FIRST.set(bucket, []);
+  MASTER_BY_FIRST.get(bucket)!.push([key, disp]);
+}
+const CURATED_KEYS = [...CURATED_WORDS.keys()];
+
+/** The CURATED glossary as a compact string for the report-generation prompt.
+ *  (The 5k master list is deliberately NOT sent to the AI — too large for the prompt.) */
 export function glossaryForPrompt(): string {
-  return TERMS.join(', ');
+  return CURATED.join(', ');
 }
 
-// Levenshtein edit distance (early-exit once it exceeds `max`).
+// Levenshtein edit distance with early-exit once it exceeds `max`.
 function editDistance(a: string, b: string, max: number): number {
   if (Math.abs(a.length - b.length) > max) return max + 1;
   const prev = new Array(b.length + 1);
@@ -45,31 +62,41 @@ function editDistance(a: string, b: string, max: number): number {
   return prev[b.length];
 }
 
-// Closest glossary word within a tight edit-distance budget, or null. Kept
-// conservative (distance 1 for short words, 2 for long) so ordinary words aren't
-// "corrected" — medicine names are distinctive enough for this to be safe.
-function closestTerm(token: string): string | null {
-  const key = token.toLowerCase();
-  if (WORD_MAP.has(key)) return null; // already correct
-  const budget = key.length >= 9 ? 2 : 1;
+function bestIn(pairs: Array<[string, string]>, key: string, budget: number): string | null {
   let best: string | null = null;
   let bestDist = budget + 1;
-  for (const cand of WORD_KEYS) {
+  for (const [cand, disp] of pairs) {
     if (Math.abs(cand.length - key.length) > budget) continue;
     const d = editDistance(key, cand, budget);
     if (d <= budget && d < bestDist) {
       bestDist = d;
-      best = WORD_MAP.get(cand)!;
+      best = disp;
       if (d === 1) break;
     }
   }
   return best;
 }
 
+// Closest known term for a token, or null. Curated first (distance 1, or 2 for long
+// words), then the master list (distance 1 only — proven zero false positives).
+function closestTerm(token: string): string | null {
+  const key = token.toLowerCase();
+  if (CURATED_WORDS.has(key)) return null; // already a correct curated term
+  const curatedBudget = key.length >= 9 ? 2 : 1;
+  const curated = bestIn(
+    CURATED_KEYS.map(k => [k, CURATED_WORDS.get(k)!] as [string, string]),
+    key,
+    curatedBudget,
+  );
+  if (curated) return curated;
+  const bucket = MASTER_BY_FIRST.get(key[0]);
+  return bucket ? bestIn(bucket, key, 1) : null;
+}
+
 /**
- * Conservatively correct mis-transcribed medical terms in free text. Only
- * alphabetic tokens (length >= 6) that are a near-miss of a known glossary word are
- * replaced; everything else is left exactly as written.
+ * Conservatively correct mis-transcribed medical terms in free text. Only alphabetic
+ * tokens (length >= 6) that are a near-miss of a known term are replaced; everything
+ * else is left exactly as written.
  */
 export function correctMedicalTerms(text: string): string {
   if (!text) return text;
