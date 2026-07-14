@@ -210,7 +210,6 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
   const [uploadFileName, setUploadFileName] = useState<string>('');
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Sessions panel search box.
@@ -946,7 +945,6 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
     }
 
     setError(null);
-    setUploadSuccess(null);
     setUploadFileName(file.name);
     setUploadProgress(0);
     setIsUploading(true);
@@ -976,11 +974,12 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
       // model as recording), then convert the full transcript into the selected
       // output language (Auto Detect keeps the original spoken language).
       const newOriginal = (originalTranscript ? `${originalTranscript} ${text}` : text).trim();
+      // Success is silent by design: the audio player + loaded transcript are the
+      // feedback. No success banner/toast — nothing interrupts the doctor's review.
       setOriginalTranscript(newOriginal);
       setIsTranscribing(false);
       setDisplayedTranscript(await toOutputLanguage(newOriginal));
-
-      setUploadSuccess(`"${file.name}" uploaded and transcribed. Review the transcript, then generate the report.`);
+      setUploadFileName('');
     } catch (err) {
       console.error('Audio upload error:', err);
       const detail = err instanceof Error ? err.message : '';
@@ -1004,9 +1003,8 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
     await deleteConsultationAudio(audioUrl);
 
     setAudioUrl('');
-    // Hide the upload status card too, so no stale "uploaded" note remains.
+    // Clear the upload file name too, so no stale progress note remains.
     setUploadFileName('');
-    setUploadSuccess(null);
   };
 
   // The dropdown selects the OUTPUT language. Changing it converts the ENTIRE
@@ -1853,40 +1851,26 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
             </div>
           )}
 
-          {/* Upload status: file name + progress while uploading, success after. */}
-          {(isUploading || (uploadFileName && uploadSuccess)) && (
+          {/* Upload PROGRESS only (while the file uploads/transcribes). No success
+              banner — once done, the audio player + loaded transcript are the only
+              feedback, so nothing interrupts the doctor's review. */}
+          {isUploading && (
             <div className="mb-4 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm">
               <div className="flex items-center gap-3">
-                <Upload size={18} className={`flex-shrink-0 ${isUploading ? 'text-blue-600' : 'text-emerald-600'}`} />
+                <Upload size={18} className="flex-shrink-0 text-blue-600" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{uploadFileName}</p>
-                  {isUploading ? (
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : 'Transcribing'}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-emerald-700 mt-0.5 font-medium flex items-center gap-1">
-                      <CheckCircle size={12} /> {uploadSuccess}
-                    </p>
-                  )}
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : 'Transcribing'}
+                  </p>
                 </div>
-                {!isUploading && uploadSuccess && (
-                  <button
-                    onClick={() => { setUploadSuccess(null); setUploadFileName(''); }}
-                    className="text-slate-400 hover:text-slate-600 transition-colors text-xs font-bold uppercase tracking-wide"
-                  >
-                    Dismiss
-                  </button>
-                )}
               </div>
-              {isUploading && (
-                <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 transition-all duration-200"
-                    style={{ width: `${uploadProgress < 100 ? uploadProgress : 100}%` }}
-                  />
-                </div>
-              )}
+              <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 transition-all duration-200"
+                  style={{ width: `${uploadProgress < 100 ? uploadProgress : 100}%` }}
+                />
+              </div>
             </div>
           )}
 
