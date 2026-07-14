@@ -1,5 +1,4 @@
 import {
-  patientsRepo,
   consultationsRepo,
   reportsRepo,
   usageRepo,
@@ -13,6 +12,8 @@ import type {
   TimeSeriesPoint,
 } from '../contracts/index.js';
 import { SUPPORTED_LANGUAGES } from '../contracts/index.js';
+import { currentClinicId } from '../context.js';
+import { countClinicDoctors, countClinicPatients, listClinicPatientsAdmin } from '../clinicData.js';
 
 type Rec = Record<string, any>;
 
@@ -136,9 +137,12 @@ const LANG_NAME = new Map(SUPPORTED_LANGUAGES.map((l) => [l.code, l.name]));
 // ── Public API ───────────────────────────────────────────────
 
 export async function buildOverview(): Promise<AdminOverview> {
+  // Doctors & patients are owned by ClinicBook (same Postgres + clinicId) — count
+  // them there so the scribe dashboard matches ClinicBook exactly. Consultations /
+  // reports / usage are the scribe's own (NovaDoc).
+  const clinicId = currentClinicId();
   const [
     totalDoctors,
-    activeDoctors,
     totalPatients,
     totalConsultations,
     reportsGenerated,
@@ -149,9 +153,8 @@ export async function buildOverview(): Promise<AdminOverview> {
     consultations,
     usage,
   ] = await Promise.all([
-    usersRepo.countBy({ role: 'doctor' }),
-    usersRepo.countBy({ role: 'doctor', status: 'active' }),
-    patientsRepo.count(),
+    countClinicDoctors(clinicId),
+    countClinicPatients(clinicId),
     consultationsRepo.count(),
     reportsRepo.count(),
     reportsRepo.countBy({ status: 'Draft' }),
@@ -177,7 +180,7 @@ export async function buildOverview(): Promise<AdminOverview> {
 
   return {
     totalDoctors,
-    activeDoctors,
+    activeDoctors: totalDoctors, // ClinicBook doctors are bookable resources — all active
     totalPatients,
     totalConsultations,
     todayConsultations,
@@ -196,7 +199,7 @@ export async function buildAnalytics(): Promise<AdminAnalytics> {
   const [consultations, reports, patients, usage] = await Promise.all([
     consultationsRepo.findAll(),
     reportsRepo.findAll(),
-    patientsRepo.findAll(),
+    listClinicPatientsAdmin(currentClinicId()), // patient growth from ClinicBook (shared source)
     usageRepo.findAll(),
   ]);
 

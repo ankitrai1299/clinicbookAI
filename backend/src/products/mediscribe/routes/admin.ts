@@ -11,6 +11,8 @@ import { buildOverview, buildAnalytics, buildLanguageDashboard } from '../servic
 import { hashPassword, sanitizeUser, newId } from '../services/auth.js';
 import { requirePermission } from '../middleware/auth.js';
 import type { AdminSettings, SearchResult } from '../contracts/index.js';
+import { currentClinicId } from '../context.js';
+import { listClinicDoctorsAdmin, listClinicPatientsAdmin } from '../clinicData.js';
 
 const router = Router();
 
@@ -53,10 +55,10 @@ function matchSearch(hay: string, q: string) {
 
 router.get('/doctors', requirePermission('doctors.view'), async (req, res) => {
   try {
+    // Doctors are owned by ClinicBook (same clinic id) — list THOSE so the scribe
+    // shows exactly the clinic's doctors, not a separate NovaDoc set.
     const q = String(req.query.search || '').trim();
-    let doctors = (await usersRepo.findBy({ role: 'doctor' }, { createdAt: -1 })).map((d) =>
-      sanitizeUser(d as any),
-    );
+    let doctors = await listClinicDoctorsAdmin(currentClinicId());
     if (q) {
       doctors = doctors.filter(
         (d) =>
@@ -202,9 +204,11 @@ router.put('/users/:id/role', requirePermission('users.manage'), async (req, res
 // ── Patient Management ───────────────────────────────────────
 router.get('/patients', requirePermission('patients.view'), async (req, res) => {
   try {
+    // Patients are owned by ClinicBook (same clinic id) — list THOSE so the scribe
+    // matches the clinic's patient list (a patient added in either app appears here).
     const q = String(req.query.search || '').trim();
-    let patients = await patientsRepo.findAll();
-    if (q) patients = patients.filter((p: any) => matchSearch(p.name || '', q) || matchSearch(p.phone || '', q));
+    let patients = await listClinicPatientsAdmin(currentClinicId());
+    if (q) patients = patients.filter((p) => matchSearch(p.name || '', q) || matchSearch(p.phone || '', q));
     return res.json(patients);
   } catch (error) {
     console.error('[admin:patients]', error);
@@ -456,18 +460,18 @@ router.get('/search', requirePermission('dashboard.view'), async (req, res) => {
     const like = (s: string) => (s || '').toLowerCase().includes(ql);
 
     const [patients, doctors, reports] = await Promise.all([
-      patientsRepo.findAll(),
-      usersRepo.findBy({ role: 'doctor' }),
+      listClinicPatientsAdmin(currentClinicId()), // ClinicBook (shared source)
+      listClinicDoctorsAdmin(currentClinicId()),
       reportsRepo.findAll(),
     ]);
 
     const results: SearchResult[] = [];
-    for (const p of patients as any[]) {
-      if (like(p.name) || like(p.phone)) {
+    for (const p of patients) {
+      if (like(p.name) || like(p.phone || '')) {
         results.push({ id: p.id, entity: 'patient', title: p.name || 'Unknown', subtitle: `${p.age || '?'}y · ${p.gender || '—'}` });
       }
     }
-    for (const d of doctors as any[]) {
+    for (const d of doctors) {
       if (like(d.name) || like(d.email) || like(d.specialization)) {
         results.push({ id: d.id, entity: 'doctor', title: d.name || d.email, subtitle: d.specialization || 'Doctor' });
       }

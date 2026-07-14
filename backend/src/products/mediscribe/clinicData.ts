@@ -97,6 +97,69 @@ export const listClinicDoctors = async (clinicId: string): Promise<ScribeDoctor[
   }));
 };
 
+/** Live count of the clinic's doctors (ClinicBook) — for the admin dashboard. */
+export const countClinicDoctors = (clinicId: string): Promise<number> =>
+  forClinic(clinicId).doctor.count();
+
+/** Live count of the clinic's patients (ClinicBook) — for the admin dashboard. */
+export const countClinicPatients = (clinicId: string): Promise<number> =>
+  forClinic(clinicId).patient.count();
+
+// MediScribe ADMIN doctor shape (its Doctors page + search expect a "user"-like
+// record). ClinicBook owns doctors as bookable resources (no login), so we map its
+// Doctor into this shape with sensible constants — status is always 'active'.
+export interface ScribeAdminDoctor {
+  id: string;
+  name: string;
+  email: string;
+  role: 'doctor';
+  status: 'active';
+  specialization: string;
+  experience: number;
+  licenseNumber: string;
+  hospital: string;
+  phone: string;
+  createdAt?: string;
+}
+
+/** Every doctor in the clinic (ClinicBook), in the admin Doctors-page shape. */
+export const listClinicDoctorsAdmin = async (clinicId: string): Promise<ScribeAdminDoctor[]> => {
+  const doctors = await getDoctors(clinicId);
+  return doctors.map((d: any) => ({
+    id: d.id,
+    name: d.name,
+    email: d.email || '',
+    role: 'doctor',
+    status: 'active',
+    specialization: d.speciality || '',
+    experience: d.experienceYears ?? 0,
+    licenseNumber: '',
+    hospital: '',
+    phone: d.phone || '',
+    createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : undefined
+  }));
+};
+
+// MediScribe ADMIN patient shape (its Patients page + growth analytics need
+// createdAt + language, which the lean ScribePatient drops).
+export interface ScribeAdminPatient extends ScribePatient {
+  language?: string;
+  createdAt?: string;
+}
+
+/** Every patient in the clinic (ClinicBook), richer shape for the admin page. */
+export const listClinicPatientsAdmin = async (clinicId: string): Promise<ScribeAdminPatient[]> => {
+  const rows = await forClinic(clinicId).patient.findMany({
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, name: true, phone: true, age: true, gender: true, language: true, createdAt: true }
+  });
+  return rows.map((r) => ({
+    ...toScribePatient(r),
+    language: r.language || undefined,
+    createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : undefined
+  }));
+};
+
 // A doctor's upcoming appointment, shown on the scribe dashboard so the doctor can
 // start a consultation for that visit in one click.
 export interface UpcomingAppointment {
