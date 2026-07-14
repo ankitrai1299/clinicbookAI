@@ -250,7 +250,24 @@ mediscribeRouter.post('/save-consultation', async (req: Request, res: Response) 
   try {
     const consultation = req.body;
     if (!consultation?.id) return res.status(400).json({ error: 'consultation.id is required' });
-    const isNew = !(await consultationsRepo.findById(consultation.id));
+    const existing = await consultationsRepo.findById(consultation.id);
+    const isNew = !existing;
+
+    // NEVER regress a finished consultation. A background auto-save carries
+    // status 'Draft'/'Recording'/'Processing'; because the store shallow-merges,
+    // such a late write would otherwise overwrite a 'Completed' record's status
+    // and flatten its saved report — the "saved report still shows Draft" bug.
+    // Drop the downgrading fields so the merge keeps the completed status +
+    // report, while still accepting benign updates (transcript text, audio).
+    if (
+      (existing as { status?: string } | null)?.status === 'Completed' &&
+      consultation.status &&
+      consultation.status !== 'Completed'
+    ) {
+      delete consultation.status;
+      delete consultation.report;
+      delete consultation.prescriptions;
+    }
     await consultationsRepo.upsert(consultation);
     if (isNew) pushNotification('new_consultation', 'New consultation', `Session started for ${consultation.patientName || 'a patient'}`, { consultationId: consultation.id });
     // Schedule WhatsApp medicine reminders from a finalized prescription

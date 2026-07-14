@@ -217,12 +217,21 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
 
   // Transient "Saved" confirmation shown after a successful Save (auto-clears).
   const [saveSuccess, setSaveSuccess] = useState(false);
+  // Centered "Report Saved Successfully" modal shown after a successful Save.
+  const [savedModalOpen, setSavedModalOpen] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); }, []);
+  const savedModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (savedModalTimerRef.current) clearTimeout(savedModalTimerRef.current);
+  }, []);
 
   // Pending debounced auto-save timer (so Save can cancel it and never get
   // overwritten by a late 'Draft' write).
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The in-flight auto-save request (if any). Save awaits it so a Draft write can
+  // never land AFTER the Completed write and revert the status.
+  const inFlightAutoSaveRef = useRef<Promise<unknown> | null>(null);
   // Serialized snapshot of the content as it was last persisted (loaded or
   // saved). Auto-save / Draft only trigger when the live content DIFFERS from
   // this — so merely opening, re-rendering, or React StrictMode's double-invoke
@@ -362,9 +371,11 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
         patientId: doc.patientId,
         status: doc.status,
       });
-      saveConsultation(doc)
+      const req = saveConsultation(doc)
         .then(() => { lastSavedSnapshotRef.current = snapshot; setTranscriptSaveStatus('saved'); })
-        .catch(err => { setTranscriptSaveStatus('failed'); console.error('Session auto-save error:', err); });
+        .catch(err => { setTranscriptSaveStatus('failed'); console.error('Session auto-save error:', err); })
+        .finally(() => { if (inFlightAutoSaveRef.current === req) inFlightAutoSaveRef.current = null; });
+      inFlightAutoSaveRef.current = req;
     }, 1500);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1129,6 +1140,12 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
       clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = null;
     }
+    // And let any ALREADY-dispatched auto-save land first, so our Completed write
+    // is the last one to hit the store (the backend also refuses to downgrade a
+    // Completed consultation, so this is belt-and-suspenders).
+    if (inFlightAutoSaveRef.current) {
+      try { await inFlightAutoSaveRef.current; } catch { /* ignore */ }
+    }
 
     const now = new Date().toISOString();
     const lines = transcriptToLines();
@@ -1194,6 +1211,12 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
     setSaveSuccess(true);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 3000);
+
+    // Centered confirmation modal — auto-closes after ~2.5s if the doctor does
+    // nothing (they can also close it or jump to the consultation).
+    setSavedModalOpen(true);
+    if (savedModalTimerRef.current) clearTimeout(savedModalTimerRef.current);
+    savedModalTimerRef.current = setTimeout(() => setSavedModalOpen(false), 2500);
 
     onSaveReport(reportData);
   };
@@ -2153,6 +2176,47 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
           </div>
         </div>
       </div>
+
+      {/* Centered "Report Saved Successfully" confirmation. Auto-closes ~2.5s. */}
+      {savedModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+          onClick={() => setSavedModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+              <CheckCircle size={30} className="text-emerald-600" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Report Saved Successfully</h3>
+            <p className="text-sm text-slate-600 mb-5">
+              This consultation has been saved successfully. It is now available under Previous Consultations.
+            </p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => {
+                  if (savedModalTimerRef.current) clearTimeout(savedModalTimerRef.current);
+                  setSavedModalOpen(false);
+                }}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
+              >
+                View Consultation
+              </button>
+              <button
+                onClick={() => {
+                  if (savedModalTimerRef.current) clearTimeout(savedModalTimerRef.current);
+                  setSavedModalOpen(false);
+                }}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
