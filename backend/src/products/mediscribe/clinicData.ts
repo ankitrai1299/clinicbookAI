@@ -59,9 +59,11 @@ export const createClinicPatient = async (
     if (existing) return toScribePatient(existing);
   }
 
+  // No phone → create WITHOUT one (stored NULL). Never substitute a placeholder
+  // like "0000000000"; the UI shows the patient with no phone instead.
   const created = await createPatient(clinicId, {
     name: input.name,
-    phone: input.phone && input.phone.trim() ? input.phone.trim() : '0000000000',
+    phone: input.phone && input.phone.trim() ? input.phone.trim() : undefined,
     language: 'English'
   });
   // age/gender aren't part of the standard create contract — set them directly

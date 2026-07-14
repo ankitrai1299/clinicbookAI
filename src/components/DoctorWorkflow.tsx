@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Plus, Trash2, Clock, Mail, Phone, Loader2, Save, CalendarOff, CalendarDays, Stethoscope, Pencil } from 'lucide-react';
+import { realPhone } from '../utils/phone';
 import {
   ApiDoctor,
   ApiLeave,
@@ -480,7 +481,7 @@ export default function DoctorWorkflow() {
                               <td className="py-2 px-2 font-mono text-slate-700">{a.appointmentTime}</td>
                               <td className="py-2 px-2">
                                 <span className="font-bold text-slate-800">{a.patient?.name ?? '—'}</span>
-                                {a.patient?.phone && <span className="block text-[10px] text-slate-400">{a.patient.phone}</span>}
+                                {realPhone(a.patient?.phone) && <span className="block text-[10px] text-slate-400">{realPhone(a.patient?.phone)}</span>}
                               </td>
                               <td className="py-2 px-2"><span className={`px-2 py-0.5 rounded-full font-bold ${statusColor(a.status)}`}>{a.status}</span></td>
                             </tr>

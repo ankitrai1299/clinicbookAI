@@ -162,8 +162,8 @@ const openEmrPatients = (clinicId: string, client: FhirClient): PatientPort => {
     },
     findByPhoneContains: (fragment: string) => searchByPhone(fragment),
     listRecent: async () => patientBundleToRecords(await client.search<FhirPatient>('Patient', {}), clinicId),
-    create: (data: PatientCreateData) => createFhirPatient({ name: data.name, phone: data.phone }),
-    onboard: (data) => createFhirPatient({ name: data.name, phone: data.phone }),
+    create: (data: PatientCreateData) => createFhirPatient({ name: data.name, phone: data.phone ?? '' }),
+    onboard: (data) => createFhirPatient({ name: data.name, phone: data.phone ?? '' }),
     update: async (): Promise<never> => {
       throw new AppError('Patient updates for EMR-backed clinics are not supported yet.', 501);
     },

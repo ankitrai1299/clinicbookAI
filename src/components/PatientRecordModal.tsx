@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, CalendarDays, Stethoscope, Pill, ClipboardList, User, Phone, IdCard } from 'lucide-react';
 
 import { getPatientRecord, type PatientRecord } from '../api/patientRecord';
+import { realPhone } from '../utils/phone';
 
 interface PatientRecordModalProps {
   // Internal patient id OR the Patient Code (PT-XXXX).
@@ -71,7 +72,9 @@ export default function PatientRecordModal({ patientId, onClose }: PatientRecord
                     <IdCard size={13} /> {p.patientCode}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1"><Phone size={13} /> {p.phone}</span>
+                {realPhone(p.phone) && (
+                  <span className="inline-flex items-center gap-1"><Phone size={13} /> {realPhone(p.phone)}</span>
+                )}
                 {(p.age || p.gender) && <span>{[p.age ? `${p.age}y` : null, p.gender].filter(Boolean).join(' · ')}</span>}
               </div>
             )}

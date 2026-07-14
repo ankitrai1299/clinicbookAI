@@ -114,10 +114,10 @@ const mockPatients = (clinicId: string): PatientPort => {
     findByPhone: async (phone: string) =>
       [...byId.values()].find((p) => p.phone === phone.trim()) ?? null,
     findByPhoneContains: async (fragment: string) =>
-      [...byId.values()].filter((p) => p.phone.includes(fragment)),
+      [...byId.values()].filter((p) => (p.phone ?? '').includes(fragment)),
     listRecent: async () => [...byId.values()],
     create: async (data: PatientCreateData) =>
-      save(build({ ...data, patientCode: `PT-EMR${byId.size + 1}` })),
+      save(build({ ...data, phone: data.phone ?? '', patientCode: `PT-EMR${byId.size + 1}` })),
     onboard: async (data) => save(build({ ...data })),
     update: async (id: string, data: PatientUpdateData) => {
       const existing = byId.get(id);

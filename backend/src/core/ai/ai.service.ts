@@ -344,7 +344,7 @@ const executeTool = async (
       // than letting it assume the message was delivered.
       try {
         const response = await sendWhatsAppTextMessage({
-          to: toWhatsAppNumber(patient.phone),
+          to: toWhatsAppNumber(patient.phone || ''),
           body,
           clinicId
         });

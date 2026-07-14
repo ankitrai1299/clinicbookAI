@@ -173,7 +173,7 @@ model Patient {
   patientCode   String?  @unique
   clinicId      String
   name          String
-  phone         String
+  phone         String?
   language      String
   age           Int?
   gender        String?

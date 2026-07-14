@@ -69,7 +69,7 @@ export const getPatientRecord = async (
       name: patient.name,
       age: patient.age,
       gender: patient.gender,
-      phone: patient.phone,
+      phone: patient.phone ?? '',
       language: patient.language,
       healthConcern: patient.healthConcern,
       registeredAt: patient.createdAt.toISOString()

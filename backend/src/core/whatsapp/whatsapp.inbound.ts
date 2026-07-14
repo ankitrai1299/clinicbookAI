@@ -175,7 +175,7 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
   if (national) {
     // Fast path: substring match on the contiguous national digits.
     const candidates = await patients.findByPhoneContains(national);
-    let found = candidates.find((p) => nationalKey(p.phone) === national);
+    let found = candidates.find((p) => nationalKey(p.phone || '') === national);
 
     // Robust fallback: a number stored WITH formatting (e.g. "+91 98765 43210")
     // has a space inside it, so the contiguous national digits won't substring-
@@ -185,7 +185,7 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
     // not just clean digit strings.
     if (!found) {
       const all = await patients.listRecent();
-      found = all.find((p) => nationalKey(p.phone) === national);
+      found = all.find((p) => nationalKey(p.phone || '') === national);
       if (found) {
         console.info('[WhatsApp][resolve] matched via normalized fallback (formatted stored number)', {
           patientId: found.patientCode ?? found.id,

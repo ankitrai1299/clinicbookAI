@@ -93,7 +93,9 @@ export type PatientRecord = Patient & {
 // deliberately mirrors today's code-less, source-tagged create.
 export interface PatientCreateData {
   name: string;
-  phone: string;
+  // Optional: a patient added from the scribe may have no phone yet (stored NULL,
+  // never a placeholder like "0000000000").
+  phone?: string | null;
   language: string;
   age?: number;
   gender?: string;

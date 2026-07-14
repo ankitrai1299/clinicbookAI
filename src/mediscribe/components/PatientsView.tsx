@@ -4,6 +4,7 @@ import { Patient, Consultation } from '../types';
 import { Search, ChevronRight, FileText } from 'lucide-react';
 import PreviousConsultationHistory from './PreviousConsultationHistory';
 import PatientRecordModal from '../../components/PatientRecordModal';
+import { realPhone } from '../../utils/phone';
 
 interface PatientsViewProps {
   patients: Patient[];
@@ -82,7 +83,9 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-400 hidden sm:inline">{p.phone || 'No phone'}</span>
+                      {realPhone(p.phone) && (
+                        <span className="text-sm text-slate-400 hidden sm:inline">{realPhone(p.phone)}</span>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); setRecordId(p.id); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-semibold transition-colors"

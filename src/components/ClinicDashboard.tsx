@@ -6,6 +6,7 @@ import {
   QrCode, Copy, Check, Key
 } from 'lucide-react';
 import AiAssistant from './AiAssistant';
+import { realPhone } from '../utils/phone';
 import DoctorWorkflow from './DoctorWorkflow';
 import ConnectWhatsApp from './ConnectWhatsApp';
 import WhatsAppShareCard from './WhatsAppShareCard';
@@ -1352,7 +1353,7 @@ export default function ClinicDashboard({
                     {patients.map((p) => (
                       <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50/50" id={`patient-dir-row-${p.id}`}>
                         <td className="py-3 px-2 font-bold text-slate-900">{p.name}</td>
-                        <td className="py-3 px-2 font-mono text-[10px] text-slate-500">{p.phone}</td>
+                        <td className="py-3 px-2 font-mono text-[10px] text-slate-500">{realPhone(p.phone) ?? <span className="italic text-slate-300 font-sans">Phone not available</span>}</td>
                         <td className="py-3 px-2 text-slate-500">
                           {p.age != null || p.gender ? `${p.age ?? '—'}${p.gender ? ` · ${p.gender}` : ''}` : '—'}
                         </td>

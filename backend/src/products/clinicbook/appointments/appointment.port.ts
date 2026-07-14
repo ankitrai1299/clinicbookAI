@@ -24,7 +24,7 @@ import type { Appointment, AppointmentStatus } from '@prisma/client';
 // existing importers.
 export type AppointmentRecord = Appointment & {
   doctor?: { id: string; name: string; speciality: string };
-  patient?: { id: string; name: string; phone: string; language: string };
+  patient?: { id: string; name: string; phone: string | null; language: string };
   clinic?: { id: string; name: string; plan: string };
   reminders?: Array<{ id: string; type: string; sent: boolean }>;
 };

@@ -28,7 +28,10 @@ export interface AuthenticatedClinicContext {
 export type { PatientRecord } from '../datasource/ports.js';
 import type { PatientRecord } from '../datasource/ports.js';
 
-export const createPatient = async (clinicId: string, input: CreatePatientInput): Promise<PatientRecord> => {
+export const createPatient = async (
+  clinicId: string,
+  input: Omit<CreatePatientInput, 'phone'> & { phone?: string | null }
+): Promise<PatientRecord> => {
   const patient = await dataSourceFor(clinicId).patients.create({
     name: input.name,
     phone: input.phone,
@@ -96,7 +99,7 @@ export const createPublicPatient = async (
     : await patients.create({ phone: input.phone, language: 'English', source: 'public', ...fields });
 
   // Fire-and-forget WhatsApp registration confirmation (no-op if unconfigured).
-  if (patient.patientCode) {
+  if (patient.patientCode && patient.phone) {
     notifyPatientRegistered({
       to: patient.phone,
       clinicId,

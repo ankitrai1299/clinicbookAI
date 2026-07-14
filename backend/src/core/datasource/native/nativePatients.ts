@@ -84,7 +84,9 @@ export const nativePatients = (clinicId: string): PatientPort => {
     create: (data: PatientCreateData) =>
       createWithUniqueCode({
         name: data.name.trim(),
-        phone: normalizePhone(data.phone),
+        // No phone → store NULL (never a "0000000000" placeholder). Postgres allows
+        // many NULLs under the (clinicId, phone) unique index.
+        phone: data.phone && data.phone.trim() ? normalizePhone(data.phone) : null,
         language: data.language.trim(),
         ...(data.age !== undefined ? { age: data.age } : {}),
         ...(data.gender !== undefined ? { gender: data.gender } : {}),

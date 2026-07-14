@@ -1,5 +1,6 @@
 import React from 'react';
 import { useEffect, useState, useCallback } from 'react';
+import { realPhone } from '../../../../utils/phone';
 import {
   Search,
   Plus,
@@ -133,7 +134,7 @@ export default function PatientsSection() {
                     <div className="font-semibold text-slate-900">{p.name}</div>
                     <div className="text-xs text-slate-500">
                       {p.age} yrs • {p.gender}
-                      {p.phone ? ` • ${p.phone}` : ''}
+                      {realPhone(p.phone) ? ` • ${realPhone(p.phone)}` : ''}
                     </div>
                   </div>
                   {canManage && (

@@ -139,6 +139,8 @@ export const processReminders = async (): Promise<void> => {
       });
 
       const { name: patientName, phone } = appt.patient;
+      // No phone on file → nothing to remind to; skip (never fabricate a number).
+      if (!phone) continue;
       const { name: doctorName } = appt.doctor;
       const { name: clinicName } = appt.clinic;
 
