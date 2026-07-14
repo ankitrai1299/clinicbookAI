@@ -152,7 +152,13 @@ async function condenseIfLong(text: string): Promise<string> {
 // whole report if it still cannot produce that group. A genuine API error (bad
 // key, network) is surfaced instead of being masked.
 async function extractGroup(text: string, group: (typeof SECTION_GROUPS)[number]): Promise<Record<string, unknown>> {
-  const system = `${SHARED_RULES}\n\nExtract ONLY these fields as a JSON object:\n${group.schema}\n\nGuidance: ${group.guidance}`;
+  const { glossaryForPrompt } = await import('./medicalTerms.js');
+  const system =
+    `${SHARED_RULES}\n\n` +
+    `KNOWN MEDICAL TERMS — when the transcript approximates a drug, diagnosis or ` +
+    `investigation by pronunciation, use the CORRECT spelling from this list ` +
+    `(do NOT introduce a term the transcript does not imply):\n${glossaryForPrompt()}\n\n` +
+    `Extract ONLY these fields as a JSON object:\n${group.schema}\n\nGuidance: ${group.guidance}`;
   const user = `/no_think\nConsultation transcript:\n${text}`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -206,8 +212,10 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
   }
 
   // 2) Condense a very long transcript into English facts so each section-group
-  //    call reasons over a smaller input.
-  const source = await condenseIfLong(text);
+  //    call reasons over a smaller input, then fix medical terms STT mis-heard
+  //    (e.g. "azithromicin" → "Azithromycin") using the editable glossary.
+  const { correctMedicalTerms } = await import('./medicalTerms.js');
+  const source = correctMedicalTerms(await condenseIfLong(text));
 
   // 3) Generate the report in small section groups and merge them. Sectioning keeps
   //    every response within the token budget even for a dense consultation.
