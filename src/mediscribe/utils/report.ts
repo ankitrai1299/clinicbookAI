@@ -364,6 +364,59 @@ export interface ReportMeta {
   doctorName?: string;
 }
 
+// ONE font stack for BOTH print and PDF so multilingual text (Hindi, Tamil, Telugu,
+// Bengali, Gujarati, Kannada, Malayalam, …) renders with a proper Unicode font in
+// every export. The browser picks the family that covers each script; system Indic
+// fonts are the offline fallback. FONT_LINK best-effort-loads the Noto families so
+// the rendered output embeds them.
+export const FONT_STACK =
+  `'Noto Sans','Noto Sans Devanagari','Noto Sans Tamil','Noto Sans Telugu',` +
+  `'Noto Sans Bengali','Noto Sans Gujarati','Noto Sans Kannada','Noto Sans Malayalam',` +
+  `Arial,Helvetica,sans-serif`;
+
+export const FONT_LINK =
+  `<link rel="preconnect" href="https://fonts.googleapis.com">` +
+  `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
+  `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?` +
+  `family=Noto+Sans:wght@400;700&family=Noto+Sans+Devanagari:wght@400;700` +
+  `&family=Noto+Sans+Tamil:wght@400;700&family=Noto+Sans+Telugu:wght@400;700` +
+  `&family=Noto+Sans+Bengali:wght@400;700&family=Noto+Sans+Gujarati:wght@400;700` +
+  `&family=Noto+Sans+Kannada:wght@400;700&family=Noto+Sans+Malayalam:wght@400;700&display=swap">`;
+
+/** Build a clean, paginating A4 HTML document for the TRANSCRIPT (print / PDF export).
+ *  Same styling language as the report so both exports look like one product, and the
+ *  Unicode font stack keeps every language readable (no corrupted glyphs). */
+export function buildTranscriptHtml(text: string, meta: ReportMeta = {}): string {
+  const sub = [meta.patientName, meta.date].filter(Boolean).map(escapeHtml).join('  •  ');
+  const body = escapeHtml((text || '').trim() || 'No transcript available.');
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+${FONT_LINK}
+<title>Consultation Transcript</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: ${FONT_STACK}; color: #1e293b; font-size: 12.5px; line-height: 1.65; background: #fff; margin: 0; }
+  .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 10px; margin-bottom: 16px; }
+  .brand { color: #1d4ed8; font-weight: 700; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+  h1 { font-size: 19px; margin: 0 0 3px; color: #0f172a; }
+  .sub { color: #475569; font-size: 11.5px; margin-top: 4px; }
+  .transcript { white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; text-align: justify; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">MediScribe AI</div>
+    <h1>Consultation Transcript</h1>
+    ${sub ? `<div class="sub">${sub}</div>` : ''}
+  </div>
+  <div class="transcript">${body}</div>
+</body>
+</html>`;
+}
+
 function tableHtml(columns: ColumnDef[], rows: Record<string, any>[]): string {
   const head = columns.map(c => `<th>${escapeHtml(c.label)}</th>`).join('');
   const body = rows
@@ -437,11 +490,12 @@ export function buildReportHtml(report: ReportData, meta: ReportMeta = {}): stri
 <html>
 <head>
 <meta charset="utf-8" />
+${FONT_LINK}
 <title>Clinical Report</title>
 <style>
   @page { size: A4; margin: 16mm 14mm; }
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; font-size: 12px; line-height: 1.5; background: #fff; margin: 0; }
+  body { font-family: ${FONT_STACK}; color: #1e293b; font-size: 12px; line-height: 1.5; background: #fff; margin: 0; }
   .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 10px; margin-bottom: 16px; }
   h1 { font-size: 19px; margin: 0 0 3px; letter-spacing: 0.5px; color: #0f172a; }
   .brand { color: #1d4ed8; font-weight: 700; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
