@@ -5,7 +5,7 @@
 // generation, transcription or session logic. It only reads two already-loaded
 // ReportData objects (same patient) and returns a structured diff the UI renders.
 
-import { ReportData, Vitals } from '../types';
+import { ReportData, Vitals, FollowUp } from '../types';
 import { VITALS_FIELDS } from './report';
 
 export interface SymptomComparison {
@@ -45,6 +45,7 @@ export interface VisitComparison {
   vitals: VitalChange[];
   medicines: MedicineChange;
   tests: TestComparison;
+  diagnoses: TestComparison;
   progress: { label: 'Improving' | 'Needs attention' | 'Mixed' | 'Stable'; summary: string } | null;
   // True when at least one section has something to show.
   hasAny: boolean;
@@ -52,6 +53,11 @@ export interface VisitComparison {
 
 const clean = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 const norm = (v: string): string => v.trim().toLowerCase();
+
+// AI reports fill absent fields with "Not mentioned" / "None" placeholders — drop
+// them so the summary shows only real clinical content.
+const PLACEHOLDERS = new Set(['not mentioned', 'none', 'none mentioned', 'n/a', 'na', 'nil', 'not applicable', 'no', 'not specified', 'unknown']);
+const isPlaceholder = (s: string): boolean => PLACEHOLDERS.has(norm(s));
 
 // First number found in a free-text vital (e.g. "120/80 mmHg" → 120, "98.6 F" → 98.6).
 function firstNumber(value: string): number | null {
@@ -178,6 +184,18 @@ function compareTests(prev: ReportData, curr: ReportData): TestComparison {
   return { added, removed, continuing: both };
 }
 
+// Diagnosis (assessment) names for a report, minus placeholder fillers.
+function diagnosisNames(report: ReportData): string[] {
+  return (Array.isArray(report.assessment) ? report.assessment : [])
+    .map(clean)
+    .filter(s => s && !isPlaceholder(s));
+}
+
+function compareDiagnoses(prev: ReportData, curr: ReportData): TestComparison {
+  const { added, removed, both } = diffLists(diagnosisNames(prev), diagnosisNames(curr));
+  return { added, removed, continuing: both };
+}
+
 // A gentle, non-prescriptive overall-progress read derived from symptom
 // resolution and pain-score trend. Never claims more than the data supports.
 function buildProgress(
@@ -216,11 +234,77 @@ function buildProgress(
   return { label, summary };
 }
 
+// ── Previous Visit Summary + Previous Medications ────────────────────────────
+// A concise, structured read of a completed visit's report — shown in a new
+// consultation so the doctor sees the last visit at a glance and can carry
+// medicines forward. Pure/read-only.
+
+export interface PreviousMedicine {
+  medicine: string;
+  dose: string;
+  frequency: string;
+  reason: string;
+}
+
+export interface VisitSummary {
+  diagnosis: string[];
+  complaints: string[];
+  medications: PreviousMedicine[];
+  investigations: string[];
+  followUp: string[];
+  allergies: string[];
+  chronic: string[];
+}
+
+/** The prescribed medicines of a report, flattened to medicine/dose/frequency/reason. */
+export function previousMedicines(report: ReportData): PreviousMedicine[] {
+  const rows = Array.isArray(report.prescribedMedications) ? report.prescribedMedications : [];
+  return rows
+    .filter(m => clean(m?.medicine))
+    .map(m => ({
+      medicine: clean(m.medicine),
+      dose: clean((m as any).dose) || clean((m as any).dosage) || clean(m.strength),
+      frequency: clean(m.frequency),
+      reason: clean(m.purpose) || clean(m.instructions),
+    }));
+}
+
+/** Structured summary of a previous completed visit (diagnosis, complaints, meds,
+ *  investigations, follow-up, allergies, chronic conditions). */
+export function buildVisitSummary(report: ReportData): VisitSummary {
+  const diagnosis = (Array.isArray(report.assessment) ? report.assessment : [])
+    .map(clean)
+    .filter(s => s && !isPlaceholder(s));
+  const complaints = symptomNames(report);
+  const medications = previousMedicines(report);
+  const investigations = testFindings(report);
+  const allergies = (Array.isArray(report.allergies) ? report.allergies : [])
+    .map(a => {
+      const name = clean(a?.allergy);
+      if (!name || isPlaceholder(name)) return '';
+      const reaction = clean(a?.reaction);
+      return reaction && !isPlaceholder(reaction) ? `${name} (${reaction})` : name;
+    })
+    .filter(Boolean);
+  const chronic = (Array.isArray(report.pastMedicalHistory) ? report.pastMedicalHistory : [])
+    .map(clean)
+    .filter(s => s && !isPlaceholder(s));
+  const fu = report.followUp || ({} as FollowUp);
+  const followUp = [
+    clean(fu.duration) && `Review after ${clean(fu.duration)}`,
+    clean(fu.date) && `On ${clean(fu.date)}`,
+    clean(fu.reports),
+    clean(fu.instructions),
+  ].filter(Boolean) as string[];
+  return { diagnosis, complaints, medications, investigations, followUp, allergies, chronic };
+}
+
 export function buildVisitComparison(prev: ReportData, curr: ReportData): VisitComparison {
   const symptoms = compareSymptoms(prev, curr);
   const vitals = compareVitals(prev, curr);
   const medicines = compareMedicines(prev, curr);
   const tests = compareTests(prev, curr);
+  const diagnoses = compareDiagnoses(prev, curr);
 
   const hasAny =
     symptoms.resolved.length > 0 ||
@@ -232,9 +316,12 @@ export function buildVisitComparison(prev: ReportData, curr: ReportData): VisitC
     medicines.continued.length > 0 ||
     tests.added.length > 0 ||
     tests.removed.length > 0 ||
-    tests.continuing.length > 0;
+    tests.continuing.length > 0 ||
+    diagnoses.added.length > 0 ||
+    diagnoses.removed.length > 0 ||
+    diagnoses.continuing.length > 0;
 
   const progress = buildProgress(symptoms, prev, curr, hasAny);
 
-  return { symptoms, vitals, medicines, tests, progress, hasAny };
+  return { symptoms, vitals, medicines, tests, diagnoses, progress, hasAny };
 }

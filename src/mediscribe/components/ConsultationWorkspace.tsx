@@ -41,7 +41,12 @@ import {
   ALLERGY_COLUMNS,
   TREATMENT_COLUMNS,
 } from '../utils/report';
-import { buildVisitComparison, reportHasClinicalContent } from '../utils/compareVisits';
+import {
+  buildVisitComparison,
+  reportHasClinicalContent,
+  buildVisitSummary,
+  type PreviousMedicine,
+} from '../utils/compareVisits';
 import { createVAD, VADController } from '../utils/vad';
 // The export libraries (jsPDF / docx) are heavy, so they are loaded on demand
 // via dynamic import() inside the download handlers — keeps the initial bundle small.
@@ -219,6 +224,9 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
   const [saveSuccess, setSaveSuccess] = useState(false);
   // Centered "Report Saved Successfully" modal shown after a successful Save.
   const [savedModalOpen, setSavedModalOpen] = useState(false);
+  // Which previous medicines the doctor has actioned this session
+  // (Continue / Modify → carried into the current plan; Stop → dismissed).
+  const [prevMedActions, setPrevMedActions] = useState<Record<string, 'continued' | 'modified' | 'stopped'>>({});
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -1559,6 +1567,42 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
       ? buildVisitComparison(normalizeReport(previousVisit.report as ReportData), reportData)
       : null;
 
+  // Structured summary of the previous visit (diagnosis, complaints, meds,
+  // investigations, follow-up, allergies, chronic) shown at the top of the card.
+  const previousSummary = previousVisit
+    ? buildVisitSummary(normalizeReport(previousVisit.report as ReportData))
+    : null;
+
+  // Key for a previous medicine (case-insensitive name).
+  const medKey = (m: PreviousMedicine) => m.medicine.trim().toLowerCase();
+
+  // Carry a previous medicine into the CURRENT treatment plan (Continue/Modify),
+  // or dismiss it (Stop). Continue/Modify append the row to prescribedMedications
+  // if it isn't already there; the doctor edits it in the Treatment Plan table.
+  const applyPrevMed = (m: PreviousMedicine, action: 'continued' | 'modified' | 'stopped') => {
+    setPrevMedActions(prev => ({ ...prev, [medKey(m)]: action }));
+    if (action === 'stopped') return;
+    setReportData(prev => {
+      const exists = (prev.prescribedMedications || []).some(
+        r => (r.medicine || '').trim().toLowerCase() === medKey(m),
+      );
+      if (exists) return prev;
+      const row: MedicationRow = {
+        medicine: m.medicine,
+        strength: '',
+        dose: m.dose,
+        route: '',
+        frequency: m.frequency,
+        timing: '',
+        duration: '',
+        instructions: '',
+        purpose: m.reason,
+        compliance: '',
+      };
+      return { ...prev, prescribedMedications: [...(prev.prescribedMedications || []), row] };
+    });
+  };
+
   // One labelled change block (e.g. "New symptoms") — rendered only when it has
   // items, so empty comparison rows never appear.
   const renderChangeGroup = (label: string, items: string[], tone: 'good' | 'warn' | 'info' | 'neutral') => {
@@ -1603,6 +1647,110 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
           ? 'bg-blue-50 text-blue-700'
           : 'bg-slate-100 text-slate-600';
 
+  // One labelled row of chips for the Last Visit summary.
+  const summaryRow = (label: string, items: string[]) =>
+    items.length ? (
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-0.5">{label}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((it, i) => (
+            <span key={i} className="text-xs font-medium px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
+              {it}
+            </span>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
+  // "Last Visit" summary — the previous completed consultation at a glance.
+  const renderPreviousSummary = () => {
+    if (!previousSummary) return null;
+    const s = previousSummary;
+    const medNames = s.medications.map(m => [m.medicine, m.dose].filter(Boolean).join(' '));
+    const any =
+      s.diagnosis.length || s.complaints.length || medNames.length || s.investigations.length ||
+      s.followUp.length || s.allergies.length || s.chronic.length;
+    return (
+      <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3.5">
+        <div className="flex items-center justify-between mb-2">
+          <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Last Visit</h5>
+          {previousVisit?.date && <span className="text-xs font-medium text-slate-500">{previousVisit.date}</span>}
+        </div>
+        {any ? (
+          <div className="space-y-2.5">
+            {summaryRow('Diagnosis', s.diagnosis)}
+            {summaryRow('Chief Complaints', s.complaints)}
+            {summaryRow('Medications', medNames)}
+            {summaryRow('Investigations', s.investigations)}
+            {summaryRow('Follow-up', s.followUp)}
+            {summaryRow('Allergies', s.allergies)}
+            {summaryRow('Chronic Conditions', s.chronic)}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">No structured details recorded for the last visit.</p>
+        )}
+      </div>
+    );
+  };
+
+  // "Previous Medications" — carry forward with Continue / Modify / Stop.
+  const renderPreviousMeds = () => {
+    if (!previousSummary || !previousSummary.medications.length) return null;
+    return (
+      <div className="rounded-xl border border-slate-200 p-3.5">
+        <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">Previous Medications</h5>
+        <div className="space-y-2">
+          {previousSummary.medications.map((m, i) => {
+            const action = prevMedActions[medKey(m)];
+            return (
+              <div key={i} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-2.5 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{m.medicine}</p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {[m.dose, m.frequency, m.reason && `• ${m.reason}`].filter(Boolean).join(' ')}
+                  </p>
+                </div>
+                {action ? (
+                  <span
+                    className={`text-[11px] font-semibold px-2 py-1 rounded-md whitespace-nowrap ${
+                      action === 'stopped' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    {action === 'continued' ? 'Continued' : action === 'modified' ? 'Modified' : 'Stopped'}
+                  </span>
+                ) : (
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => applyPrevMed(m, 'continued')}
+                      className="text-[11px] font-semibold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    >
+                      Continue
+                    </button>
+                    <button
+                      onClick={() => applyPrevMed(m, 'modified')}
+                      className="text-[11px] font-semibold px-2 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    >
+                      Modify
+                    </button>
+                    <button
+                      onClick={() => applyPrevMed(m, 'stopped')}
+                      className="text-[11px] font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    >
+                      Stop
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[11px] text-slate-400 mt-2">
+          Continue / Modify adds the medicine to this visit's Treatment Plan (edit it there). Stop dismisses it.
+        </p>
+      </div>
+    );
+  };
+
   const renderCompareCard = () => (
     <div className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
@@ -1612,17 +1760,25 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
           <span className="text-xs font-normal text-slate-400">• vs {previousVisit.date}</span>
         )}
       </div>
-      <div className="p-4">
+      <div className="p-4 space-y-4">
         {!previousVisit ? (
           <p className="text-sm text-slate-500">No previous visit available for comparison.</p>
-        ) : !currentHasReport ? (
-          <p className="text-sm text-slate-500">
-            Generate the current report to compare it with the previous visit.
-          </p>
-        ) : !visitComparison?.hasAny ? (
-          <p className="text-sm text-slate-500">No comparable changes between these two visits.</p>
         ) : (
-          <div className="space-y-4">
+          <>
+            {/* Previous Visit Summary + Previous Medications — always shown once a
+                previous completed visit exists (independent of the current report). */}
+            {renderPreviousSummary()}
+            {renderPreviousMeds()}
+
+            {/* Current-vs-previous changes — needs the current report generated. */}
+            {!currentHasReport ? (
+              <p className="text-sm text-slate-500">
+                Generate the current report to compare it with the previous visit.
+              </p>
+            ) : !visitComparison?.hasAny ? (
+              <p className="text-sm text-slate-500">No comparable changes between these two visits.</p>
+            ) : (
+              <div className="space-y-4">
             {/* Symptom changes */}
             {renderCompareSection(
               'Symptom Changes',
@@ -1633,6 +1789,20 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
                   {renderChangeGroup('New', visitComparison.symptoms.added, 'warn')}
                   {renderChangeGroup('Resolved', visitComparison.symptoms.resolved, 'good')}
                   {renderChangeGroup('Continuing', visitComparison.symptoms.continuing, 'neutral')}
+                </div>
+              ) : null,
+            )}
+
+            {/* Diagnosis changes */}
+            {renderCompareSection(
+              'Diagnosis Changes',
+              visitComparison.diagnoses.added.length ||
+                visitComparison.diagnoses.removed.length ||
+                visitComparison.diagnoses.continuing.length ? (
+                <div className="space-y-2">
+                  {renderChangeGroup('New', visitComparison.diagnoses.added, 'warn')}
+                  {renderChangeGroup('Resolved', visitComparison.diagnoses.removed, 'good')}
+                  {renderChangeGroup('Continuing', visitComparison.diagnoses.continuing, 'neutral')}
                 </div>
               ) : null,
             )}
@@ -1705,7 +1875,9 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
                   <p className="text-sm text-slate-600">{visitComparison.progress.summary}</p>
                 </div>,
               )}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
