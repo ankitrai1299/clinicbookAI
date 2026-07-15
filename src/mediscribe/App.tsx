@@ -15,6 +15,10 @@ import Logo from './components/Logo';
 import Sidebar from './components/Sidebar';
 import { useAuth } from './context/Auth';
 import type { Permission } from './contracts';
+import { isMobileApp } from './utils/platform';
+// Native-style phone-app shell (WebView only — never used by the web).
+const MobileShell = lazy(() => import('./mobile/MobileShell'));
+const MobileHome = lazy(() => import('./mobile/MobileHome'));
 // Code-split every view so they are not part of the initial bundle. This also
 // keeps `motion` (the animation lib, only used by the views) off the first-paint
 // path. The dashboard already shows a "Loading…" state during its data fetch, so
@@ -500,6 +504,46 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
       <Suspense fallback={<Loading />}>
         <AdminApp onExit={() => setActiveView('dashboard')} />
       </Suspense>
+    );
+  }
+
+  // PHONE APP ONLY (WebView): native-style bottom-tab shell. The web (desktop +
+  // mobile browser) skips this entirely and renders the layout below unchanged.
+  // Active consultations still use the shared workspace (handled by the main
+  // return), so recording/report editing is identical everywhere.
+  if (isMobileApp() && !activeConsultation) {
+    return (
+      <>
+        <Suspense fallback={<Loading />}>
+          <MobileShell
+            activeView={activeView}
+            onNavigate={(v) => setActiveView(v as ViewState)}
+            canView={canView}
+          >
+            {activeView === 'dashboard' ? (
+              <MobileHome
+                consultations={consultations}
+                doctorName={doctorName}
+                onStartNew={handleStartNewConsultation}
+                onSelectConsultation={handleSelectExistingConsultation}
+                onViewAllSessions={() => setActiveView('consultations')}
+              />
+            ) : (
+              renderActiveView()
+            )}
+          </MobileShell>
+        </Suspense>
+        {isPatientModalOpen && (
+          <Suspense fallback={null}>
+            <PatientSelectModal
+              patients={patients}
+              onSelect={handleSelectPatientForNewConsultation}
+              onAdd={handleAddPatient}
+              onClose={() => setIsPatientModalOpen(false)}
+            />
+          </Suspense>
+        )}
+      </>
     );
   }
 
