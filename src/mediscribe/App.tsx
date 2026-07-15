@@ -19,6 +19,7 @@ import { isMobileApp } from './utils/platform';
 // Native-style phone-app shell (WebView only — never used by the web).
 const MobileShell = lazy(() => import('./mobile/MobileShell'));
 const MobileHome = lazy(() => import('./mobile/MobileHome'));
+const DoctorOnlyGate = lazy(() => import('./mobile/DoctorOnlyGate'));
 // Code-split every view so they are not part of the initial bundle. This also
 // keeps `motion` (the animation lib, only used by the views) off the first-paint
 // path. The dashboard already shows a "Loading…" state during its data fetch, so
@@ -126,7 +127,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // view maps to a permission; the sidebar hides what the role can't see, and a
   // role that lands on (or deep-links to) a view it can't access is redirected to
   // its first allowed view. Access is entirely from the authenticated session.
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, logout } = useAuth();
   const VIEW_PERM: Record<ViewState, Permission> = {
     dashboard: 'dashboard.view',
     patients: 'patients.view',
@@ -506,6 +507,24 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // The Admin console is a self-contained, full-screen area with its own
   // sub-navigation and auth gate — it takes over the whole viewport (no outer
   // sidebar / max-width wrapper).
+  // PHONE APP is DOCTORS ONLY: a non-doctor account (Admin / Staff / Super Admin)
+  // that signs into the app is asked to use the web dashboard instead. This keeps
+  // the app strictly a per-doctor scribe (each doctor only ever sees their own
+  // patients/data). The web is unaffected — this branch is WebView-only.
+  if (isMobileApp() && user && user.role !== 'doctor') {
+    return (
+      <Suspense fallback={<Loading />}>
+        <DoctorOnlyGate
+          email={user.email}
+          onSignOut={() => {
+            logout();
+            window.location.reload();
+          }}
+        />
+      </Suspense>
+    );
+  }
+
   if (activeView === 'admin' && !activeConsultation) {
     return (
       <Suspense fallback={<Loading />}>
