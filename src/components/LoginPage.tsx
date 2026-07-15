@@ -18,10 +18,10 @@ interface LoginPageProps {
 // Selecting one is the entry context; the account's REAL role still governs what the
 // user can access after sign-in (the backend enforces it).
 const ROLE_OPTIONS = [
-  { key: 'doctor', label: 'Doctor', desc: 'Record consultations, reports & prescriptions', Icon: Stethoscope },
-  { key: 'staff', label: 'Staff', desc: 'Front desk — patients & doctor directory', Icon: Users },
-  { key: 'clinic_admin', label: 'Clinic Admin', desc: 'Manage the whole clinic', Icon: Building2 },
-  { key: 'super_admin', label: 'Super Admin', desc: 'Full platform access', Icon: ShieldCheck },
+  { key: 'doctor', mrole: 'doctor', label: 'Doctor', desc: 'Record consultations, reports & prescriptions', Icon: Stethoscope },
+  { key: 'staff', mrole: 'receptionist', label: 'Staff', desc: 'Front desk — patients & doctor directory', Icon: Users },
+  { key: 'clinic_admin', mrole: 'hospital_admin', label: 'Clinic Admin', desc: 'Manage the whole clinic', Icon: Building2 },
+  { key: 'super_admin', mrole: 'superadmin', label: 'Super Admin', desc: 'Full platform access', Icon: ShieldCheck },
 ] as const;
 
 export default function LoginPage({ setCurrentPage, onNeedVerification, product = 'clinicbook' }: LoginPageProps) {
@@ -97,7 +97,12 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
             {ROLE_OPTIONS.map((r) => (
               <button
                 key={r.key}
-                onClick={() => { setSelectedRole(r); setError(null); }}
+                onClick={() => {
+                  setSelectedRole(r);
+                  setError(null);
+                  // Drives which MediScribe panel opens after sign-in.
+                  localStorage.setItem('mediscribe_role', r.mrole);
+                }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50/40 text-left transition-colors cursor-pointer"
               >
                 <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
@@ -111,7 +116,7 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
               </button>
             ))}
             <p className="text-[11px] text-slate-400 text-center pt-2">
-              Your actual access is set by your account's assigned role.
+              You'll sign in to the panel for the role you choose.
             </p>
           </div>
         )}

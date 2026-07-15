@@ -13,6 +13,10 @@ import { login as apiLogin, getMe } from '../services/api';
 // writes this one key, so being signed into either signs you into both.
 const TOKEN_KEY = 'auth_token';
 
+// The role the user picked on the MediScribe login screen. It DRIVES which panel
+// opens (Doctor / Staff / Clinic Admin / Super Admin) — the whole app gates on it.
+const SELECTED_ROLE_KEY = 'mediscribe_role';
+
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
@@ -26,8 +30,16 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [rawUser, setRawUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(!!token);
+  // The role picked at login overrides the account's default → that role's panel opens.
+  const [selectedRole] = useState<string | null>(() => localStorage.getItem(SELECTED_ROLE_KEY));
+
+  // Effective user: the picked role wins for what the UI shows/gates on.
+  const user: AuthUser | null = rawUser
+    ? { ...rawUser, role: (selectedRole as AuthUser['role']) || rawUser.role }
+    : null;
+  const setUser = setRawUser;
 
   // On mount (or whenever a persisted token exists) hydrate the current user.
   // A rejected token (expired / revoked) clears the session cleanly.
@@ -69,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(SELECTED_ROLE_KEY);
     setToken(null);
     setUser(null);
   }, []);
