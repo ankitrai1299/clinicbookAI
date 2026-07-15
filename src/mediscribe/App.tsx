@@ -584,9 +584,9 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                   <div className="px-4 sm:px-6 lg:px-8 pt-4">
                     <button
                       onClick={onExitToHub}
-                      className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 cursor-pointer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 transition-colors cursor-pointer"
                     >
-                      <ArrowLeft size={16} /> Back to All Apps
+                      <ArrowLeft size={16} /> Back
                     </button>
                   </div>
                 )}
