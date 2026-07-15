@@ -9,7 +9,7 @@ import {
   TranscriptRecord,
   UpcomingAppointment,
 } from './types';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, ArrowLeft } from 'lucide-react';
 // Eagerly loaded shell — the only chunks on the first-paint critical path.
 import Logo from './components/Logo';
 import Sidebar from './components/Sidebar';
@@ -579,6 +579,17 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
           {!activeConsultation ? (
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-6xl mx-auto h-full">
+                {/* Back to the platform hub (All Apps) — on every panel. */}
+                {onExitToHub && (
+                  <div className="px-4 sm:px-6 lg:px-8 pt-4">
+                    <button
+                      onClick={onExitToHub}
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 cursor-pointer"
+                    >
+                      <ArrowLeft size={16} /> Back to All Apps
+                    </button>
+                  </div>
+                )}
                 {/* Suspense covers the lazily-loaded views (patients / lists /
                     modal). The dashboard is eager, so it paints immediately. */}
                 <Suspense fallback={<Loading />}>
