@@ -65,8 +65,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(TOKEN_KEY, res.token);
     setAuthToken(res.token);
     setToken(res.token);
-    setUser(res.user);
-    return res.user;
+    // The ClinicBook login response carries ClinicBook's own role enum
+    // (ADMIN / CLINIC_ADMIN / STAFF) — NOT the MediScribe role the RBAC matrix
+    // keys on (superadmin / hospital_admin / doctor / receptionist). Using it
+    // raw makes every permission fail, hiding all tabs and dumping the user on
+    // Settings with empty data. Resolve the effective MediScribe role from /me
+    // (same source the hydrate path uses) so RBAC works immediately after login.
+    let me = res.user;
+    try {
+      me = await getMe(res.token);
+    } catch {
+      // /me failed (transient) — fall back to the login user; a reopen re-hydrates.
+    }
+    setUser(me);
+    return me;
   }, []);
 
   const logout = useCallback(async () => {
