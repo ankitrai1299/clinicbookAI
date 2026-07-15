@@ -13,10 +13,6 @@ import { login as apiLogin, getMe } from '../services/api';
 // writes this one key, so being signed into either signs you into both.
 const TOKEN_KEY = 'auth_token';
 
-// The role the user picked on the MediScribe login screen. It DRIVES which panel
-// opens (Doctor / Staff / Clinic Admin / Super Admin) — the whole app gates on it.
-const SELECTED_ROLE_KEY = 'mediscribe_role';
-
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
@@ -24,11 +20,6 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => void;
   hasPermission: (permission: Permission) => boolean;
-  // The role picked on the login screen (if any) and whether it matches the
-  // account's ACTUAL role. Access is USER-BASED: a doctor account can only enter
-  // the doctor panel — picking any other role is denied.
-  selectedRole: string | null;
-  accessDenied: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -37,11 +28,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(!!token);
-  // The role the user PICKED on the login screen. USER-BASED access: it does NOT
-  // grant anything — the account's real role (from /me) governs the panel. It's
-  // only used to DENY entry when a user picks a role that isn't theirs.
-  const [selectedRole] = useState<string | null>(() => localStorage.getItem(SELECTED_ROLE_KEY));
-  const accessDenied = !!(user && selectedRole && selectedRole !== user.role);
 
   // On mount (or whenever a persisted token exists) hydrate the current user.
   // A rejected token (expired / revoked) clears the session cleanly.
@@ -83,7 +69,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(SELECTED_ROLE_KEY);
     setToken(null);
     setUser(null);
   }, []);
@@ -94,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, hasPermission, selectedRole, accessDenied }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

@@ -122,13 +122,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // view maps to a permission; the sidebar hides what the role can't see, and a
   // role that lands on (or deep-links to) a view it can't access is redirected to
   // its first allowed view. Access is entirely from the authenticated session.
-  const { user, hasPermission, accessDenied, selectedRole, logout } = useAuth();
-  const ROLE_LABEL: Record<string, string> = {
-    superadmin: 'Super Admin',
-    hospital_admin: 'Clinic Admin',
-    doctor: 'Doctor',
-    receptionist: 'Staff',
-  };
+  const { user, hasPermission } = useAuth();
   const VIEW_PERM: Record<ViewState, Permission> = {
     dashboard: 'dashboard.view',
     patients: 'patients.view',
@@ -487,32 +481,6 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // The Admin console is a self-contained, full-screen area with its own
   // sub-navigation and auth gate — it takes over the whole viewport (no outer
   // sidebar / max-width wrapper).
-  // USER-BASED access: if the user picked a role at login that isn't their account's
-  // actual role, deny entry (a doctor can only enter the doctor panel).
-  if (user && accessDenied) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-        <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-slate-100 shadow-md text-center">
-          <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center">
-            <X className="w-7 h-7 text-rose-600" />
-          </div>
-          <h1 className="text-xl font-bold text-slate-900 mb-1">Access Denied</h1>
-          <p className="text-sm text-slate-600 mb-1">
-            You selected <span className="font-semibold">{ROLE_LABEL[selectedRole || ''] || 'that role'}</span>, but your
-            account is registered as a <span className="font-semibold">{ROLE_LABEL[user.role] || user.role}</span>.
-          </p>
-          <p className="text-sm text-slate-500 mb-6">You can only access your own role's panel.</p>
-          <button
-            onClick={() => { logout(); onExitToHub?.(); }}
-            className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-sm"
-          >
-            Back to login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (activeView === 'admin' && !activeConsultation) {
     return (
       <Suspense fallback={<Loading />}>
