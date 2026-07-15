@@ -156,12 +156,19 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   useEffect(() => {
     if (!user || landedRef.current) return;
     landedRef.current = true;
-    const home: ViewState =
-      user.role === 'superadmin' || user.role === 'hospital_admin'
+    const firstAllowed = (): ViewState =>
+      hasPermission(VIEW_PERM.dashboard)
+        ? 'dashboard'
+        : VIEW_ORDER.find((v) => hasPermission(VIEW_PERM[v])) ?? 'dashboard';
+    // In the PHONE APP everyone (admins included) lands on the native Dashboard —
+    // the Admin console is reachable from the bottom-bar Admin tab. This also
+    // avoids a flash of the dashboard before bouncing to the console. On the WEB,
+    // admins still open straight into the Admin console as before.
+    const home: ViewState = isMobileApp()
+      ? firstAllowed()
+      : user.role === 'superadmin' || user.role === 'hospital_admin'
         ? 'admin'
-        : hasPermission(VIEW_PERM.dashboard)
-          ? 'dashboard'
-          : VIEW_ORDER.find((v) => hasPermission(VIEW_PERM[v])) ?? 'dashboard';
+        : firstAllowed();
     setActiveView(home);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
