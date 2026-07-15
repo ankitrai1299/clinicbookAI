@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Consultation } from '../../src/types';
 import { useAppData } from '../../src/context/AppData';
+import { useAuth } from '../../src/context/Auth';
 import { loadSettings } from '../../src/services/storage';
 import {
   Card,
@@ -44,6 +45,7 @@ const greeting = () => {
 
 export default function Dashboard() {
   const router = useRouter();
+  const { user, hasPermission } = useAuth();
   const { consultations, loading, reload } = useAppData();
   const [query, setQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -95,6 +97,19 @@ export default function Dashboard() {
   ];
 
   const firstName = (doctorName || 'Doctor').replace(/^Dr\.?\s*/i, '').split(' ')[0] || 'Doctor';
+
+  // Role-based landing: a role without Dashboard access (e.g. Staff) never sees this
+  // screen — send them to their first available tab.
+  if (user && !hasPermission('dashboard.view')) {
+    const href = hasPermission('patients.view')
+      ? '/(tabs)/patients'
+      : hasPermission('consultations.view')
+        ? '/(tabs)/sessions'
+        : hasPermission('analytics.view')
+          ? '/(tabs)/admin'
+          : '/(tabs)/settings';
+    return <Redirect href={href as never} />;
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={['top']}>
