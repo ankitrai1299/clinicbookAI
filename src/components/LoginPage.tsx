@@ -116,7 +116,7 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
               </button>
             ))}
             <p className="text-[11px] text-slate-400 text-center pt-2">
-              You'll sign in to the panel for the role you choose.
+              Pick the role your account is registered as — access is set by your account.
             </p>
           </div>
         )}
