@@ -31,6 +31,8 @@ export interface HistoryMedicine {
 export interface ConsultationHistoryItem {
   consultationId: string;
   visitDateTime: string;
+  // The doctor who attended this visit (empty for legacy records without it).
+  doctorName: string;
   chiefComplaints: string[];
   diagnosis: string[];
   medicines: HistoryMedicine[];
@@ -151,6 +153,7 @@ export async function buildPatientHistory(
     return {
       consultationId: c.id,
       visitDateTime: visitTimeOf(c),
+      doctorName: asString(c?.doctorName),
       chiefComplaints: extractChiefComplaints(report),
       diagnosis: extractDiagnosis(report),
       medicines: extractMedicines(report, c),

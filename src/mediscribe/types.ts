@@ -4,6 +4,8 @@ export interface Patient {
   age: number;
   gender: string;
   phone?: string;
+  // Admin view only: the doctor(s) who have attended this patient (attribution).
+  attendingDoctors?: string[];
 }
 
 export interface TranscriptLine {
@@ -18,6 +20,10 @@ export interface Consultation {
   id: string;
   patientId: string;
   patientName: string;
+  // The doctor who recorded this session (stamped server-side on first save).
+  // Used to keep each doctor's patients/sessions separate + show admin attribution.
+  doctorId?: string;
+  doctorName?: string;
   date: string;
   status: 'Draft' | 'Recording' | 'Processing' | 'Completed';
   transcript: TranscriptLine[];
@@ -141,6 +147,7 @@ export interface HistoryMedicine {
 export interface ConsultationHistoryItem {
   consultationId: string;
   visitDateTime: string;
+  doctorName?: string;
   chiefComplaints: string[];
   diagnosis: string[];
   medicines: HistoryMedicine[];

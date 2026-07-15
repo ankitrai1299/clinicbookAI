@@ -217,7 +217,22 @@ router.get('/patients', requirePermission('patients.view'), async (req, res) => 
     const q = String(req.query.search || '').trim();
     let patients = await listClinicPatientsAdmin(currentClinicId());
     if (q) patients = patients.filter((p) => matchSearch(p.name || '', q) || matchSearch(p.phone || '', q));
-    return res.json(patients);
+
+    // Annotate each patient with the doctor(s) who attended them, so the admin can
+    // see which doctor saw which patient (attribution). Derived from consultations.
+    const cons = (await consultationsRepo.findAll()) as Array<{ patientId?: string; doctorName?: string }>;
+    const byPatient = new Map<string, Set<string>>();
+    for (const c of cons) {
+      const name = (c.doctorName || '').trim();
+      if (!c.patientId || !name) continue;
+      if (!byPatient.has(c.patientId)) byPatient.set(c.patientId, new Set());
+      byPatient.get(c.patientId)!.add(name);
+    }
+    const withDoctors = patients.map((p) => ({
+      ...p,
+      attendingDoctors: Array.from(byPatient.get(p.id) ?? [])
+    }));
+    return res.json(withDoctors);
   } catch (error) {
     console.error('[admin:patients]', error);
     return res.json([]);

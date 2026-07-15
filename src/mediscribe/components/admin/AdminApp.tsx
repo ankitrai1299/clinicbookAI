@@ -3,14 +3,11 @@ import {
   LayoutDashboard,
   Stethoscope,
   Users,
-  Activity,
-  ClipboardList,
   BarChart3,
   Languages,
   Bell,
   Settings,
   ShieldCheck,
-  Search,
   LogOut,
   ArrowLeft,
   Menu,
@@ -24,14 +21,11 @@ import LoginView from './LoginView';
 import DashboardSection from './sections/DashboardSection';
 import DoctorsSection from './sections/DoctorsSection';
 import PatientsSection from './sections/PatientsSection';
-import ConsultationsSection from './sections/ConsultationsSection';
-import ReportsSection from './sections/ReportsSection';
 import AnalyticsSection from './sections/AnalyticsSection';
 import LanguagesSection from './sections/LanguagesSection';
 import NotificationsSection from './sections/NotificationsSection';
 import SettingsSection from './sections/SettingsSection';
 import RolesUsersSection from './sections/RolesUsersSection';
-import SearchSection from './sections/SearchSection';
 
 type SectionId =
   | 'dashboard'
@@ -54,18 +48,18 @@ interface NavItem {
   render: () => ReactElement;
 }
 
+// Consultations / Reports / Search are intentionally omitted from the admin
+// console — attribution now lives on the Patients page (each patient shows the
+// attending doctor + their visit history), so the standalone lists are redundant.
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view', render: () => <DashboardSection /> },
   { id: 'doctors', label: 'Doctors', icon: Stethoscope, permission: 'doctors.view', render: () => <DoctorsSection /> },
   { id: 'patients', label: 'Patients', icon: Users, permission: 'patients.view', render: () => <PatientsSection /> },
-  { id: 'consultations', label: 'Consultations', icon: Activity, permission: 'consultations.view', render: () => <ConsultationsSection /> },
-  { id: 'reports', label: 'Reports', icon: ClipboardList, permission: 'reports.view', render: () => <ReportsSection /> },
   { id: 'analytics', label: 'Analytics', icon: BarChart3, permission: 'analytics.view', render: () => <AnalyticsSection /> },
   { id: 'languages', label: 'Languages', icon: Languages, permission: 'analytics.view', render: () => <LanguagesSection /> },
   { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'notifications.view', render: () => <NotificationsSection /> },
   { id: 'settings', label: 'Settings', icon: Settings, permission: 'settings.view', render: () => <SettingsSection /> },
   { id: 'roles', label: 'Roles & Users', icon: ShieldCheck, permission: 'users.manage', render: () => <RolesUsersSection /> },
-  { id: 'search', label: 'Search', icon: Search, permission: 'dashboard.view', render: () => <SearchSection /> },
 ];
 
 interface AdminAppProps {

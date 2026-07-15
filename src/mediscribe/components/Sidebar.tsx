@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Clock, FileText, ClipboardList, Pill, Settings, Shield, LayoutGrid } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, Settings, Shield, LayoutGrid } from 'lucide-react';
 import Logo from './Logo';
 import type { Permission } from '../contracts';
 
@@ -14,13 +14,13 @@ interface SidebarProps {
 
 // Each nav item is gated by a permission (see ROLE_PERMISSIONS). This is the single
 // source of truth for the sidebar — hidden here means also refused by the server.
+// Transcripts / AI Reports / Prescriptions are intentionally NOT top-level nav for
+// the clinician — those live inside a patient's history / the consultation
+// workspace. The doctor dashboard stays focused: Dashboard, Patients, Sessions.
 export const NAV_ITEMS: { id: string; label: string; icon: typeof LayoutDashboard; permission: Permission }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
   { id: 'patients', label: 'Patients', icon: Users, permission: 'patients.view' },
   { id: 'consultations', label: 'Sessions', icon: Clock, permission: 'consultations.view' },
-  { id: 'transcripts', label: 'Transcripts', icon: FileText, permission: 'consultations.view' },
-  { id: 'reports', label: 'AI Reports', icon: ClipboardList, permission: 'reports.view' },
-  { id: 'prescriptions', label: 'Prescriptions', icon: Pill, permission: 'reports.view' },
   { id: 'settings', label: 'Settings', icon: Settings, permission: 'settings.view' },
   { id: 'admin', label: 'Admin', icon: Shield, permission: 'analytics.view' },
 ];

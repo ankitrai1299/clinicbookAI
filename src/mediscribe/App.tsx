@@ -179,9 +179,6 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'patients', label: 'Patients' },
     { id: 'consultations', label: 'Sessions' },
-    { id: 'transcripts', label: 'Transcripts' },
-    { id: 'reports', label: 'AI Reports' },
-    { id: 'prescriptions', label: 'Prescriptions' },
     { id: 'settings', label: 'Settings' },
     { id: 'admin', label: 'Admin' },
   ];

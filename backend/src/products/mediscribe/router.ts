@@ -12,7 +12,8 @@ import fs from 'fs';
 import express, { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 
-import { bridgeAuth } from './middleware/auth.js';
+import { bridgeAuth, type AuthedRequest } from './middleware/auth.js';
+import type { Role } from './contracts/index.js';
 import { currentClinicId } from './context.js';
 import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
@@ -21,7 +22,8 @@ import {
   consultationsRepo,
   transcriptsRepo,
   reportsRepo,
-  prescriptionsRepo
+  prescriptionsRepo,
+  usersRepo
 } from './repositories/index.js';
 import { logUsage, pushNotification } from './services/events.js';
 import {
@@ -77,6 +79,46 @@ function checkAudioFile(originalName?: string, mimetype?: string): { accepted: b
   if (ACCEPTED_AUDIO_EXT.has(ext)) return { accepted: true, reason: `extension ${ext}` };
   return { accepted: false, reason: `unrecognised audio (mime=${mime || 'empty'}, ext=${ext || 'none'})` };
 }
+
+// ── Doctor attribution / data isolation ──────────────────────
+// Every consultation is stamped with the DOCTOR who recorded it (the logged-in
+// user). A Doctor then only ever sees THEIR OWN patients + sessions + reports —
+// one doctor's patients never mix with another's — while admins see everything
+// (with the attending doctor shown). This resolves the effective MediScribe role
+// + display name the same way /me does (an admin-assigned role wins the default).
+interface Principal { id: string; role: Role; name: string; }
+async function resolvePrincipal(req: AuthedRequest): Promise<Principal> {
+  const auth = req.auth!;
+  const stored = (await usersRepo.findById(auth.userId)) as { role?: Role; name?: string } | null;
+  return {
+    id: auth.userId,
+    role: (stored?.role ?? auth.role) as Role,
+    name: (stored?.name && String(stored.name).trim()) || auth.email.split('@')[0]
+  };
+}
+
+// The set of consultation ids + patient ids that belong to this doctor — used to
+// scope the report/transcript/prescription collections (which link by
+// consultationId / id / patientId) down to just the doctor's own records.
+async function doctorScopeKeys(doctorId: string): Promise<{ consultIds: Set<string>; patientIds: Set<string> }> {
+  const cons = (await consultationsRepo.findAll()) as Array<{ id: string; patientId?: string; doctorId?: string }>;
+  const mine = cons.filter((c) => c.doctorId === doctorId);
+  return {
+    consultIds: new Set(mine.map((c) => c.id)),
+    patientIds: new Set(mine.map((c) => c.patientId).filter(Boolean) as string[])
+  };
+}
+
+// A collection record (report/transcript/prescription) belongs to the doctor when
+// it links to one of the doctor's consultations (by consultationId or shared id)
+// or one of the doctor's patients.
+const belongsToDoctor = (
+  rec: { id?: string; consultationId?: string; patientId?: string },
+  keys: { consultIds: Set<string>; patientIds: Set<string> }
+): boolean =>
+  (!!rec.consultationId && keys.consultIds.has(rec.consultationId)) ||
+  (!!rec.id && keys.consultIds.has(rec.id)) ||
+  (!!rec.patientId && keys.patientIds.has(rec.patientId));
 
 export const mediscribeRouter = Router();
 
@@ -190,9 +232,16 @@ mediscribeRouter.post('/generate-report', async (req: Request, res: Response) =>
 });
 
 // ── Patients (SHARED with ClinicBook — its Patient table is the source) ──
-mediscribeRouter.get('/patients', async (_req: Request, res: Response) => {
-  try { return res.json(await listClinicPatients(currentClinicId())); }
-  catch (error) { console.error('[mediscribe:patients]', error); return res.json([]); }
+// A Doctor sees only the patients THEY have consulted (derived from their own
+// consultations); admins/receptionists see the whole clinic list.
+mediscribeRouter.get('/patients', async (req: AuthedRequest, res: Response) => {
+  try {
+    const all = await listClinicPatients(currentClinicId());
+    const me = await resolvePrincipal(req);
+    if (me.role !== 'doctor') return res.json(all);
+    const { patientIds } = await doctorScopeKeys(me.id);
+    return res.json(all.filter((p) => patientIds.has(p.id)));
+  } catch (error) { console.error('[mediscribe:patients]', error); return res.json([]); }
 });
 
 // Adding a patient in the scribe creates a REAL ClinicBook patient (shared both
@@ -241,17 +290,29 @@ mediscribeRouter.get('/patients/:patientId/history', async (req: Request, res: R
 });
 
 // ── Consultations ────────────────────────────────────────────
-mediscribeRouter.get('/consultations', async (_req: Request, res: Response) => {
-  try { return res.json(await consultationsRepo.findAll()); }
-  catch (error) { console.error('[mediscribe:consultations]', error); return res.json([]); }
+// A Doctor sees only their own sessions; admins see all.
+mediscribeRouter.get('/consultations', async (req: AuthedRequest, res: Response) => {
+  try {
+    const items = (await consultationsRepo.findAll()) as Array<{ doctorId?: string }>;
+    const me = await resolvePrincipal(req);
+    return res.json(me.role === 'doctor' ? items.filter((c) => c.doctorId === me.id) : items);
+  } catch (error) { console.error('[mediscribe:consultations]', error); return res.json([]); }
 });
 
-mediscribeRouter.post('/save-consultation', async (req: Request, res: Response) => {
+mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Response) => {
   try {
     const consultation = req.body;
     if (!consultation?.id) return res.status(400).json({ error: 'consultation.id is required' });
     const existing = await consultationsRepo.findById(consultation.id);
     const isNew = !existing;
+
+    // Stamp the attending doctor once (the user who first records the session), and
+    // backfill any legacy record that predates attribution. Never reassigned after.
+    if (!(existing as { doctorId?: string } | null)?.doctorId && !consultation.doctorId) {
+      const me = await resolvePrincipal(req);
+      consultation.doctorId = me.id;
+      consultation.doctorName = me.name;
+    }
 
     // NEVER regress a finished consultation. A background auto-save carries
     // status 'Draft'/'Recording'/'Processing'; because the store shallow-merges,
@@ -284,9 +345,18 @@ mediscribeRouter.post('/save-consultation', async (req: Request, res: Response) 
 
 // ── Generic collections: reports, prescriptions, transcripts ─
 function registerCollection(name: string, repo: typeof reportsRepo) {
-  mediscribeRouter.get(`/${name}`, async (_req: Request, res: Response) => {
-    try { return res.json(await repo.findAll()); }
-    catch (error) { console.error(`[mediscribe:${name}]`, error); return res.json([]); }
+  mediscribeRouter.get(`/${name}`, async (req: AuthedRequest, res: Response) => {
+    try {
+      const items = await repo.findAll();
+      const me = await resolvePrincipal(req);
+      if (me.role !== 'doctor') return res.json(items);
+      const keys = await doctorScopeKeys(me.id);
+      return res.json(
+        (items as Array<{ id?: string; consultationId?: string; patientId?: string }>).filter((r) =>
+          belongsToDoctor(r, keys)
+        )
+      );
+    } catch (error) { console.error(`[mediscribe:${name}]`, error); return res.json([]); }
   });
   mediscribeRouter.post(`/${name}`, async (req: Request, res: Response) => {
     try {

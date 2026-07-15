@@ -136,6 +136,11 @@ export default function PatientsSection() {
                       {p.age} yrs • {p.gender}
                       {realPhone(p.phone) ? ` • ${realPhone(p.phone)}` : ''}
                     </div>
+                    {p.attendingDoctors && p.attendingDoctors.length > 0 && (
+                      <div className="text-xs font-medium text-blue-600 mt-0.5 truncate">
+                        Attended by {p.attendingDoctors.join(', ')}
+                      </div>
+                    )}
                   </div>
                   {canManage && (
                     <div className="flex items-center gap-1">
@@ -225,6 +230,9 @@ function PatientHistoryPanel({ patientId }: { patientId: string }) {
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                   <FileText size={15} className="text-blue-500" />
                   {h.visitDateTime}
+                  {h.doctorName && (
+                    <span className="text-xs font-medium text-blue-600">· {h.doctorName}</span>
+                  )}
                 </div>
                 <Badge tone={h.reportStatus === 'Completed' ? 'emerald' : 'amber'}>
                   {h.reportStatus}
