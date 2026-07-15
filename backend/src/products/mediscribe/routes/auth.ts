@@ -17,19 +17,33 @@ router.get('/me', async (req: AuthedRequest, res) => {
     const auth = req.auth!; // guaranteed by the bridge + requireAuth on the mount
     const stored = (await usersRepo.findById(auth.userId)) as Record<string, unknown> | null;
 
+    // A MediScribe role explicitly ASSIGNED to this user (Roles & Users) is the
+    // source of truth — this is what makes Doctor / Staff / Clinic Admin / Super
+    // Admin per-user. Only when none is assigned do we fall back to the default
+    // derived from the ClinicBook session (mapClinicBookRole).
+    const assignedRole = stored?.role as typeof auth.role | undefined;
+    const effectiveRole = assignedRole ?? auth.role;
+
     const merged: Record<string, unknown> = {
       name: auth.email.split('@')[0],
       ...(stored ?? {}),
-      // ClinicBook session is authoritative for identity + role.
       id: auth.userId,
       email: auth.email,
-      role: auth.role,
+      role: effectiveRole,
       status: 'active',
     };
 
-    // Mirror (best-effort) so admin user/doctor lists include this clinic admin.
+    // Mirror identity so admin user lists include this user. Persist the DEFAULT
+    // role ONLY when the user has none yet — never clobber an admin-assigned role
+    // (the store shallow-merges, so omitting `role` preserves the stored one).
     usersRepo
-      .upsert({ id: auth.userId, name: merged.name, email: auth.email, role: auth.role, status: 'active' })
+      .upsert({
+        id: auth.userId,
+        name: merged.name,
+        email: auth.email,
+        status: 'active',
+        ...(assignedRole ? {} : { role: auth.role }),
+      })
       .catch(() => undefined);
 
     return res.json({ user: sanitizeUser(merged) });

@@ -2,20 +2,26 @@ import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadow } from '../../src/theme';
+import { useAuth } from '../../src/context/Auth';
+import type { Permission } from '../../src/contracts';
 
 type Ion = keyof typeof Ionicons.glyphMap;
 
 // Bottom-tab navigation. Transcripts / reports / prescriptions are reached via
-// patient profiles and sessions, so there is no separate "Records" tab.
-const TABS: { name: string; title: string; icon: Ion; iconActive: Ion }[] = [
-  { name: 'index', title: 'Dashboard', icon: 'grid-outline', iconActive: 'grid' },
-  { name: 'patients', title: 'Patients', icon: 'people-outline', iconActive: 'people' },
-  { name: 'sessions', title: 'Sessions', icon: 'pulse-outline', iconActive: 'pulse' },
-  { name: 'admin', title: 'Admin', icon: 'shield-outline', iconActive: 'shield' },
-  { name: 'settings', title: 'Settings', icon: 'settings-outline', iconActive: 'settings' },
+// patient profiles and sessions, so there is no separate "Records" tab. Each tab
+// is gated by a permission (RBAC) — hidden for roles that can't access it.
+const TABS: { name: string; title: string; icon: Ion; iconActive: Ion; permission: Permission }[] = [
+  { name: 'index', title: 'Dashboard', icon: 'grid-outline', iconActive: 'grid', permission: 'dashboard.view' },
+  { name: 'patients', title: 'Patients', icon: 'people-outline', iconActive: 'people', permission: 'patients.view' },
+  { name: 'sessions', title: 'Sessions', icon: 'pulse-outline', iconActive: 'pulse', permission: 'consultations.view' },
+  { name: 'admin', title: 'Admin', icon: 'shield-outline', iconActive: 'shield', permission: 'analytics.view' },
+  { name: 'settings', title: 'Settings', icon: 'settings-outline', iconActive: 'settings', permission: 'settings.view' },
 ];
 
 export default function TabsLayout() {
+  const { user, hasPermission } = useAuth();
+  // Permissive until the user loads so tabs don't flash empty.
+  const canView = (p: Permission) => !user || hasPermission(p);
   return (
     <Tabs
       screenOptions={{
@@ -41,6 +47,8 @@ export default function TabsLayout() {
           name={t.name}
           options={{
             title: t.title,
+            // Hide the tab entirely for roles without the permission.
+            href: canView(t.permission) ? undefined : null,
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons name={focused ? t.iconActive : t.icon} size={size - 1} color={color} />
             ),

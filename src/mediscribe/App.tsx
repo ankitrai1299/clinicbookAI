@@ -13,6 +13,8 @@ import { Menu, X } from 'lucide-react';
 // Eagerly loaded shell — the only chunks on the first-paint critical path.
 import Logo from './components/Logo';
 import Sidebar from './components/Sidebar';
+import { useAuth } from './context/Auth';
+import type { Permission } from './contracts';
 // Code-split every view so they are not part of the initial bundle. This also
 // keeps `motion` (the animation lib, only used by the views) off the first-paint
 // path. The dashboard already shows a "Loading…" state during its data fetch, so
@@ -114,6 +116,35 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // Mounted inside the host app shell (the platform hub owns URL routing), so the
   // view is plain in-memory state starting at the dashboard.
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
+
+  // ── RBAC ──────────────────────────────────────────────────────────────────
+  // The logged-in user's role decides which views are visible/accessible. Each
+  // view maps to a permission; the sidebar hides what the role can't see, and a
+  // role that lands on (or deep-links to) a view it can't access is redirected to
+  // its first allowed view. Access is entirely from the authenticated session.
+  const { user, hasPermission } = useAuth();
+  const VIEW_PERM: Record<ViewState, Permission> = {
+    dashboard: 'dashboard.view',
+    patients: 'patients.view',
+    consultations: 'consultations.view',
+    transcripts: 'consultations.view',
+    reports: 'reports.view',
+    prescriptions: 'reports.view',
+    settings: 'settings.view',
+    admin: 'analytics.view',
+  };
+  // Permissive until the user is loaded, so the menu doesn't flash empty.
+  const canView = (p: Permission): boolean => !user || hasPermission(p);
+  const VIEW_ORDER: ViewState[] = ['dashboard', 'patients', 'consultations', 'transcripts', 'reports', 'prescriptions', 'settings', 'admin'];
+  useEffect(() => {
+    if (!user) return;
+    if (!hasPermission(VIEW_PERM[activeView])) {
+      const first = VIEW_ORDER.find((v) => hasPermission(VIEW_PERM[v]));
+      if (first && first !== activeView) setActiveView(first);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activeView]);
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
@@ -127,7 +158,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Navigation entries for the mobile dropdown menu (mirrors the desktop sidebar).
-  const mobileNavItems: { id: ViewState; label: string }[] = [
+  const ALL_MOBILE_NAV: { id: ViewState; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'patients', label: 'Patients' },
     { id: 'consultations', label: 'Sessions' },
@@ -137,6 +168,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
     { id: 'settings', label: 'Settings' },
     { id: 'admin', label: 'Admin' },
   ];
+  const mobileNavItems = ALL_MOBILE_NAV.filter((item) => canView(VIEW_PERM[item.id]));
 
   // Normalize raw API/MongoDB records so incomplete documents can't crash rendering
   const normalizePatient = (item: Partial<Patient> = {}): Patient => ({
@@ -466,6 +498,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
           onNavigate={(v) => setActiveView(v as ViewState)}
           onExitToHub={onExitToHub}
           doctorName={doctorName}
+          canView={canView}
         />
       )}
 

@@ -1,5 +1,6 @@
 import { LayoutDashboard, Users, Clock, FileText, ClipboardList, Pill, Settings, Shield, LayoutGrid } from 'lucide-react';
 import Logo from './Logo';
+import type { Permission } from '../contracts';
 
 interface SidebarProps {
   activeView: string;
@@ -7,19 +8,25 @@ interface SidebarProps {
   // When hosted inside the ClinicBook platform hub, returns to the app switcher.
   onExitToHub?: () => void;
   doctorName?: string;
+  // RBAC: only nav items the logged-in role is permitted to see are rendered.
+  canView?: (permission: Permission) => boolean;
 }
 
-export default function Sidebar({ activeView, onNavigate, onExitToHub, doctorName }: SidebarProps) {
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'patients', label: 'Patients', icon: Users },
-    { id: 'consultations', label: 'Sessions', icon: Clock },
-    { id: 'transcripts', label: 'Transcripts', icon: FileText },
-    { id: 'reports', label: 'AI Reports', icon: ClipboardList },
-    { id: 'prescriptions', label: 'Prescriptions', icon: Pill },
-    { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'admin', label: 'Admin', icon: Shield },
-  ];
+// Each nav item is gated by a permission (see ROLE_PERMISSIONS). This is the single
+// source of truth for the sidebar — hidden here means also refused by the server.
+export const NAV_ITEMS: { id: string; label: string; icon: typeof LayoutDashboard; permission: Permission }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+  { id: 'patients', label: 'Patients', icon: Users, permission: 'patients.view' },
+  { id: 'consultations', label: 'Sessions', icon: Clock, permission: 'consultations.view' },
+  { id: 'transcripts', label: 'Transcripts', icon: FileText, permission: 'consultations.view' },
+  { id: 'reports', label: 'AI Reports', icon: ClipboardList, permission: 'reports.view' },
+  { id: 'prescriptions', label: 'Prescriptions', icon: Pill, permission: 'reports.view' },
+  { id: 'settings', label: 'Settings', icon: Settings, permission: 'settings.view' },
+  { id: 'admin', label: 'Admin', icon: Shield, permission: 'analytics.view' },
+];
+
+export default function Sidebar({ activeView, onNavigate, onExitToHub, doctorName, canView }: SidebarProps) {
+  const navItems = NAV_ITEMS.filter((i) => !canView || canView(i.permission));
 
   return (
     <div className="w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex flex-shrink-0">

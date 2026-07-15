@@ -74,13 +74,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'consultations.manage',
     'reports.view',
     'reports.manage',
+    'settings.view',
   ],
   receptionist: [
-    'dashboard.view',
     'doctors.view',
     'patients.view',
     'patients.manage',
-    'notifications.view',
   ],
 };
 
