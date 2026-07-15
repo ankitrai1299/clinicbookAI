@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowLeft, ArrowRight, CalendarCheck, Key, Mail, Stethoscope } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, Building2, CalendarCheck, Key, Mail, ShieldCheck, Stethoscope, Users } from 'lucide-react';
 
 import { loginUser } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,16 @@ interface LoginPageProps {
   product?: 'clinicbook' | 'novascribe';
 }
 
+// The four MediScribe roles, shown as a choose-your-role step before the login form.
+// Selecting one is the entry context; the account's REAL role still governs what the
+// user can access after sign-in (the backend enforces it).
+const ROLE_OPTIONS = [
+  { key: 'doctor', label: 'Doctor', desc: 'Record consultations, reports & prescriptions', Icon: Stethoscope },
+  { key: 'staff', label: 'Staff', desc: 'Front desk — patients & doctor directory', Icon: Users },
+  { key: 'clinic_admin', label: 'Clinic Admin', desc: 'Manage the whole clinic', Icon: Building2 },
+  { key: 'super_admin', label: 'Super Admin', desc: 'Full platform access', Icon: ShieldCheck },
+] as const;
+
 export default function LoginPage({ setCurrentPage, onNeedVerification, product = 'clinicbook' }: LoginPageProps) {
   const isNova = product === 'novascribe';
   const { setAuth } = useAuth();
@@ -21,6 +31,9 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // MediScribe: pick a role first, then log in. (null = show the role picker.)
+  const [selectedRole, setSelectedRole] = useState<(typeof ROLE_OPTIONS)[number] | null>(null);
+  const showRolePicker = isNova && !selectedRole;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,11 +62,15 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
       <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-slate-100 shadow-md">
 
         <button
-          onClick={() => setCurrentPage(isNova ? 'novascribe-landing' : 'landing')}
+          onClick={() => {
+            // On the login form (after picking a role) → go back to the role picker.
+            if (isNova && selectedRole) { setSelectedRole(null); setError(null); return; }
+            setCurrentPage(isNova ? 'novascribe-landing' : 'landing');
+          }}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-4 cursor-pointer"
           id="login-back-btn"
         >
-          <ArrowLeft className="w-4 h-4" /> Back
+          <ArrowLeft className="w-4 h-4" /> {isNova && selectedRole ? 'Choose a different role' : 'Back'}
         </button>
 
         <div className="flex flex-col items-center gap-2 mb-8">
@@ -63,20 +80,51 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
             {isNova ? <Stethoscope className="w-7 h-7" /> : <CalendarCheck className="w-7 h-7" />}
           </div>
           <h1 className="font-display text-2xl font-bold text-slate-900">
-            {isNova ? 'Sign in to MediScribe' : 'Sign in to your clinic'}
+            {showRolePicker ? 'Sign in to MediScribe' : isNova ? `Sign in as ${selectedRole!.label}` : 'Sign in to your clinic'}
           </h1>
           <p className="text-slate-400 text-sm text-center">
-            {isNova ? 'Access your MediScribe AI medical scribe' : 'Access your ClinicBook AI dashboard'}
+            {showRolePicker
+              ? 'Choose your role to continue'
+              : isNova
+                ? 'Access your MediScribe AI medical scribe'
+                : 'Access your ClinicBook AI dashboard'}
           </p>
         </div>
 
-        {error && (
+        {/* Role picker (MediScribe) — shown before the login form. */}
+        {showRolePicker && (
+          <div className="space-y-2.5">
+            {ROLE_OPTIONS.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => { setSelectedRole(r); setError(null); }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50/40 text-left transition-colors cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                  <r.Icon className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-slate-900">{r.label}</div>
+                  <div className="text-xs text-slate-500 truncate">{r.desc}</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-300 ml-auto shrink-0" />
+              </button>
+            ))}
+            <p className="text-[11px] text-slate-400 text-center pt-2">
+              Your actual access is set by your account's assigned role.
+            </p>
+          </div>
+        )}
+
+        {!showRolePicker && error && (
           <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
+        {!showRolePicker && (
+        <>
         <form onSubmit={handleSubmit} className="space-y-4" id="login-form">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
@@ -136,6 +184,8 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
             Create clinic account
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
