@@ -143,21 +143,42 @@ router.post('/users', requirePermission('users.manage'), async (req, res) => {
   try {
     const { name, email, password, role } = req.body ?? {};
     if (!email || !role) return res.status(400).json({ error: 'email and role are required' });
-    const normalized = String(email).toLowerCase().trim();
-    if ((await usersRepo.findBy({ email: normalized })).length) {
-      return res.status(409).json({ error: 'A user with that email already exists' });
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ error: 'A password (min 6 chars) is required' });
     }
-    const user = {
-      id: newId('usr'),
-      name: name || normalized.split('@')[0],
-      email: normalized,
-      passwordHash: password ? await hashPassword(String(password)) : '',
-      role,
-      status: 'active' as const,
-      hospitalId: '',
-    };
-    await usersRepo.upsert(user);
-    return res.json(sanitizeUser(user));
+    const normalized = String(email).toLowerCase().trim();
+
+    // Create a REAL, pre-verified ClinicBook login account in THIS clinic. The
+    // ClinicBook role is mapped from the chosen MediScribe role (ClinicBook has no
+    // DOCTOR enum); the full MediScribe role (e.g. 'doctor') is stored keyed by the
+    // new account id, so on login /me returns it and the correct panel opens. This is
+    // what makes "doctorx@clinic → doctor panel, adminx@clinic → admin panel" work.
+    const { prisma } = await import('../../../config/prisma.js');
+    const { UserRole } = await import('@prisma/client');
+    const bcrypt = (await import('bcryptjs')).default;
+
+    const exists = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true } });
+    if (exists) return res.status(409).json({ error: 'A user with that email already exists' });
+
+    const clinicRole =
+      role === 'superadmin' ? UserRole.ADMIN : role === 'hospital_admin' ? UserRole.CLINIC_ADMIN : UserRole.STAFF;
+
+    const account = await prisma.user.create({
+      data: {
+        clinicId: currentClinicId(),
+        name: name || normalized.split('@')[0],
+        email: normalized,
+        passwordHash: await bcrypt.hash(String(password), 12),
+        role: clinicRole,
+        emailVerified: true,
+      },
+      select: { id: true, name: true, email: true },
+    });
+
+    // Persist the MediScribe role keyed by the ClinicBook account id (what /me reads).
+    const mUser = { id: account.id, name: account.name, email: account.email, role, status: 'active' as const, hospitalId: '' };
+    await usersRepo.upsert(mUser);
+    return res.json(sanitizeUser(mUser));
   } catch (error) {
     console.error('[admin:user:create]', error);
     return res.status(500).json({ error: 'Failed to create user' });
@@ -168,7 +189,19 @@ router.put('/users/:id/role', requirePermission('users.manage'), async (req, res
   try {
     const { role } = req.body ?? {};
     if (!role) return res.status(400).json({ error: 'role is required' });
+    // The MediScribe role (what /me reads → drives the panel).
     await usersRepo.upsert({ id: req.params.id, role } as any);
+    // Keep the ClinicBook account role aligned (best-effort; no-op for records that
+    // aren't a real ClinicBook account).
+    try {
+      const { prisma } = await import('../../../config/prisma.js');
+      const { UserRole } = await import('@prisma/client');
+      const clinicRole =
+        role === 'superadmin' ? UserRole.ADMIN : role === 'hospital_admin' ? UserRole.CLINIC_ADMIN : UserRole.STAFF;
+      await prisma.user.update({ where: { id: req.params.id }, data: { role: clinicRole } });
+    } catch {
+      /* not a ClinicBook account row — MediScribe role is enough */
+    }
     return res.json({ success: true });
   } catch (error) {
     console.error('[admin:user:role]', error);
