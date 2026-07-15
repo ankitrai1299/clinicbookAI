@@ -145,6 +145,23 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeView]);
 
+  // On first login, land on the role's HOME panel: an Admin (Clinic Admin / Super
+  // Admin) opens straight into the Admin console; a Doctor opens the scribe
+  // Dashboard; front-desk Staff opens Patients.
+  const landedRef = useRef(false);
+  useEffect(() => {
+    if (!user || landedRef.current) return;
+    landedRef.current = true;
+    const home: ViewState =
+      user.role === 'superadmin' || user.role === 'hospital_admin'
+        ? 'admin'
+        : hasPermission(VIEW_PERM.dashboard)
+          ? 'dashboard'
+          : VIEW_ORDER.find((v) => hasPermission(VIEW_PERM[v])) ?? 'dashboard';
+    setActiveView(home);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const [patients, setPatients] = useState<Patient[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
