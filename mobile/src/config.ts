@@ -33,3 +33,14 @@ export const AUTH_BASE = `${API_ROOT}/api/auth`;
 
 // Surfaced in the UI so the doctor can see/diagnose connection problems.
 export const isApiConfigured = (): boolean => API_ROOT.length > 0;
+
+// ── Web app (WebView) ────────────────────────────────────────
+// The phone app is a thin shell around the SAME web NovaScribe the browser uses,
+// so it's feature-for-feature identical and always in sync. Point this at the
+// deployed frontend (Vercel). Override per-build with EXPO_PUBLIC_WEB_URL.
+const WEB_URL_FALLBACK = 'https://clinicbook-ai-yj2d.vercel.app';
+export const WEB_ROOT = (process.env.EXPO_PUBLIC_WEB_URL || WEB_URL_FALLBACK || '').replace(/\/+$/, '');
+
+// Open straight into MediScribe (the web app reads `?app=novascribe` and skips the
+// product hub → same login → the full scribe).
+export const WEB_APP_URL = `${WEB_ROOT}/?app=novascribe`;

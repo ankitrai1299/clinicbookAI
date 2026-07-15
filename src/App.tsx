@@ -19,12 +19,22 @@ import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
 
+// Deep-link support: `?app=novascribe` opens straight into MediScribe (skipping
+// the hub). The mobile WebView shell loads the site with this param so the phone
+// app IS the web NovaScribe — same login, same functions, just mobile-framed.
+const wantsNovaScribe =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('app') === 'novascribe';
+
 function AppShell() {
   const { user, loading, logout, setAuth } = useAuth();
-  // The platform launcher (product chooser) is the first screen.
-  const [currentPage, setCurrentPage] = useState<PageType>('hub');
+  // The platform launcher (product chooser) is the first screen — unless deep-linked
+  // straight to a product (e.g. the mobile app loads `?app=novascribe`).
+  const [currentPage, setCurrentPage] = useState<PageType>(wantsNovaScribe ? 'novascribe' : 'hub');
   // Which product's app to land on after a successful login.
-  const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>('dashboard');
+  const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>(
+    wantsNovaScribe ? 'novascribe' : 'dashboard',
+  );
   // Deep-link a specific dashboard tab (e.g. the docs page's "Get an API key"
   // jumps a logged-in clinic straight to Developers & API, not the Overview).
   const [dashboardTab, setDashboardTab] = useState<DashboardTab | undefined>(undefined);
