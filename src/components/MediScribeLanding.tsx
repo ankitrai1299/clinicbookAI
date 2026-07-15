@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Stethoscope, Mic, FileText, Pill, ShieldCheck, Languages, ArrowRight, ArrowLeft, Check,
+  Stethoscope, Mic, FileText, Pill, ShieldCheck, Languages, ArrowRight, ArrowLeft, Check, Smartphone,
 } from 'lucide-react';
 
 interface Props {
@@ -8,6 +8,10 @@ interface Props {
   onOpen: () => void;   // open the app (or go to login)
   onBack: () => void;   // back to the platform hub
 }
+
+// The Android APK download link. Set VITE_MEDISCRIBE_APK_URL (Vercel env) to the
+// URL of the EAS-built APK; until then the button shows a "coming soon" state.
+const APK_URL = (import.meta.env.VITE_MEDISCRIBE_APK_URL as string | undefined) || '';
 
 export default function MediScribeLanding({ isLoggedIn, onOpen, onBack }: Props) {
   return (
@@ -42,7 +46,26 @@ export default function MediScribeLanding({ isLoggedIn, onOpen, onBack }: Props)
               >
                 {isLoggedIn ? 'Open MediScribe' : 'Sign in to start'} <ArrowRight className="w-4 h-4" />
               </button>
-              <span className="text-sm text-slate-400">Same login as ClinicBook</span>
+
+              {/* Android app download */}
+              {APK_URL ? (
+                <a
+                  href={APK_URL}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-900 text-white font-semibold shadow-md hover:bg-slate-800 transition-colors"
+                >
+                  <Smartphone className="w-4 h-4" /> Download Android App
+                </a>
+              ) : (
+                <span
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-100 text-slate-400 font-semibold cursor-not-allowed"
+                  title="The Android app is being prepared"
+                >
+                  <Smartphone className="w-4 h-4" /> Android app — coming soon
+                </span>
+              )}
+            </div>
+            <div className="mt-2">
+              <span className="text-sm text-slate-400">Same login as ClinicBook — your clinic's data, on your phone.</span>
             </div>
 
             <div className="flex flex-wrap gap-x-5 gap-y-2 mt-7">

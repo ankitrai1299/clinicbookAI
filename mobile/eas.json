@@ -8,19 +8,28 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://novascribe-ai.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app"
       }
     },
     "preview": {
       "distribution": "internal",
+      "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://novascribe-ai.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app"
+      }
+    },
+    "apk": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app"
       }
     },
     "production": {
       "autoIncrement": true,
+      "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://novascribe-ai.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app"
       }
     }
   },
