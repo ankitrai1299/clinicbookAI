@@ -31,16 +31,24 @@ export function newId(prefix = 'usr'): string {
 }
 
 /**
- * Map a ClinicBook UserRole onto a MediScribe role. A clinic's admin gets full
- * access to the scribe (incl. its admin dashboard); other staff are doctors.
+ * Map a ClinicBook UserRole onto a MediScribe RBAC role — the single source of
+ * truth for what a logged-in user can see/do (drives the permission-gated sidebar
+ * on web + mobile). Three login roles, one-to-one:
+ *   ADMIN        → superadmin      (Super Admin — full platform)
+ *   CLINIC_ADMIN → hospital_admin  (Clinic Admin — full clinic)
+ *   STAFF        → receptionist    (Staff — front desk: patients/appointments only)
+ * (Doctors are resources, not login users, so there is no 'doctor' login role.)
  */
 export function mapClinicBookRole(role: string | undefined): Role {
   switch ((role || '').toUpperCase()) {
     case 'ADMIN':
-    case 'CLINIC_ADMIN':
       return 'superadmin';
+    case 'CLINIC_ADMIN':
+      return 'hospital_admin';
+    case 'STAFF':
+      return 'receptionist';
     default:
-      return 'doctor';
+      return 'receptionist';
   }
 }
 

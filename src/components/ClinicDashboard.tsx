@@ -25,6 +25,7 @@ import PatientRecordModal from './PatientRecordModal';
 import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
 import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, convertWaitlistEntry as convertWaitlistEntryApi, ApiWaitlistEntry } from '../api/waitlist';
 import { getMyClinic as getMyClinicApi, updateMyClinic as updateMyClinicApi } from '../api/clinic';
+import { getMe } from '../api/auth';
 import { getBillingStatus, createCheckoutSession as createCheckoutSessionApi, createPortalSession as createPortalSessionApi } from '../api/billing';
 import { getNotifications as getNotificationsApi, markAllNotificationsRead as markAllNotificationsReadApi, ApiNotification } from '../api/notifications';
 import { API_BASE } from '../api/client';
@@ -124,6 +125,26 @@ export default function ClinicDashboard({
 }: ClinicDashboardProps) {
 
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab ?? 'overview');
+
+  // ── RBAC ──────────────────────────────────────────────────────────────────
+  // The logged-in user's role (from the authenticated session) decides which tabs
+  // are visible. STAFF = front desk (appointments/patients/doctors/waitlist only);
+  // CLINIC_ADMIN + ADMIN see everything. Nothing is a hardcoded/demo role — it is
+  // always the real role of the authenticated user.
+  const [role, setRole] = useState<string>('');
+  useEffect(() => {
+    getMe().then((u) => setRole((u.role || '').toUpperCase())).catch(() => undefined);
+  }, []);
+  const isStaff = role === 'STAFF';
+  const STAFF_TABS = ['appointments', 'patients', 'calendar', 'waitlist'];
+  const canSeeTab = (id: string): boolean => !isStaff || STAFF_TABS.includes(id);
+  // Prevent direct access to a restricted tab (e.g. a deep-linked or stale tab):
+  // a staff user landing anywhere they can't see is bounced to Appointments.
+  useEffect(() => {
+    if (isStaff && !STAFF_TABS.includes(activeTab)) setActiveTab('appointments');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStaff, activeTab]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
@@ -532,7 +553,7 @@ export default function ClinicDashboard({
               { id: 'settings', label: 'Bot Settings', icon: Settings },
               { id: 'developers', label: 'Developers & API', icon: Key },
               { id: 'billing', label: 'Subscription Billing', icon: CreditCard }
-            ].map((tab) => {
+            ].filter((tab) => canSeeTab(tab.id)).map((tab) => {
               const TabIcon = tab.icon;
               const isSelected = activeTab === tab.id;
               return (
@@ -576,7 +597,7 @@ export default function ClinicDashboard({
           <div className="flex items-center gap-3">
             {/* Sidebar toggle option for mobile */}
             <div className="md:hidden flex gap-1.5 overflow-x-auto">
-              {['overview', 'appointments', 'waitlist', 'settings'].map((mTab) => (
+              {['overview', 'appointments', 'waitlist', 'settings'].filter(canSeeTab).map((mTab) => (
                 <button
                   key={mTab}
                   onClick={() => setActiveTab(mTab as DashboardTab)}
