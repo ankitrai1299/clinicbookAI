@@ -29,6 +29,7 @@ import { logUsage, pushNotification } from './services/events.js';
 import {
   listClinicPatients,
   createClinicPatient,
+  findClinicPatientByPhone,
   listClinicDoctors,
   listUpcomingAppointments
 } from './clinicData.js';
@@ -251,6 +252,19 @@ mediscribeRouter.post('/patients', async (req: Request, res: Response) => {
   try {
     const { name, phone, age, gender } = req.body ?? {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+
+    // Duplicate guard — CLINIC-WIDE (not just this doctor's list): a number booked
+    // via WhatsApp or added by another doctor also counts. Block with a clear
+    // "already registered" so the same phone is never added twice.
+    const dup = await findClinicPatientByPhone(currentClinicId(), typeof phone === 'string' ? phone : undefined);
+    if (dup) {
+      return res.status(409).json({
+        error: `This phone number is already registered (${dup.name}).`,
+        existed: true,
+        patient: dup
+      });
+    }
+
     const patient = await createClinicPatient(currentClinicId(), {
       name: String(name).trim(),
       phone: typeof phone === 'string' ? phone : undefined,

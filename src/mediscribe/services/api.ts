@@ -282,7 +282,12 @@ export async function savePatient(patient: Patient): Promise<Patient> {
     headers: { 'Content-Type': 'application/json', ...authHeader() },
     body: JSON.stringify(patient),
   });
-  if (!res.ok) throw new Error('Failed to save patient');
+  if (!res.ok) {
+    // Surface the server's message (e.g. "This phone number is already
+    // registered.") so the Add-Patient form can show it verbatim.
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string })?.error || 'Failed to save patient');
+  }
   const data = await res.json().catch(() => ({}));
   return (data?.patient as Patient) ?? patient;
 }

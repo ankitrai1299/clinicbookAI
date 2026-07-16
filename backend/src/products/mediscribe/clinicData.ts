@@ -38,6 +38,24 @@ export const listClinicPatients = async (clinicId: string): Promise<ScribePatien
 };
 
 /**
+ * Find a CLINIC-WIDE patient by phone (last 10 digits) — used to block adding a
+ * duplicate from the scribe. Unlike the doctor-scoped patient list, this sees the
+ * WHOLE clinic (a number booked via WhatsApp or added by another doctor counts),
+ * so the "already registered" check can't be bypassed by scope.
+ */
+export const findClinicPatientByPhone = async (
+  clinicId: string,
+  phone?: string | null
+): Promise<{ id: string; name: string } | null> => {
+  const digits = (phone || '').replace(/\D/g, '');
+  if (digits.length < 10) return null;
+  return forClinic(clinicId).patient.findFirst({
+    where: { phone: { contains: digits.slice(-10) } },
+    select: { id: true, name: true }
+  });
+};
+
+/**
  * Add a patient from the scribe → creates a REAL ClinicBook patient (shared both
  * ways) and returns it with the ClinicBook id, so the consultation links to the
  * same patient the rest of the clinic sees.
