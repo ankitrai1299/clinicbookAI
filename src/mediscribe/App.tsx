@@ -31,6 +31,7 @@ const PatientSelectModal = lazy(() => import('./components/PatientSelectModal'))
 const ConsultationWorkspace = lazy(() => import('./components/ConsultationWorkspace'));
 const PatientsView = lazy(() => import('./components/PatientsView'));
 const GenericListView = lazy(() => import('./components/GenericListView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
 const AdminApp = lazy(() => import('./components/admin/AdminApp'));
 import {
   getPatients,
@@ -345,6 +346,15 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
     }
   };
 
+  // Add a patient from the Patients tab (no consultation started). Persists to
+  // ClinicBook (shared, deduped by phone) and refreshes the list with the real
+  // returned record — so a repeat phone reuses the same patient, never a dup.
+  const handleCreatePatientOnly = async (name: string, age: number, gender: string, phone: string): Promise<void> => {
+    const draft: Patient = { id: `pat-${Date.now()}`, name, age, gender, phone };
+    const saved = await savePatient(draft);
+    setPatients(prev => [saved, ...prev.filter(p => p.id !== saved.id)]);
+  };
+
   const handleSelectExistingConsultation = (con: Consultation) => {
     setActiveConsultation(con);
   };
@@ -405,6 +415,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             patients={patients}
             consultations={consultations}
             onOpenConsultation={handleSelectExistingConsultation}
+            onAddPatient={handleCreatePatientOnly}
           />
         );
       case 'consultations':
@@ -494,10 +505,13 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
         );
       case 'settings':
         return (
-          <div className="p-8 text-center text-slate-500">
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">Settings</h1>
-            Language & Microphone configurations.
-          </div>
+          <SettingsView
+            doctorName={doctorName}
+            onLogout={() => {
+              logout();
+              window.location.reload();
+            }}
+          />
         );
       default:
         return null;

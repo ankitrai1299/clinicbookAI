@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Patient, Consultation } from '../types';
-import { Search, ChevronRight, FileText } from 'lucide-react';
+import { Search, ChevronRight, FileText, Plus, X } from 'lucide-react';
 import PreviousConsultationHistory from './PreviousConsultationHistory';
 import PatientRecordModal from '../../components/PatientRecordModal';
 import { realPhone } from '../../utils/phone';
@@ -10,13 +10,15 @@ interface PatientsViewProps {
   patients: Patient[];
   consultations?: Consultation[];
   onOpenConsultation?: (con: Consultation) => void;
+  onAddPatient?: (name: string, age: number, gender: string, phone: string) => Promise<void>;
 }
 
-export default function PatientsView({ patients, consultations = [], onOpenConsultation }: PatientsViewProps) {
+export default function PatientsView({ patients, consultations = [], onOpenConsultation, onAddPatient }: PatientsViewProps) {
   const [query, setQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // Full 360 record modal (bookings + medicines + notes) for a patient.
   const [recordId, setRecordId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const filtered = patients.filter(p =>
     (p.name || '').toLowerCase().includes(query.trim().toLowerCase()),
@@ -28,13 +30,21 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center gap-3 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Patients</h1>
           <p className="text-slate-500">
             {patients.length} {patients.length === 1 ? 'patient' : 'patients'} • manage records and past visits.
           </p>
         </div>
+        {onAddPatient && (
+          <button
+            onClick={() => setAdding(true)}
+            className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm shadow-sm transition-colors"
+          >
+            <Plus size={18} /> <span className="hidden sm:inline">Add New Patient</span><span className="sm:hidden">Add</span>
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
@@ -121,6 +131,102 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
       </div>
 
       {recordId && <PatientRecordModal patientId={recordId} onClose={() => setRecordId(null)} />}
+      {adding && onAddPatient && (
+        <AddPatientModal existing={patients} onAdd={onAddPatient} onClose={() => setAdding(false)} />
+      )}
     </motion.div>
+  );
+}
+
+const last10 = (p?: string | null) => (p || '').replace(/\D/g, '').slice(-10);
+
+function AddPatientModal({
+  existing,
+  onAdd,
+  onClose,
+}: {
+  existing: Patient[];
+  onAdd: (name: string, age: number, gender: string, phone: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [gender, setGender] = useState('Male');
+  const [phone, setPhone] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const digits = phone.replace(/\D/g, '');
+    if (!name.trim()) return setError('Please enter the patient name.');
+    if (digits.length < 10) return setError('A valid 10-digit phone number is required.');
+    // No duplicates: a phone already on file means it's the same patient.
+    if (existing.some((p) => last10(p.phone) && last10(p.phone) === digits.slice(-10))) {
+      return setError('A patient with this phone number already exists.');
+    }
+    setBusy(true);
+    try {
+      await onAdd(name.trim(), parseInt(age, 10) || 0, gender, phone.trim());
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add patient.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const input =
+    'w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all';
+  const label = 'block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h2 className="font-bold text-slate-900">Add New Patient</h2>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg" aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <form onSubmit={submit} className="p-5 space-y-4">
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-700 text-sm font-medium">{error}</div>
+          )}
+          <div>
+            <label className={label}>Full name</label>
+            <input autoFocus className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Patient name" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={label}>Age</label>
+              <input type="number" min={0} max={150} className={input} value={age} onChange={(e) => setAge(e.target.value)} placeholder="Age" />
+            </div>
+            <div>
+              <label className={label}>Gender</label>
+              <select className={input} value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className={label}>Phone number <span className="text-red-500">*</span></label>
+            <input type="tel" className={input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" />
+            <p className="text-xs text-slate-400 mt-1">Required &amp; unique — one patient per phone number.</p>
+          </div>
+          <div className="pt-1 flex gap-3 justify-end">
+            <button type="button" onClick={onClose} className="px-4 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={busy} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg font-semibold shadow-sm transition-colors">
+              {busy ? 'Adding…' : 'Add Patient'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
