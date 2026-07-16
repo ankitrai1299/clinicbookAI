@@ -1,0 +1,6 @@
+{
+  "name": "NovaScribe AI",
+  "description": "Premium, modern landing page for NovaScribe AI Medical Scribe.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
