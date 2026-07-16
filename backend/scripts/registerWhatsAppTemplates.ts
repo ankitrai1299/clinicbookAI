@@ -86,6 +86,17 @@ const templates: TemplateDefinition[] = [
     bodyText:
       'Hi {{1}}, medicine reminder from {{3}}.\n\nPlease take: {{2}}\n\nStay healthy! Reply here if you have any questions.',
     example: ['Asha', 'Paracetamol 500mg — 1 tablet after food', 'Sunrise Medical Center']
+  },
+  {
+    // Prescription ready — {{1}} patient · {{2}} doctor (bare) · {{3}} clinic ·
+    // {{4}} medicines (ONE line, no newlines). Sent when a MediScribe note is
+    // finalized and the 24h window is closed. Keep in sync with
+    // prescriptionReadyComponents in whatsapp.templates.ts.
+    name: 'prescription_ready',
+    category: 'UTILITY',
+    bodyText:
+      'Hi {{1}}! Your prescription from Dr. {{2}} at {{3}} is ready:\n\n{{4}}\n\nGet well soon. Reply here if you have any questions.',
+    example: ['Asha', 'Smith', 'Sunrise Medical Center', '1. Paracetamol 500mg — twice daily, 5 days; 2. Azithromycin 250mg — once daily, 3 days']
   }
 ];
 

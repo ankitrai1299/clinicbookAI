@@ -14,7 +14,8 @@ export const WhatsAppTemplate = {
   WAITLIST_OFFER: 'waitlist_offer',
   PATIENT_REGISTRATION: 'patient_registration',
   REGISTRATION_WELCOME: 'registration_welcome',
-  MEDICINE_REMINDER: 'medicine_reminder'
+  MEDICINE_REMINDER: 'medicine_reminder',
+  PRESCRIPTION_READY: 'prescription_ready'
 } as const;
 
 export type WhatsAppTemplateName = (typeof WhatsAppTemplate)[keyof typeof WhatsAppTemplate];
@@ -113,3 +114,20 @@ export interface MedicineReminderTemplateData {
 export const medicineReminderComponents = (
   d: MedicineReminderTemplateData
 ): TemplateComponent[] => bodyParams(d.patientName, d.medicine, d.clinicName);
+
+export interface PrescriptionReadyTemplateData {
+  patientName: string;
+  doctorName: string; // BARE name (no "Dr." — the body prints it)
+  clinicName: string;
+  medicines: string; // ONE line, comma/semicolon-separated (no newlines — Meta rule)
+}
+
+// prescription_ready:
+//   {{1}} patient · {{2}} doctor (bare) · {{3}} clinic · {{4}} medicines (one line)
+// Suggested approved body (submit via scripts/registerWhatsAppTemplates.ts):
+//   "Hi {{1}}! 🩺 Your prescription from Dr. {{2}} at {{3}} is ready:\n\n{{4}}\n\n
+//    Get well soon. Reply here for any questions."
+// NOTE: {{4}} must be a single line — WhatsApp rejects newlines inside a variable.
+export const prescriptionReadyComponents = (
+  d: PrescriptionReadyTemplateData
+): TemplateComponent[] => bodyParams(d.patientName, d.doctorName, d.clinicName, d.medicines);

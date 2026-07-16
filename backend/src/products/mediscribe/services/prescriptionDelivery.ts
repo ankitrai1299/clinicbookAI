@@ -12,7 +12,7 @@
 
 import { prisma } from '../../../config/prisma.js';
 import { sendTemplatedOrSession } from '../../../core/whatsapp/whatsapp.service.js';
-import { WhatsAppTemplate, appointmentCompletedComponents } from '../../../core/whatsapp/whatsapp.templates.js';
+import { WhatsAppTemplate, prescriptionReadyComponents } from '../../../core/whatsapp/whatsapp.templates.js';
 import { medicineLabel } from '../../../services/medicineReminder.frequency.js';
 import { consultationsRepo } from '../repositories/index.js';
 
@@ -80,13 +80,22 @@ export const sendPrescriptionOnFinalize = async (clinicId: string, consultation:
     followUp: followUpLine(consultation?.report),
   });
 
+  // Out-of-window fallback uses the approved template, so the FULL prescription
+  // still reaches the patient. Template variables can't contain newlines, so the
+  // medicine list is collapsed to a single semicolon-separated line for {{4}}.
+  const medsOneLine = meds
+    .map((m) => medicineLabel(m))
+    .filter((l) => l.trim().length > 3)
+    .join('; ');
+
   const { channel } = await sendTemplatedOrSession({
     to: patient.phone,
-    templateName: WhatsAppTemplate.APPOINTMENT_COMPLETED,
-    components: appointmentCompletedComponents({
-      clinicName,
+    templateName: WhatsAppTemplate.PRESCRIPTION_READY,
+    components: prescriptionReadyComponents({
       patientName,
       doctorName: bareDoctor(doctorName) || 'your doctor',
+      clinicName,
+      medicines: medsOneLine || 'See clinic for details',
     }),
     sessionBody: body,
     clinicId,
