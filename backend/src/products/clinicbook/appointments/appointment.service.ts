@@ -7,6 +7,7 @@ import {
 } from '../../../core/whatsapp/whatsapp.notifications.js';
 import { recordNotification } from '../../../core/notifications/notification.service.js';
 import { eventBus } from '../../../core/events/index.js';
+import { emitEvent, type PatientEventType } from '../../../core/timeline/patientTimeline.service.js';
 import { autoOfferFreedSlot } from '../waitlist/waitlist.service.js';
 import { canonicalizeTime, isPastSlot } from '../../../services/scheduling.service.js';
 import { runPostVisitWorkflow } from './postVisit.service.js';
@@ -77,6 +78,25 @@ const onStatusTransition = (prev: AppointmentStatus, appt: AppointmentRecord): v
 
   const patientName = appt.patient?.name ?? 'A patient';
   const doctorName = appt.doctor?.name ?? 'the doctor';
+
+  // Timeline: record the meaningful lifecycle transitions on the patient stream.
+  const TL: Partial<Record<AppointmentStatus, { type: PatientEventType; title: string }>> = {
+    [AppointmentStatus.CONFIRMED]: { type: 'confirmed', title: `Appointment confirmed — ${whenLabel(appt)}` },
+    [AppointmentStatus.NO_SHOW]: { type: 'no_show', title: `Marked no-show — ${whenLabel(appt)}` },
+    [AppointmentStatus.COMPLETED]: { type: 'visited', title: `Visit completed — ${whenLabel(appt)}` }
+  };
+  const ev = TL[appt.status];
+  if (ev && appt.patientId) {
+    emitEvent({
+      clinicId: appt.clinicId,
+      patientId: appt.patientId,
+      type: ev.type,
+      title: ev.title,
+      actorType: 'staff',
+      refType: 'appointment',
+      refId: appt.id
+    });
+  }
 
   if (appt.status === AppointmentStatus.CONFIRMED) {
     // Requirement 6: approval sends a WhatsApp confirmation to the patient.
@@ -194,6 +214,19 @@ export const createAppointment = async (
       appointmentTime: appointment.appointmentTime
     });
   }
+
+  // Timeline: record the booking on the patient's event stream (fire-and-forget).
+  emitEvent({
+    clinicId,
+    patientId: appointment.patientId,
+    type: 'booked',
+    title: `Booked with Dr. ${(appointment.doctor?.name ?? 'the doctor').replace(/^dr\.?\s*/i, '')} — ${appointment.appointmentDate
+      .toISOString()
+      .slice(0, 10)} ${appointment.appointmentTime}`,
+    actorType: 'patient',
+    refType: 'appointment',
+    refId: appointment.id
+  });
 
   // Requirement 4: every new booking raises a dashboard notification so staff see
   // bot-originated bookings (notify:false path) the moment they land.

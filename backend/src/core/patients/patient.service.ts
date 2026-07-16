@@ -4,6 +4,7 @@ import { createAppointment } from '../../products/clinicbook/appointments/appoin
 import { isSlotAvailable } from '../../services/scheduling.service.js';
 import { dataSourceFor } from '../datasource/index.js';
 import { notifyPatientRegistered } from '../whatsapp/whatsapp.notifications.js';
+import { emitEvent } from '../timeline/patientTimeline.service.js';
 import {
   CreatePatientInput,
   PublicBookingInput,
@@ -36,6 +37,14 @@ export const createPatient = async (
     name: input.name,
     phone: input.phone,
     language: input.language
+  });
+
+  emitEvent({
+    clinicId,
+    patientId: patient.id,
+    type: 'registered',
+    title: `${patient.name} registered`,
+    actorType: 'staff'
   });
 
   // Fire-and-forget WhatsApp registration confirmation (no-op if unconfigured).
@@ -97,6 +106,16 @@ export const createPublicPatient = async (
   const patient = existing
     ? await patients.update(existing.id, fields)
     : await patients.create({ phone: input.phone, language: 'English', source: 'public', ...fields });
+
+  if (!existing) {
+    emitEvent({
+      clinicId,
+      patientId: patient.id,
+      type: 'registered',
+      title: `${patient.name} self-registered`,
+      actorType: 'patient'
+    });
+  }
 
   // Fire-and-forget WhatsApp registration confirmation (no-op if unconfigured).
   if (patient.patientCode && patient.phone) {

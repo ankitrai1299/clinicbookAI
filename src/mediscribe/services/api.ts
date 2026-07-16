@@ -7,6 +7,7 @@ import {
   TranscriptRecord,
   ConsultationHistoryItem,
   UpcomingAppointment,
+  TimelineEvent,
 } from '../types';
 import {
   AuthUser,
@@ -271,6 +272,17 @@ export async function getPatientHistory(
     { cache: 'no-store', headers: authHeader() },
   );
   if (!res.ok) throw new Error(await errorMessage(res, 'Failed to fetch consultation history'));
+  return res.json();
+}
+
+// A patient's TIMELINE — the append-only event stream (registered / booked /
+// visited / prescribed / …), newest first.
+export async function getPatientTimeline(patientId: string): Promise<TimelineEvent[]> {
+  const res = await fetch(`${BASE}/patients/${encodeURIComponent(patientId)}/timeline`, {
+    cache: 'no-store',
+    headers: authHeader(),
+  });
+  if (!res.ok) throw new Error('Failed to load timeline');
   return res.json();
 }
 

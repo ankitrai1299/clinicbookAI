@@ -144,6 +144,23 @@ export interface HistoryMedicine {
   instructions: string;
 }
 
+// One entry on a patient's TIMELINE (GET /patients/:id/timeline) — the append-only
+// event stream (registered / booked / visited / prescribed / …), newest first.
+export interface TimelineEvent {
+  id: string;
+  type:
+    | 'registered' | 'booked' | 'confirmed' | 'reminded' | 'no_show' | 'visited'
+    | 'note_finalized' | 'prescribed' | 'lab_ordered' | 'follow_up_set'
+    | 'refill_due' | 'message_in' | 'message_out';
+  title: string;
+  detail: string | null;
+  actorType: string;
+  actorName: string | null;
+  refType: string | null;
+  refId: string | null;
+  at: string;
+}
+
 export interface ConsultationHistoryItem {
   consultationId: string;
   visitDateTime: string;

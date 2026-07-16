@@ -376,6 +376,33 @@ model MedicineReminder {
   @@index([consultationId])
 }
 
+// Append-only PATIENT TIMELINE. Every meaningful action across the platform
+// (registered, booked, reminded, visited, note finalized, prescribed, follow-up…)
+// writes one row. Read three ways: the Healthcare Brain's patient context, the
+// doctor's Patient Timeline UI, and the clinic's audit trail. Writes are
+// fire-and-forget; scalars + indexes (no FK) mirror MedicineReminder so recording
+// an event can never block or fail the action that produced it.
+model PatientEvent {
+  id        String   @id @default(cuid())
+  clinicId  String
+  patientId String
+  // 'registered' | 'booked' | 'confirmed' | 'reminded' | 'no_show' | 'visited' |
+  // 'note_finalized' | 'prescribed' | 'lab_ordered' | 'follow_up_set' |
+  // 'refill_due' | 'message_in' | 'message_out'
+  type      String
+  title     String // human one-line, e.g. "Booked with Dr. Mehra — Tue 10:00 AM"
+  detail    String?  @db.Text
+  actorType String   @default("system") // 'patient' | 'doctor' | 'staff' | 'system'
+  actorName String?
+  refType   String? // 'appointment' | 'consultation' | 'prescription' | 'reminder'
+  refId     String?
+  meta      Json?
+  at        DateTime @default(now())
+
+  @@index([clinicId, patientId, at])
+  @@index([clinicId, at])
+}
+
 enum AiMessageRole {
   USER
   ASSISTANT

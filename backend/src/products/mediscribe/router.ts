@@ -35,6 +35,7 @@ import {
 } from './clinicData.js';
 import { syncFromScribeConsultation } from '../../services/medicineReminder.service.js';
 import { sendPrescriptionOnFinalize } from './services/prescriptionDelivery.js';
+import { emitEvent, getPatientTimeline } from '../../core/timeline/patientTimeline.service.js';
 
 // 25 MB ceiling — matches the client-side limit for uploaded audio files.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -304,6 +305,19 @@ mediscribeRouter.get('/patients/:patientId/history', async (req: Request, res: R
   }
 });
 
+// Patient TIMELINE — the append-only event stream (registered / booked / visited /
+// prescribed / …), newest first. The doctor's Patient Timeline UI reads this.
+mediscribeRouter.get('/patients/:patientId/timeline', async (req: Request, res: Response) => {
+  try {
+    const { patientId } = req.params;
+    if (!patientId) return res.status(400).json({ error: 'patientId is required' });
+    return res.json(await getPatientTimeline(currentClinicId(), patientId));
+  } catch (error) {
+    console.error('[mediscribe:patient-timeline]', error);
+    return res.json([]);
+  }
+});
+
 // ── Consultations ────────────────────────────────────────────
 // A Doctor sees only their own sessions; admins see all.
 mediscribeRouter.get('/consultations', async (req: AuthedRequest, res: Response) => {
@@ -344,8 +358,27 @@ mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Resp
       delete consultation.report;
       delete consultation.prescriptions;
     }
+    const wasCompleted = (existing as { status?: string } | null)?.status === 'Completed';
     await consultationsRepo.upsert(consultation);
     if (isNew) pushNotification('new_consultation', 'New consultation', `Session started for ${consultation.patientName || 'a patient'}`, { consultationId: consultation.id });
+
+    // Timeline: first time this note is finalized (once, not on every re-save).
+    if (!wasCompleted && consultation.status === 'Completed' && consultation.patientId) {
+      const cc =
+        (Array.isArray(consultation?.report?.chiefComplaint) && consultation.report.chiefComplaint[0]) ||
+        (Array.isArray(consultation?.report?.chiefComplaints) && consultation.report.chiefComplaints[0]?.complaint) ||
+        '';
+      emitEvent({
+        clinicId: currentClinicId(),
+        patientId: String(consultation.patientId),
+        type: 'note_finalized',
+        title: cc ? `Consultation completed — ${cc}` : 'Consultation completed',
+        actorType: 'doctor',
+        actorName: consultation.doctorName ? String(consultation.doctorName).replace(/^dr\.?\s*/i, '') : undefined,
+        refType: 'consultation',
+        refId: String(consultation.id)
+      });
+    }
     // Schedule WhatsApp medicine reminders from a finalized prescription
     // (fire-and-forget — a reminder failure must never fail the save).
     void syncFromScribeConsultation(currentClinicId(), consultation).catch((e) =>

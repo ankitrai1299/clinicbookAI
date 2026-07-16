@@ -14,6 +14,7 @@ import { prisma } from '../../../config/prisma.js';
 import { sendTemplatedOrSession } from '../../../core/whatsapp/whatsapp.service.js';
 import { WhatsAppTemplate, prescriptionReadyComponents } from '../../../core/whatsapp/whatsapp.templates.js';
 import { medicineLabel } from '../../../services/medicineReminder.frequency.js';
+import { emitEvent } from '../../../core/timeline/patientTimeline.service.js';
 import { consultationsRepo } from '../repositories/index.js';
 
 const bareDoctor = (name: string): string => name.replace(/^dr\.?\s*/i, '').trim();
@@ -103,6 +104,17 @@ export const sendPrescriptionOnFinalize = async (clinicId: string, consultation:
 
   // Mark as sent so a re-save never double-sends (shallow-merged into the note).
   await consultationsRepo.upsert({ id: consultationId, prescriptionSentAt: new Date().toISOString() } as any);
+  emitEvent({
+    clinicId,
+    patientId,
+    type: 'prescribed',
+    title: `Prescription sent — ${meds.length} medicine${meds.length === 1 ? '' : 's'}`,
+    detail: medsOneLine,
+    actorType: 'doctor',
+    actorName: bareDoctor(doctorName) || undefined,
+    refType: 'consultation',
+    refId: consultationId
+  });
   console.info(`[Prescription] Sent via ${channel} → ${patientName} (${meds.length} medicine(s))`);
   return true;
 };

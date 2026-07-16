@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Patient, Consultation } from '../types';
 import { Search, ChevronRight, FileText, Plus, X } from 'lucide-react';
 import PreviousConsultationHistory from './PreviousConsultationHistory';
+import PatientTimeline from './PatientTimeline';
 import PatientRecordModal from '../../components/PatientRecordModal';
 import { realPhone } from '../../utils/phone';
 
@@ -113,7 +114,9 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
                   {/* Patient details — Previous Consultation History (fetched
                       from the dedicated endpoint when the profile is opened) */}
                   {isOpen && (
-                    <div className="bg-slate-50/70 border-t border-slate-100 px-4 py-4">
+                    <div className="bg-slate-50/70 border-t border-slate-100 px-4 py-4 space-y-5">
+                      <PatientTimeline patientId={p.id} />
+                      <div className="border-t border-slate-200/70" />
                       <PreviousConsultationHistory
                         patientId={p.id}
                         onOpenConsultation={cid => {
