@@ -42,7 +42,7 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
             onClick={() => setAdding(true)}
             className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm shadow-sm transition-colors"
           >
-            <Plus size={18} /> <span className="hidden sm:inline">Add New Patient</span><span className="sm:hidden">Add</span>
+            <Plus size={18} /> Add Patient
           </button>
         )}
       </div>

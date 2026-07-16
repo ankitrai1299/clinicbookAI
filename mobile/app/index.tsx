@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -50,6 +50,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Cache-bust the initial document each launch (and on Retry) so the app always
+  // loads the LATEST deployed web — never a stale WebView-cached page. Hashed JS
+  // bundles still cache normally (a new deploy = new hashes = fetched fresh).
+  const url = useMemo(() => `${WEB_APP_URL}&_ts=${Date.now()}`, [reloadKey]);
 
   // Pre-grant the OS microphone permission so the WebView can auto-grant the
   // site's getUserMedia() request (mediaCapturePermissionGrantType="grant").
@@ -106,8 +111,11 @@ export default function App() {
           <WebView
             key={reloadKey}
             ref={webRef}
-            source={{ uri: WEB_APP_URL }}
+            source={{ uri: url }}
             originWhitelist={['*']}
+            // Always revalidate the document against the network so a new web
+            // deploy shows up on next launch without reinstalling the app.
+            cacheMode="LOAD_NO_CACHE"
             // Core web features the scribe relies on.
             javaScriptEnabled
             domStorageEnabled
