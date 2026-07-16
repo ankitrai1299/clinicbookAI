@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import { WEB_APP_URL } from '../src/config';
 import { colors } from '../src/theme';
 
@@ -41,6 +42,17 @@ async function sharePdf(filename: string, dataUrl: string): Promise<void> {
     }
   } catch (err) {
     console.error('[webview] share pdf failed', err);
+  }
+}
+
+// Open the NATIVE Android print dialog for the report/transcript HTML. This shows
+// any connected printer + "Save as PDF" and has its own Cancel/Back — unlike a
+// WebView popup, which can't print and traps the user with no working Back.
+async function printDoc(html: string): Promise<void> {
+  try {
+    await Print.printAsync({ html });
+  } catch (err) {
+    console.error('[webview] print failed', err);
   }
 }
 
@@ -82,6 +94,8 @@ export default function App() {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg?.type === 'pdf' && typeof msg.dataUrl === 'string') {
         void sharePdf(msg.filename, msg.dataUrl);
+      } else if (msg?.type === 'print' && typeof msg.html === 'string') {
+        void printDoc(msg.html);
       }
     } catch {
       // non-JSON messages from the page are ignored

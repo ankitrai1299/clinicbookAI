@@ -44,12 +44,19 @@ async function htmlToPdf(html: string, filename: string): Promise<void> {
   saveAs(blob, filename);
 }
 
-// Running inside the mobile app's WebView shell (React Native). There, a popup
-// print window (`window.open` + `window.print`) isn't available, so Print is
-// routed to the SAME server-rendered PDF as Download — the native share sheet it
-// opens offers Print / Save / share. Keeps "Print == Download" on mobile too.
+// Running inside the mobile app's WebView shell (React Native).
 const inMobileApp = (): boolean =>
   typeof window !== 'undefined' && !!(window as unknown as { ReactNativeWebView?: unknown }).ReactNativeWebView;
+
+// Inside the app, `window.print()` / popup windows don't work in a WebView (and a
+// report opened in the WebView traps the user with no working Back). So Print is
+// handed to the React Native shell, which opens the NATIVE Android print dialog
+// (expo-print) — that shows any connected printer + "Save as PDF" and has its own
+// Cancel/Back. We send the exact same report/transcript HTML the PDF is built from.
+function bridgePrint(html: string): void {
+  (window as unknown as { ReactNativeWebView?: { postMessage: (m: string) => void } })
+    .ReactNativeWebView?.postMessage(JSON.stringify({ type: 'print', html }));
+}
 
 // Open the SAME report/transcript HTML in a print window. Same HTML the PDF is
 // built from → the print preview and the downloaded PDF are the same document.
@@ -63,14 +70,14 @@ function printHtml(html: string): void {
 }
 
 // ── Public API — the ONLY report/transcript PDF + print entry points ──────────
-export const printReport = (report: ReportData, meta: ReportMeta = {}): void | Promise<void> =>
+export const printReport = (report: ReportData, meta: ReportMeta = {}): void =>
   inMobileApp()
-    ? htmlToPdf(buildReportHtml(report, meta), fileName('report', meta, 'pdf'))
+    ? bridgePrint(buildReportHtml(report, meta))
     : printHtml(buildReportHtml(report, meta));
 
-export const printTranscript = (text: string, meta: ReportMeta = {}): void | Promise<void> =>
+export const printTranscript = (text: string, meta: ReportMeta = {}): void =>
   inMobileApp()
-    ? htmlToPdf(buildTranscriptHtml(text, meta), fileName('transcript', meta, 'pdf'))
+    ? bridgePrint(buildTranscriptHtml(text, meta))
     : printHtml(buildTranscriptHtml(text, meta));
 
 export const downloadReportPdf = (report: ReportData, meta: ReportMeta = {}): Promise<void> =>
