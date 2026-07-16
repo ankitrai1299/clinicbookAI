@@ -33,6 +33,7 @@ import {
   listUpcomingAppointments
 } from './clinicData.js';
 import { syncFromScribeConsultation } from '../../services/medicineReminder.service.js';
+import { sendPrescriptionOnFinalize } from './services/prescriptionDelivery.js';
 
 // 25 MB ceiling — matches the client-side limit for uploaded audio files.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -335,6 +336,10 @@ mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Resp
     // (fire-and-forget — a reminder failure must never fail the save).
     void syncFromScribeConsultation(currentClinicId(), consultation).catch((e) =>
       console.error('[mediscribe:save-consultation] reminder sync failed:', e)
+    );
+    // Send the finalized prescription to the patient's WhatsApp (once, best-effort).
+    void sendPrescriptionOnFinalize(currentClinicId(), consultation).catch((e) =>
+      console.error('[mediscribe:save-consultation] prescription send failed:', e)
     );
     return res.json({ success: true });
   } catch (error) {
