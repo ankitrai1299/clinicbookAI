@@ -15,6 +15,18 @@ const getClinicId = (req: Request) => {
   return clinicId;
 };
 
+// A patient is a "ClinicBook patient" (belongs on the clinic dashboard) when they
+// are reachable on WhatsApp — i.e. they have a real phone number. Booking, the
+// WhatsApp bot and self-registration ALL capture a phone; only MediScribe's
+// scribe-created records (a walk-in noted during a consultation) may have none.
+// Filtering on a real phone keeps the clinic's patient list to people who
+// actually booked / can be messaged, and leaves the scribe-only records to the
+// scribe — without hiding anything MediScribe needs (it uses its own endpoint).
+const hasRealPhone = (phone?: string | null): boolean => {
+  const digits = (phone || '').replace(/\D/g, '');
+  return digits.length >= 6 && !/^0+$/.test(digits);
+};
+
 export const createPatientHandler = asyncHandler(async (req: Request, res: Response) => {
   const clinicId = getClinicId(req);
   const patient = await createPatient(clinicId, req.body as CreatePatientInput);
@@ -30,9 +42,11 @@ export const getPatientsHandler = asyncHandler(async (req: Request, res: Respons
   const clinicId = getClinicId(req);
   const patients = await getPatients(clinicId);
 
+  // The ClinicBook dashboard lists WhatsApp/booking patients only — scribe-created
+  // walk-ins with no phone stay in MediScribe, not here.
   res.status(200).json({
     success: true,
-    data: patients
+    data: patients.filter((p) => hasRealPhone(p.phone))
   });
 });
 
