@@ -360,8 +360,13 @@ function escapeHtml(s: string): string {
 
 export interface ReportMeta {
   patientName?: string;
+  patientAge?: number;
+  patientGender?: string;
+  patientPhone?: string;
   date?: string;
   doctorName?: string;
+  doctorQualification?: string;
+  doctorRegNo?: string;
   // Concise previous-visit comparison baked into the report (print + PDF). Shape
   // matches compareVisits.PreviousVisitPdf (kept structural to avoid an import
   // cycle). null/undefined → the section prints "No previous consultation available."
@@ -416,7 +421,12 @@ export const FONT_LINK =
  *  Same styling language as the report so both exports look like one product, and the
  *  Unicode font stack keeps every language readable (no corrupted glyphs). */
 export function buildTranscriptHtml(text: string, meta: ReportMeta = {}): string {
-  const sub = [meta.patientName, meta.date].filter(Boolean).map(escapeHtml).join('  •  ');
+  const demographics = [
+    typeof meta.patientAge === 'number' && meta.patientAge > 0 ? `${meta.patientAge} yrs` : '',
+    meta.patientGender
+  ].filter(Boolean).join(', ');
+  const sub = [meta.patientName, demographics, meta.patientPhone, meta.date]
+    .filter(Boolean).map(escapeHtml).join('  •  ');
   const body = escapeHtml((text || '').trim() || 'No transcript available.');
   return `<!DOCTYPE html>
 <html>
@@ -517,7 +527,12 @@ export function buildReportHtml(report: ReportData, meta: ReportMeta = {}): stri
   });
   const sectionsHtml = (sections.length ? parts.join('') : pvHtml);
 
-  const sub = [meta.patientName, meta.date].filter(Boolean).map(escapeHtml).join('  •  ');
+  const demographics = [
+    typeof meta.patientAge === 'number' && meta.patientAge > 0 ? `${meta.patientAge} yrs` : '',
+    meta.patientGender
+  ].filter(Boolean).join(', ');
+  const sub = [meta.patientName, demographics, meta.patientPhone, meta.date]
+    .filter(Boolean).map(escapeHtml).join('  •  ');
 
   return `<!DOCTYPE html>
 <html>
@@ -564,6 +579,8 @@ ${FONT_LINK}
   <div class="signature">
     <div class="box">
       <div class="name">${escapeHtml(meta.doctorName || 'Attending Physician')}</div>
+      ${meta.doctorQualification ? `<div>${escapeHtml(meta.doctorQualification)}</div>` : ''}
+      ${meta.doctorRegNo ? `<div>Reg. No: ${escapeHtml(meta.doctorRegNo)}</div>` : ''}
       <div>Doctor's Signature</div>
     </div>
   </div>

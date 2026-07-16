@@ -197,6 +197,19 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   ];
   const mobileNavItems = ALL_MOBILE_NAV.filter((item) => canView(VIEW_PERM[item.id]));
 
+  // Phone app back-button: opening a consultation is a "deeper" screen, so the
+  // hardware Back should return to the list — NOT exit the whole app. The scribe
+  // is a state SPA (no URL per view), so we push a history entry when a session
+  // opens and close it on Back (popstate) instead of letting the WebView unwind
+  // its page history all the way out. Web is unaffected.
+  useEffect(() => {
+    if (!isMobileApp() || !activeConsultation) return;
+    window.history.pushState({ scribeConsultation: activeConsultation.id }, '');
+    const onPop = () => setActiveConsultation(null);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [activeConsultation]);
+
   // Normalize raw API/MongoDB records so incomplete documents can't crash rendering
   const normalizePatient = (item: Partial<Patient> = {}): Patient => ({
     id: item.id || crypto.randomUUID(),
@@ -703,6 +716,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 // audio, status).
                 key={activeConsultation.id}
                 consultation={activeConsultation}
+                patient={patients.find(p => p.id === activeConsultation.patientId)}
                 patientHistory={consultations.filter(c => c.patientId === activeConsultation.patientId)}
                 onFinish={handleFinishConsultation}
                 onSaveReport={handleSaveReport}

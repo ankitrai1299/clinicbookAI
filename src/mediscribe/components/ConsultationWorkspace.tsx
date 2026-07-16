@@ -10,8 +10,10 @@ import {
   Vitals,
   FollowUp,
   TranscriptLine,
+  Patient,
 } from '../types';
-import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
+import { loadDoctorProfile } from '../utils/settings';
+import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight, ArrowLeft } from 'lucide-react';
 import Logo from './Logo';
 import UploadedAudioPlayer from './UploadedAudioPlayer';
 import {
@@ -55,6 +57,9 @@ import { createVAD, VADController } from '../utils/vad';
 
 interface ConsultationWorkspaceProps {
   consultation: Consultation;
+  // The patient record (age / gender / phone) for the report header. Optional so
+  // an unlinked session still renders; demographics are simply omitted.
+  patient?: Patient;
   // Sessions for the currently selected patient only (scoped by the parent).
   patientHistory: Consultation[];
   onFinish: (updatedReport: ReportData, transcript: TranscriptLine[]) => void;
@@ -174,7 +179,7 @@ function isLikelyHallucination(text: string): boolean {
   return HALLUCINATION_PHRASES.some(p => lower.includes(p));
 }
 
-export default function ConsultationWorkspace({ consultation, patientHistory, onFinish, onSaveReport, onExit, onNewSession, onSelectSession, onSessionUpdate }: ConsultationWorkspaceProps) {
+export default function ConsultationWorkspace({ consultation, patient, patientHistory, onFinish, onSaveReport, onExit, onNewSession, onSelectSession, onSessionUpdate }: ConsultationWorkspaceProps) {
   const [isRecording, setIsRecording] = useState(false);
   // Live-recording is paused (still the same consultation; transcript retained).
   const [isPaused, setIsPaused] = useState(false);
@@ -198,7 +203,24 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
   const [error, setError] = useState<string | null>(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
   // Doctor's name for the final review / signature block (print + export only).
-  const [doctorName, setDoctorName] = useState('');
+  // Seeded from the saved Settings profile so the doctor doesn't retype it.
+  const [doctorName, setDoctorName] = useState(() => loadDoctorProfile().name || '');
+
+  // Patient demographics + doctor letterhead (qualification / reg no) that print
+  // on the report & prescription. Demographics come from the linked patient; the
+  // letterhead from the per-device Settings profile.
+  const reportPatientMeta = {
+    patientAge: typeof patient?.age === 'number' ? patient.age : undefined,
+    patientGender: patient?.gender,
+    patientPhone: patient?.phone || undefined,
+  };
+  const letterhead = (() => {
+    const p = loadDoctorProfile();
+    return {
+      doctorQualification: p.qualification || undefined,
+      doctorRegNo: p.regNo || undefined,
+    };
+  })();
 
   // originalTranscript = raw Whisper output (in the originally spoken language).
   // displayedTranscript = what is shown in the textarea (translated + editable).
@@ -1110,8 +1132,10 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
   const handlePrint = () => {
     const html = buildReportHtml(reportData, {
       patientName: consultation.patientName,
+      ...reportPatientMeta,
       date: consultation.date,
       doctorName: doctorName.trim() || undefined,
+      ...letterhead,
       previousVisit: previousVisitPdf,
     });
     const w = window.open('', '_blank');
@@ -1130,8 +1154,10 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
   // `pick` selects the export function from the lazily-loaded download module.
   const exportMeta = {
     patientName: consultation.patientName,
+    ...reportPatientMeta,
     date: consultation.date,
     doctorName: doctorName.trim() || undefined,
+    ...letterhead,
   };
   type DownloadModule = typeof import('../utils/download');
   const runDownload = (pick: (m: DownloadModule) => void | Promise<void>) => {
@@ -2105,8 +2131,19 @@ export default function ConsultationWorkspace({ consultation, patientHistory, on
         <div className="flex-1 flex flex-col min-h-0">
           {/* Fixed header */}
           <div className="flex-shrink-0 p-4 border-b border-slate-200 bg-white shadow-sm z-10 flex justify-between items-center gap-2">
-            {/* Mobile-only MediScribe logo — returns to the dashboard */}
-            <Logo onClick={() => onExit?.()} className="md:hidden" />
+            {/* Mobile-only back + logo — returns to the previous screen */}
+            <div className="flex items-center gap-1.5 md:hidden">
+              {onExit && (
+                <button
+                  onClick={() => onExit()}
+                  aria-label="Back"
+                  className="p-1.5 -ml-1 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+              )}
+              <Logo onClick={() => onExit?.()} />
+            </div>
             <h3 className="hidden md:flex font-bold text-slate-900 items-center gap-2">
               <FileText size={18} className="text-blue-600" />
               Report Editor
