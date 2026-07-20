@@ -5,6 +5,7 @@ import NovaPricing from './novascribe/NovaPricing';
 import { NovaTrust, NovaFAQ, NovaFinalCTA } from './novascribe/NovaTrust';
 import PlatformStory from './platform/PlatformStory';
 import TrustStrip from './platform/TrustStrip';
+import PatientAsksSection from './platform/PatientAsksSection';
 
 interface Props {
   isLoggedIn: boolean;
@@ -42,6 +43,8 @@ export default function MediScribeLanding({ isLoggedIn, onOpen, onBack }: Props)
       {/* The same "one platform, two apps" story the ClinicBook landing tells —
           so a doctor landing here understands where the patient side fits. */}
       <PlatformStory />
+      {/* Where the doctor's prescription actually ends up — in the patient's chat. */}
+      <PatientAsksSection />
       <NovaPricing onOpen={onOpen} />
       <NovaTrust />
       <NovaFAQ />
