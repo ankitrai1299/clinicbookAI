@@ -6,6 +6,7 @@ import { NovaTrust, NovaFAQ, NovaFinalCTA } from './novascribe/NovaTrust';
 import PlatformStory from './platform/PlatformStory';
 import TrustStrip from './platform/TrustStrip';
 import PatientAsksSection from './platform/PatientAsksSection';
+import NovaScribeShowcase from './platform/NovaScribeShowcase';
 
 interface Props {
   isLoggedIn: boolean;
@@ -40,6 +41,8 @@ export default function MediScribeLanding({ isLoggedIn, onOpen, onBack }: Props)
       <NovaHero isLoggedIn={isLoggedIn} onOpen={onOpen} apkUrl={APK_URL} />
       <TrustStrip />
       <NovaFeatures />
+      {/* A clinic day end-to-end, shown as WhatsApp panels */}
+      <NovaScribeShowcase />
       {/* The same "one platform, two apps" story the ClinicBook landing tells —
           so a doctor landing here understands where the patient side fits. */}
       <PlatformStory />

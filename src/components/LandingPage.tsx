@@ -8,6 +8,7 @@ import { PageType } from '../types';
 import PlatformStory from './platform/PlatformStory';
 import TrustStrip from './platform/TrustStrip';
 import PatientAsksSection from './platform/PatientAsksSection';
+import ClinicBookShowcase from './platform/ClinicBookShowcase';
 
 interface LandingPageProps {
   setCurrentPage: (page: PageType) => void;
@@ -284,6 +285,9 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
           </div>
         </div>
       </section>
+
+      {/* 4a2. SHOWCASE — the real WhatsApp flows, panel by panel */}
+      <ClinicBookShowcase />
 
       {/* 4b. ONE PLATFORM, TWO APPS — what ClinicBook + NovaScribe do together */}
       <PlatformStory />
