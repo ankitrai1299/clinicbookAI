@@ -163,6 +163,121 @@ export const sendWhatsAppTextMessage = async (
   }
 };
 
+// --- Document (PDF) messages ----------------------------------------------
+// Two steps, per the Cloud API: upload the bytes to Meta to get a media id, then
+// send a message referencing it. Uploading (rather than passing a public link)
+// means the PDF never has to be hosted publicly — patient documents stay private.
+//
+// NOTE: a document is a FREE-FORM message, so it can only be sent while the 24h
+// customer-service window is open. Outside it, callers must fall back to an
+// approved template (see sendTemplatedOrSession).
+
+/** Upload a file to Meta and return its media id (null when unavailable). */
+export const uploadWhatsAppMedia = async (params: {
+  data: Buffer;
+  mimeType: string;
+  filename: string;
+  clinicId?: string | null;
+}): Promise<string | null> => {
+  try {
+    const { client, phoneNumberId } = await resolveSendContext(params.clinicId);
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', params.mimeType);
+    form.append(
+      'file',
+      new Blob([new Uint8Array(params.data)], { type: params.mimeType }),
+      params.filename
+    );
+    const res = await client.post<{ id?: string }>(`/${phoneNumberId}/media`, form);
+    return res.data?.id ?? null;
+  } catch (error) {
+    console.error(`[WhatsApp] media upload failed: ${describeError(error)}`);
+    return null;
+  }
+};
+
+/**
+ * Send a PDF (or other file) as a WhatsApp document. Returns false when the send
+ * could not be made — callers should then fall back to text/template rather than
+ * treating it as fatal.
+ */
+export const sendWhatsAppDocument = async (input: {
+  to: string;
+  data: Buffer;
+  filename: string;
+  caption?: string;
+  mimeType?: string;
+  messageType?: string;
+  clinicId?: string | null;
+}): Promise<boolean> => {
+  const label = input.messageType ?? 'document';
+  const intercepted = interceptSend(label);
+  if (intercepted) return true;
+  const suppressed = await sandboxIntercept(input.clinicId, label);
+  if (suppressed) return true;
+
+  const mimeType = input.mimeType ?? 'application/pdf';
+  const mediaId = await uploadWhatsAppMedia({
+    data: input.data,
+    mimeType,
+    filename: input.filename,
+    clinicId: input.clinicId
+  });
+  if (!mediaId) return false;
+
+  const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
+  const body = input.caption || input.filename;
+
+  try {
+    const response = await withRetry(
+      () =>
+        client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: input.to,
+          type: 'document',
+          document: {
+            id: mediaId,
+            filename: input.filename,
+            ...(input.caption ? { caption: input.caption } : {})
+          }
+        }),
+      {
+        onRetry: ({ attempt, delayMs, error }) =>
+          console.warn(
+            `[WhatsApp] document send to ${input.to} failed (attempt ${attempt}) — retrying in ${delayMs}ms: ${describeError(error)}`
+          )
+      }
+    );
+
+    await logOutbound({
+      to: input.to,
+      messageType: label,
+      body,
+      clinicId: input.clinicId,
+      waMessageId: extractWaMessageId(response.data),
+      status: 'sent'
+    });
+    noteSendSuccess();
+    return true;
+  } catch (error) {
+    const tokenExpired = isTokenExpiredError(error);
+    const detail = describeError(error);
+    console.error(`[WhatsApp] document send to ${input.to} FAILED: ${detail}`);
+    await logOutbound({
+      to: input.to,
+      messageType: label,
+      body,
+      clinicId: input.clinicId,
+      status: 'failed',
+      error: `${tokenExpired ? '[token_expired] ' : ''}${detail}`
+    });
+    noteSendFailure({ clinicId: input.clinicId, tokenExpired, error: detail });
+    return false;
+  }
+};
+
 // --- Interactive (buttons / list) messages --------------------------------
 // Build the Graph API `interactive` payload from a BotReply, enforcing Meta's
 // length limits (silently truncating titles/bodies that would otherwise be

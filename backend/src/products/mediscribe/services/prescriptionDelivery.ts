@@ -11,7 +11,12 @@
 // they give the patient both the prescription and the daily reminders on WhatsApp.
 
 import { prisma } from '../../../config/prisma.js';
-import { sendTemplatedOrSession } from '../../../core/whatsapp/whatsapp.service.js';
+import {
+  sendTemplatedOrSession,
+  sendWhatsAppDocument,
+  isConversationWindowOpen,
+} from '../../../core/whatsapp/whatsapp.service.js';
+import { buildPrescriptionPdf, prescriptionFileName } from './prescriptionPdf.js';
 import { WhatsAppTemplate, prescriptionReadyComponents } from '../../../core/whatsapp/whatsapp.templates.js';
 import { medicineLabel } from '../../../services/medicineReminder.frequency.js';
 import { emitEvent } from '../../../core/timeline/patientTimeline.service.js';
@@ -89,6 +94,26 @@ export const sendPrescriptionOnFinalize = async (clinicId: string, consultation:
     .filter((l) => l.trim().length > 3)
     .join('; ');
 
+  // Attach the ACTUAL prescription PDF when the 24h window is open — the patient
+  // gets the same document the clinic prints, not just a text summary. A document
+  // is a free-form message, so outside the window we can only send the approved
+  // template below (the patient's next reply opens a window and the MCP
+  // prescription skill can then deliver the file on request).
+  let pdfSent = false;
+  if (await isConversationWindowOpen(clinicId, patient.phone)) {
+    const pdf = await buildPrescriptionPdf(consultation);
+    if (pdf) {
+      pdfSent = await sendWhatsAppDocument({
+        to: patient.phone,
+        data: pdf,
+        filename: prescriptionFileName(patientName, consultation?.date),
+        caption: `Prescription — ${doctorName ? `Dr. ${bareDoctor(doctorName)}` : clinicName}`,
+        messageType: 'prescription_pdf',
+        clinicId,
+      });
+    }
+  }
+
   const { channel } = await sendTemplatedOrSession({
     to: patient.phone,
     templateName: WhatsAppTemplate.PRESCRIPTION_READY,
@@ -115,6 +140,8 @@ export const sendPrescriptionOnFinalize = async (clinicId: string, consultation:
     refType: 'consultation',
     refId: consultationId
   });
-  console.info(`[Prescription] Sent via ${channel} → ${patientName} (${meds.length} medicine(s))`);
+  console.info(
+    `[Prescription] Sent via ${channel}${pdfSent ? ' + PDF' : ''} → ${patientName} (${meds.length} medicine(s))`,
+  );
   return true;
 };

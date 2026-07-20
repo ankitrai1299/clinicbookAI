@@ -7,6 +7,8 @@
 import { skillRegistry } from '../../../core/mcp/skillRegistry.js';
 import type { McpContext } from '../../../core/mcp/index.js';
 import type { Skill } from '../../../core/mcp/skill.types.js';
+import { sendWhatsAppDocument } from '../../../core/whatsapp/whatsapp.service.js';
+import { buildPrescriptionPdf, prescriptionFileName } from '../../mediscribe/services/prescriptionPdf.js';
 import { latestScribeConsultation, type MedRow } from './mediscribeData.js';
 
 const formatMeds = (items: MedRow[]): string =>
@@ -41,6 +43,28 @@ const prescriptionSkill: Skill = {
     const meds = Array.isArray(consult.report.prescribedMedications) ? consult.report.prescribedMedications : [];
     const advice = Array.isArray(consult.report.advice) ? consult.report.advice.filter(Boolean) : [];
     const doctor = consult.doctorName ? `Dr. ${consult.doctorName.replace(/^dr\.?\s*/i, '')}` : 'your doctor';
+
+    // Send the ACTUAL prescription PDF too — the patient asked us, so the 24h
+    // window is open and a document is allowed. Best-effort: if the render or
+    // upload fails they still get the full text reply below.
+    const phone = phoneOf(ctx);
+    if (phone) {
+      try {
+        const pdf = await buildPrescriptionPdf(consult);
+        if (pdf) {
+          await sendWhatsAppDocument({
+            to: phone,
+            data: pdf,
+            filename: prescriptionFileName(consult.patientName, consult.date),
+            caption: `Prescription — ${doctor}`,
+            messageType: 'prescription_pdf',
+            clinicId: ctx.clinicId,
+          });
+        }
+      } catch (err) {
+        console.error('[novascribe.prescription] PDF delivery failed:', err);
+      }
+    }
 
     const lines: string[] = [`📋 *Your prescription* — ${doctor}`];
     if (meds.length) lines.push('', '*Medicines:*', formatMeds(meds));
