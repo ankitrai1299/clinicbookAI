@@ -111,10 +111,19 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
               </div>
             </div>
 
-            {/* Right side WhatsApp simulation preview */}
-            <div className="lg:col-span-5 flex justify-center">
-              <div 
-                className="w-full max-w-[370px] rounded-[36px] bg-slate-900 p-3 shadow-2xl relative border-4 border-slate-800 scale-100 hover:scale-[1.02] transition-transform duration-300"
+            {/* Right side WhatsApp simulation preview — a real patient sits behind
+                the phone so the hero shows WHO this is for, not just the UI. The
+                photo is hidden on small screens where there's no room for both. */}
+            <div className="lg:col-span-5 flex justify-center relative">
+              <img
+                src="/images/patient-3.jpg"
+                alt="A patient booking an appointment on WhatsApp"
+                loading="eager"
+                decoding="async"
+                className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[62%] max-w-[260px] rounded-3xl shadow-2xl object-cover"
+              />
+              <div
+                className="w-full max-w-[370px] lg:max-w-[330px] lg:mr-24 rounded-[36px] bg-slate-900 p-3 shadow-2xl relative z-10 border-4 border-slate-800 scale-100 hover:scale-[1.02] transition-transform duration-300"
                 id="hero-whatsapp-simulator"
               >
                 {/* Speaker top bar of a phone */}
