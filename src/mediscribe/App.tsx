@@ -577,8 +577,10 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
               <MobileHome
                 consultations={consultations}
                 doctorName={doctorName}
+                upcomingAppointments={upcomingAppointments}
                 onStartNew={handleStartNewConsultation}
                 onSelectConsultation={handleSelectExistingConsultation}
+                onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName)}
                 onViewAllSessions={() => setActiveView('consultations')}
               />
             ) : (

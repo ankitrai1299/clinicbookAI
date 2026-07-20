@@ -1,5 +1,5 @@
 import React from 'react';
-import { Consultation } from '../types';
+import { Consultation, UpcomingAppointment } from '../types';
 import {
   Sparkles,
   Mic,
@@ -10,6 +10,8 @@ import {
   Clock,
   ChevronRight,
   Search,
+  CalendarClock,
+  Stethoscope,
 } from 'lucide-react';
 
 // Native-style mobile dashboard — shown ONLY inside the phone app (WebView).
@@ -21,8 +23,10 @@ import {
 interface MobileHomeProps {
   consultations: Consultation[];
   doctorName?: string;
+  upcomingAppointments?: UpcomingAppointment[];
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
+  onScribeAppointment?: (appt: UpcomingAppointment) => void;
   onViewAllSessions: () => void;
 }
 
@@ -54,12 +58,18 @@ const initials = (name?: string): string =>
 export default function MobileHome({
   consultations,
   doctorName,
+  upcomingAppointments = [],
   onStartNew,
   onSelectConsultation,
+  onScribeAppointment,
   onViewAllSessions,
 }: MobileHomeProps) {
   const [query, setQuery] = React.useState('');
   const now = new Date();
+
+  // Today's queue — the doctor's actual starting point on a clinic day.
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local
+  const todaysQueue = upcomingAppointments.filter((a) => a.date === todayStr);
 
   const todayCount = consultations.filter((c) => {
     const raw = c.updatedAt || c.createdAt || c.date;
@@ -144,6 +154,47 @@ export default function MobileHome({
           ))}
         </div>
       </button>
+
+      {/* Today's queue — one tap starts the consultation for that patient */}
+      {todaysQueue.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-slate-800 flex items-center gap-2">
+              <CalendarClock size={17} className="text-blue-600" /> Today's Queue
+            </h2>
+            <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">
+              {todaysQueue.length} waiting
+            </span>
+          </div>
+          <div className="space-y-2.5">
+            {todaysQueue.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => onScribeAppointment?.(a)}
+                className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm active:bg-blue-50/60 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
+                  {initials(a.patientName)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-slate-900 text-[15px] truncate">{a.patientName}</div>
+                  <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2.5">
+                    <span className="flex items-center gap-1 font-semibold text-slate-600">
+                      <Clock size={12} /> {a.time}
+                    </span>
+                    <span className="flex items-center gap-1 truncate">
+                      <Stethoscope size={12} /> Dr. {a.doctorName.replace(/^dr\.?\s*/i, '')}
+                    </span>
+                  </div>
+                </div>
+                <span className="flex-shrink-0 flex items-center gap-1.5 bg-blue-600 text-white px-3.5 py-2 rounded-xl font-semibold text-[13px]">
+                  <Mic size={14} /> Start
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Today at a glance */}
       <p className="text-[13px] font-bold uppercase tracking-wider text-slate-400 mb-3">Today at a glance</p>

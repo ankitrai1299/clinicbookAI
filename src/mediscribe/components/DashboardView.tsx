@@ -74,6 +74,13 @@ export default function DashboardView({
     : consultations.filter(c => c?.report).length;
   const prescriptionsGenerated = prescriptionsCount ?? 0;
 
+  // Today's queue is the doctor's real starting point — split it out of the
+  // upcoming list so it can LEAD the dashboard: one tap from here opens a
+  // consultation already linked to the right patient.
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local
+  const todaysQueue = upcomingAppointments.filter(a => a.date === todayStr);
+  const laterAppointments = upcomingAppointments.filter(a => a.date !== todayStr);
+
   const metrics = [
     { label: 'Total Patients', value: totalPatients, icon: Users, color: 'bg-blue-50 text-blue-600' },
     { label: 'Total Consultations', value: consultations.length, icon: Activity, color: 'bg-indigo-50 text-indigo-600' },
@@ -98,6 +105,49 @@ export default function DashboardView({
         </button>
       </div>
 
+      {/* TODAY'S QUEUE — the doctor's starting point. One tap = consultation. */}
+      {todaysQueue.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
+          <div className="p-5 border-b border-slate-100 flex items-center gap-2 bg-gradient-to-r from-blue-50/80 to-transparent">
+            <CalendarClock size={18} className="text-blue-600" />
+            <h2 className="font-semibold text-lg text-slate-800">Today's Queue</h2>
+            <span className="ml-auto text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">
+              {todaysQueue.length} waiting
+            </span>
+          </div>
+          <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto custom-scrollbar">
+            {todaysQueue.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => onScribeAppointment?.(a)}
+                className="w-full p-4 sm:px-5 flex items-center gap-4 hover:bg-blue-50/40 transition-colors text-left group cursor-pointer"
+              >
+                <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
+                  {(a.patientName || '?').charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-slate-900 truncate group-hover:text-blue-700 transition-colors">
+                    {a.patientName}
+                  </div>
+                  <div className="text-sm text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-3">
+                    <span className="flex items-center gap-1 font-medium text-slate-600">
+                      <Clock size={13} /> {a.time}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Stethoscope size={13} /> Dr. {a.doctorName.replace(/^dr\.?\s*/i, '')}
+                    </span>
+                  </div>
+                </div>
+                <span className="flex-shrink-0 flex items-center gap-2 bg-blue-600 group-hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors">
+                  <Mic size={15} />
+                  <span className="hidden sm:inline">Start</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {metrics.map(m => {
@@ -116,16 +166,16 @@ export default function DashboardView({
         })}
       </div>
 
-      {/* Upcoming Appointments (from ClinicBook) — start a scribe session per visit */}
-      {upcomingAppointments.length > 0 && (
+      {/* Later appointments (today's are in the queue above, not repeated here) */}
+      {laterAppointments.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
           <div className="p-5 border-b border-slate-100 flex items-center gap-2 bg-slate-50/50">
             <CalendarClock size={18} className="text-blue-500" />
             <h2 className="font-semibold text-lg text-slate-800">Upcoming Appointments</h2>
-            <span className="ml-auto text-xs font-medium text-slate-500">{upcomingAppointments.length} scheduled</span>
+            <span className="ml-auto text-xs font-medium text-slate-500">{laterAppointments.length} scheduled</span>
           </div>
           <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto custom-scrollbar">
-            {upcomingAppointments.map((a) => (
+            {laterAppointments.map((a) => (
               <div key={a.id} className="p-4 sm:px-5 flex items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
                 <div className="min-w-0">
                   <div className="font-semibold text-slate-900 truncate">{a.patientName}</div>

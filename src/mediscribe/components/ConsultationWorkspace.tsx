@@ -16,6 +16,7 @@ import { loadDoctorProfile } from '../utils/settings';
 import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight, ArrowLeft } from 'lucide-react';
 import Logo from './Logo';
 import UploadedAudioPlayer from './UploadedAudioPlayer';
+import PatientSnapshot from './PatientSnapshot';
 import {
   transcribeAudio,
   translateTranscript,
@@ -1980,6 +1981,14 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
 
         {/* Transcript Area */}
         <div className="flex-1 flex flex-col overflow-hidden p-6 bg-slate-50">
+          {/* Visit-start context — last visit, what they were on, what's pending.
+              Collapsible; silent on a first visit. */}
+          {consultation.patientId && (
+            <div className="mb-4 flex-shrink-0">
+              <PatientSnapshot patientId={consultation.patientId} patientName={consultation.patientName} />
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3">
               <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
