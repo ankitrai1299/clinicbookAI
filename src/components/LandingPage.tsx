@@ -114,16 +114,44 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
             {/* Right side WhatsApp simulation preview — a real patient sits behind
                 the phone so the hero shows WHO this is for, not just the UI. The
                 photo is hidden on small screens where there's no room for both. */}
-            <div className="lg:col-span-5 flex justify-center relative">
+            <div className="lg:col-span-5 flex justify-center relative lg:pr-8">
+              {/* The patient this is actually for, behind the phone. */}
               <img
                 src="/images/patient-3.jpg"
                 alt="A patient booking an appointment on WhatsApp"
                 loading="eager"
                 decoding="async"
-                className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[62%] max-w-[260px] rounded-3xl shadow-2xl object-cover"
+                className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[58%] max-w-[250px] rounded-3xl shadow-2xl object-cover"
               />
+
+              {/* What the bot did, floating around the phone — the outcomes a
+                  clinic cares about, not just the chat UI. */}
+              <div className="hidden lg:flex flex-col gap-3 absolute left-0 top-1/2 -translate-y-1/2 z-20">
+                {[
+                  { icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50', title: 'Appointment confirmed', time: '10:32 AM' },
+                  { icon: Bell, tone: 'text-sky-600 bg-sky-50', title: 'Reminder sent', time: '09:00 AM' },
+                  { icon: Calendar, tone: 'text-violet-600 bg-violet-50', title: 'Follow-up scheduled', time: 'After 3 days' },
+                ].map((c) => {
+                  const Icon = c.icon;
+                  return (
+                    <div
+                      key={c.title}
+                      className="flex items-center gap-2.5 bg-white rounded-xl border border-slate-100 shadow-lg px-3 py-2.5"
+                    >
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${c.tone}`}>
+                        <Icon className="w-4 h-4" />
+                      </span>
+                      <div className="leading-tight whitespace-nowrap">
+                        <div className="text-xs font-bold text-slate-900">{c.title}</div>
+                        <div className="text-[10px] text-slate-400">{c.time}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               <div
-                className="w-full max-w-[370px] lg:max-w-[330px] lg:mr-24 rounded-[36px] bg-slate-900 p-3 shadow-2xl relative z-10 border-4 border-slate-800 scale-100 hover:scale-[1.02] transition-transform duration-300"
+                className="w-full max-w-[370px] lg:max-w-[300px] lg:mx-auto rounded-[36px] bg-slate-900 p-3 shadow-2xl relative z-10 border-4 border-slate-800 scale-100 hover:scale-[1.02] transition-transform duration-300"
                 id="hero-whatsapp-simulator"
               >
                 {/* Speaker top bar of a phone */}
