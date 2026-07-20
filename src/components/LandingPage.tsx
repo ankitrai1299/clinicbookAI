@@ -114,15 +114,10 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
             {/* Right side WhatsApp simulation preview — a real patient sits behind
                 the phone so the hero shows WHO this is for, not just the UI. The
                 photo is hidden on small screens where there's no room for both. */}
-            <div className="lg:col-span-5 flex justify-center relative lg:pr-8">
-              {/* The patient this is actually for, behind the phone. */}
-              <img
-                src="/images/patient-3.jpg"
-                alt="A patient booking an appointment on WhatsApp"
-                loading="eager"
-                decoding="async"
-                className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 w-[58%] max-w-[250px] rounded-3xl shadow-2xl object-cover"
-              />
+            {/* Phone and patient sit SIDE BY SIDE with only a small deliberate
+                overlap, so her face is never covered. Flex + a negative margin
+                keeps that overlap fixed instead of guessing at absolute offsets. */}
+            <div className="lg:col-span-5 flex items-center justify-center relative">
 
               {/* What the bot did, floating around the phone — the outcomes a
                   clinic cares about, not just the chat UI. */}
@@ -151,7 +146,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
               </div>
 
               <div
-                className="w-full max-w-[370px] lg:max-w-[300px] lg:mx-auto rounded-[36px] bg-slate-900 p-3 shadow-2xl relative z-10 border-4 border-slate-800 scale-100 hover:scale-[1.02] transition-transform duration-300"
+                className="w-full max-w-[370px] lg:max-w-[268px] flex-shrink-0 rounded-[36px] bg-slate-900 p-3 shadow-2xl relative z-10 border-4 border-slate-800 scale-100 hover:scale-[1.02] transition-transform duration-300"
                 id="hero-whatsapp-simulator"
               >
                 {/* Speaker top bar of a phone */}
@@ -213,6 +208,16 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                   </div>
                 </div>
               </div>
+
+              {/* The patient — beside the phone, overlapping only at the edge so
+                  her face is always fully visible. */}
+              <img
+                src="/images/patient-3.jpg"
+                alt="A patient booking an appointment on WhatsApp"
+                loading="eager"
+                decoding="async"
+                className="hidden lg:block w-[230px] xl:w-[250px] h-[380px] xl:h-[410px] flex-shrink-0 -ml-8 object-cover object-[55%_18%] rounded-[28px] shadow-2xl ring-1 ring-slate-900/5"
+              />
             </div>
           </div>
         </div>
