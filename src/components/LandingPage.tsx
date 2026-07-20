@@ -5,6 +5,8 @@ import {
   Terminal, Webhook, FlaskConical, KeyRound
 } from 'lucide-react';
 import { PageType } from '../types';
+import PlatformStory from './platform/PlatformStory';
+import TrustStrip from './platform/TrustStrip';
 
 interface LandingPageProps {
   setCurrentPage: (page: PageType) => void;
@@ -177,6 +179,9 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
         </div>
       </section>
 
+      {/* 2b. TRUST STRIP — quiet credibility under the hero */}
+      <TrustStrip />
+
       {/* 3. THE SOLUTION SECTION */}
       <section className="py-20 bg-white border-y border-slate-100" id="solution-section">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -278,6 +283,9 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
           </div>
         </div>
       </section>
+
+      {/* 4b. ONE PLATFORM, TWO APPS — what ClinicBook + NovaScribe do together */}
+      <PlatformStory />
 
       {/* 5. PLATFORM FEATURES */}
       <section className="py-20 bg-white" id="features-section">
