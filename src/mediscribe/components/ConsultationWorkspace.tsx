@@ -17,6 +17,8 @@ import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2,
 import Logo from './Logo';
 import UploadedAudioPlayer from './UploadedAudioPlayer';
 import PatientSnapshot from './PatientSnapshot';
+import DrugSafetyAlerts from './DrugSafetyAlerts';
+import { checkDrugSafety } from '../utils/drugSafety';
 import {
   transcribeAudio,
   translateTranscript,
@@ -1579,6 +1581,14 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     s => s.editable || sectionHasContent(reportData, s),
   );
 
+  // Prescribing safety — recomputed only when the medicines or allergies change,
+  // so it never runs on every keystroke elsewhere in the report.
+  const safetyAlerts = React.useMemo(
+    () => checkDrugSafety(reportData),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reportData.prescribedMedications, reportData.medicationHistory, reportData.allergies],
+  );
+
   // ── Compare Previous Visit ──────────────────────────────────────────────
   // The immediately previous visit = the most recent session of THIS patient
   // (allPrevious is already scoped to this patient and excludes the active
@@ -2246,6 +2256,13 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
                   immediately previous visit. Additive; does not affect the
                   report sections, save, or any other flow below. */}
               {renderCompareCard()}
+
+              {/* Prescribing safety — allergy conflicts, interactions and
+                  duplicates in the treatment plan. Advisory; never blocks. */}
+              <DrugSafetyAlerts
+                alerts={safetyAlerts}
+                hasPrescription={(reportData.prescribedMedications || []).some(m => (m.medicine || '').trim())}
+              />
 
               {visibleSections.map((section, idx) => (
                 <div key={section.key as string}>
