@@ -19,6 +19,7 @@ import UploadedAudioPlayer from './UploadedAudioPlayer';
 import PatientSnapshot from './PatientSnapshot';
 import DrugSafetyAlerts from './DrugSafetyAlerts';
 import { checkDrugSafety } from '../utils/drugSafety';
+import { saveChunk, loadRecording, clearRecording, type StoredRecording } from '../utils/recordingStore';
 import {
   transcribeAudio,
   translateTranscript,
@@ -283,6 +284,12 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   // MediaRecorder refs (Whisper fallback path)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  // Sequence counter so persisted chunks can be reassembled in order.
+  const chunkSeqRef = useRef(0);
+  // An unsent recording found on disk for this consultation (crash recovery, or a
+  // transcription that failed). Null when there's nothing to recover.
+  const [recovered, setRecovered] = useState<StoredRecording | null>(null);
+  const [isRecovering, setIsRecovering] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   // Wall-clock start of the current MediaRecorder capture (ms) — used only to
   // log the recording duration for debugging audio-capture issues.
@@ -500,8 +507,14 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      chunkSeqRef.current = 0;
+      void clearRecording(consultation.id); // fresh capture — drop any stale chunks
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+          // Crash-safety: persist each chunk as it arrives (fire-and-forget).
+          void saveChunk(consultation.id, e.data, chunkSeqRef.current++, mediaRecorder.mimeType || mimeType);
+        }
       };
       recordStartMsRef.current = Date.now();
       mediaRecorder.start(1000); // timeslice flushes data periodically
@@ -600,11 +613,22 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
             ? `${recordingBaseRef.current} ${whisperText}`
             : whisperText).trim();
         }
+        // Transcribed — the persisted audio has served its purpose.
+        void clearRecording(consultation.id);
+        setRecovered(null);
       } else {
         console.warn('[transcribe] recorded blob too small/missing — keeping live transcript:', blob?.size ?? 'none');
+        void clearRecording(consultation.id);
       }
     } catch (err) {
-      console.error('[transcribe] backend error — keeping live transcript:', err);
+      // KEEP the audio: transcription failed (usually the network), so surface it
+      // for a retry instead of silently dropping the consultation's recording.
+      console.error('[transcribe] backend error — recording kept for retry:', err);
+      const saved = await loadRecording(consultation.id);
+      if (saved) {
+        setRecovered(saved);
+        setError('Could not transcribe the recording — your audio is saved. Tap "Transcribe now" to retry.');
+      }
     } finally {
       setIsTranscribing(false);
     }
@@ -821,10 +845,16 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
       mediaRecorderRef.current = mediaRecorder;
       // Always start from a clean chunk buffer — never reuse a previous recording.
       audioChunksRef.current = [];
+      chunkSeqRef.current = 0;
+      void clearRecording(consultation.id);
 
       mediaRecorder.ondataavailable = (e) => {
         // Only keep non-empty chunks.
-        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+          // Crash-safety: persist each chunk as it arrives (fire-and-forget).
+          void saveChunk(consultation.id, e.data, chunkSeqRef.current++, mediaRecorder.mimeType || mimeType);
+        }
       };
 
       // Timeslice so data is flushed periodically (and a final chunk on stop).
@@ -1581,6 +1611,66 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     s => s.editable || sectionHasContent(reportData, s),
   );
 
+  // ── Crash recovery ──────────────────────────────────────────
+  // On open, look for audio that was recorded for this consultation but never
+  // transcribed (tab closed, crash, phone call, failed upload) and offer it back.
+  useEffect(() => {
+    let cancelled = false;
+    if (!consultation.id) return;
+    loadRecording(consultation.id)
+      .then(saved => { if (!cancelled && saved) setRecovered(saved); })
+      .catch(() => { /* recovery is best-effort */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consultation.id]);
+
+  // Warn before leaving mid-recording — the audio is saved, but the doctor almost
+  // certainly meant to press Stop first.
+  useEffect(() => {
+    if (!isRecording) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isRecording]);
+
+  // Transcribe a recovered recording (crash recovery or a failed upload retry).
+  const handleRecoverRecording = async () => {
+    if (!recovered || isRecovering) return;
+    setIsRecovering(true);
+    setError(null);
+    try {
+      const result = await transcribeAudio(recovered.blob);
+      const text = (result.rawText || '').trim();
+      if (!text || isLikelyHallucination(text)) {
+        setError('The saved recording could not be transcribed. You can try again or discard it.');
+        return;
+      }
+      // Append to whatever is already there, mirroring the normal stop-recording
+      // path: originalTranscript holds the spoken words, displayedTranscript the
+      // version converted into the selected output language.
+      const base = originalTranscript.trim();
+      const finalText = base ? `${base} ${text}`.trim() : text;
+      setOriginalTranscript(finalText);
+      setDisplayedTranscript(await toOutputLanguage(finalText));
+      await clearRecording(consultation.id);
+      setRecovered(null);
+    } catch (err) {
+      console.error('[recover] transcription failed:', err);
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Could not transcribe the saved recording. Please check your connection and try again.',
+      );
+    } finally {
+      setIsRecovering(false);
+    }
+  };
+
+  const handleDiscardRecording = async () => {
+    await clearRecording(consultation.id);
+    setRecovered(null);
+  };
+
   // Prescribing safety — recomputed only when the medicines or allergies change,
   // so it never runs on every keystroke elsewhere in the report.
   const safetyAlerts = React.useMemo(
@@ -1996,6 +2086,37 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
           {consultation.patientId && (
             <div className="mb-4 flex-shrink-0">
               <PatientSnapshot patientId={consultation.patientId} patientName={consultation.patientName} />
+            </div>
+          )}
+
+          {/* Unsent recording found — crash recovery, or a retry after a failed
+              transcription. The audio is safe on disk until it's used or dropped. */}
+          {recovered && !isRecording && (
+            <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <Mic size={18} className="text-amber-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-900">Unsent recording found</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  {recovered.seconds > 0 ? `About ${Math.floor(recovered.seconds / 60)}m ${recovered.seconds % 60}s of ` : ''}
+                  audio from this consultation was saved but never transcribed.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={handleRecoverRecording}
+                  disabled={isRecovering}
+                  className="bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center gap-2"
+                >
+                  {isRecovering ? 'Transcribing…' : 'Transcribe now'}
+                </button>
+                <button
+                  onClick={handleDiscardRecording}
+                  disabled={isRecovering}
+                  className="text-amber-700 hover:text-amber-900 disabled:opacity-50 text-xs font-bold uppercase tracking-wide px-2"
+                >
+                  Discard
+                </button>
+              </div>
             </div>
           )}
 
