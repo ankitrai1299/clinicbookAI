@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Check, CheckCheck, Mic, Paperclip, Smile } from 'lucide-react';
+import { Check, CheckCheck } from 'lucide-react';
 
 // One marketing "panel": headline + feature cards + a live WhatsApp mockup, with
 // an optional photograph behind it. Built in code rather than exported as a flat
@@ -78,16 +78,18 @@ function Bubble({ item, tone }: { item: ChatItem; tone: PanelTone; key?: string 
   return (
     <div className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[85%] rounded-lg px-2.5 py-1.5 shadow-sm text-[11px] leading-snug ${
-          isOut ? 'bg-[#d9fdd3] text-slate-800' : 'bg-white text-slate-800'
+        className={`max-w-[86%] rounded-2xl px-3.5 py-2.5 shadow-xl text-[12px] leading-snug backdrop-blur-[2px] ${
+          isOut
+            ? 'bg-emerald-500 text-white rounded-tr-sm'
+            : 'bg-white/95 text-slate-800 rounded-tl-sm border border-white'
         }`}
       >
         {item.text && <p className="whitespace-pre-line">{item.text}</p>}
 
         {item.menu && (
-          <div className="mt-1.5 space-y-1">
+          <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
             {item.menu.map((m, i) => (
-              <div key={m} className={`text-[11px] ${t.accent} font-medium`}>
+              <div key={m} className={`text-[12px] font-semibold ${isOut ? 'text-white' : t.accent}`}>
                 {i + 1}. {m}
               </div>
             ))}
@@ -124,9 +126,11 @@ function Bubble({ item, tone }: { item: ChatItem; tone: PanelTone; key?: string 
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-1 mt-0.5">
-          <span className="text-[8px] text-slate-400">{item.time ?? '10:31 AM'}</span>
-          {isOut && <CheckCheck className="w-2.5 h-2.5 text-sky-500" />}
+        <div className="flex items-center justify-end gap-1 mt-1">
+          <span className={`text-[9px] ${isOut ? 'text-emerald-50' : 'text-slate-400'}`}>
+            {item.time ?? '10:31 AM'}
+          </span>
+          {isOut && <CheckCheck className="w-3 h-3 text-emerald-100" />}
         </div>
       </div>
     </div>
@@ -188,68 +192,39 @@ export default function ShowcasePanel({
           </div>
         </div>
 
-        {/* Photo + phone mockup, SIDE BY SIDE — the phone overlaps the photo's
-            edge for depth but never covers the face. Without a photo the mockup
-            simply centres itself. */}
-        <div className={`relative flex justify-center ${photo ? 'md:justify-start md:pl-4' : ''}`}>
+        {/* The conversation floats OVER the photograph — one composition rather
+            than a phone box sitting next to a portrait. The person is anchored
+            right so the bubbles always land on clear space. */}
+        <div className="relative rounded-3xl overflow-hidden min-h-[420px] sm:min-h-[460px] bg-gradient-to-br from-white/60 to-white/20">
           {photo && (
-            <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-[52%] max-w-[240px]">
-              <img
-                src={photo}
-                alt={photoAlt || ''}
-                loading="lazy"
-                decoding="async"
-                className="w-full h-auto rounded-2xl shadow-xl object-cover"
-              />
-            </div>
+            <img
+              src={photo}
+              alt={photoAlt || ''}
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 w-full h-full object-cover object-[75%_center]"
+            />
           )}
 
-          <div
-            className={`relative z-10 w-full max-w-[300px] rounded-[34px] bg-slate-900 p-2 shadow-2xl border-4 border-slate-800 ${
-              photo ? 'md:max-w-[260px]' : ''
-            }`}
-          >
-            <div className="rounded-[26px] overflow-hidden bg-[#efe7de]">
-              {/* Status bar */}
-              <div className="bg-[#075e54] px-3 pt-2 pb-0 flex items-center justify-between text-[9px] text-white/90">
-                <span>10:31</span>
-                <span className="flex items-center gap-1">
-                  <span className="tracking-tighter">▂▄▆</span>
-                  <span>100%</span>
-                </span>
-              </div>
-              {/* Chat header */}
-              <div className="bg-[#075e54] px-3 py-2 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-full bg-white/20 text-white text-[10px] font-bold flex items-center justify-center">
-                  {clinicName.charAt(0)}
-                </span>
-                <div className="leading-tight min-w-0">
-                  <div className="text-white text-[11px] font-semibold flex items-center gap-1 truncate">
-                    {clinicName}
-                    <Check className="w-2.5 h-2.5 text-emerald-300" />
-                  </div>
-                  <div className="text-emerald-100 text-[8px]">online</div>
-                </div>
-              </div>
+          {/* Soft wash so white bubbles stay readable over any photo */}
+          <div className="absolute inset-0 bg-gradient-to-r from-white/85 via-white/40 to-transparent" />
 
-              {/* Messages */}
-              <div className="p-2.5 space-y-1.5 min-h-[300px] max-h-[340px] overflow-hidden">
-                {chat.map((item, i) => (
-                  <Bubble key={i} item={item} tone={tone} />
-                ))}
-              </div>
+          <div className="relative p-4 sm:p-5">
+            {/* Clinic chip — keeps the WhatsApp context without a phone frame */}
+            <div className="inline-flex items-center gap-2 bg-white/95 border border-white rounded-full pl-1.5 pr-3 py-1.5 shadow-lg mb-3">
+              <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {clinicName.charAt(0)}
+              </span>
+              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                {clinicName}
+                <Check className="w-3 h-3 text-emerald-600" />
+              </span>
+            </div>
 
-              {/* Composer */}
-              <div className="bg-[#f0f0f0] px-2 py-1.5 flex items-center gap-1.5">
-                <div className="flex-1 bg-white rounded-full px-2.5 py-1.5 flex items-center gap-1.5">
-                  <Smile className="w-3 h-3 text-slate-400" />
-                  <span className="text-[9px] text-slate-400">Type a message</span>
-                  <Paperclip className="w-3 h-3 text-slate-400 ml-auto" />
-                </div>
-                <span className="w-7 h-7 rounded-full bg-[#25d366] flex items-center justify-center">
-                  <Mic className="w-3.5 h-3.5 text-white" />
-                </span>
-              </div>
+            <div className="space-y-2 max-w-[85%]">
+              {chat.map((item, i) => (
+                <Bubble key={i} item={item} tone={tone} />
+              ))}
             </div>
           </div>
         </div>
