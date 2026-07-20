@@ -13,7 +13,7 @@ import {
   Patient,
 } from '../types';
 import { loadDoctorProfile } from '../utils/settings';
-import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Users } from 'lucide-react';
 import Logo from './Logo';
 import UploadedAudioPlayer from './UploadedAudioPlayer';
 import PatientSnapshot from './PatientSnapshot';
@@ -31,6 +31,7 @@ import {
   uploadConsultationAudio,
   resolveMediaUrl,
   deleteConsultationAudio,
+  labelSpeakers,
 } from '../services/api';
 import {
   REPORT_SECTIONS,
@@ -290,6 +291,12 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   // transcription that failed). Null when there's nothing to recover.
   const [recovered, setRecovered] = useState<StoredRecording | null>(null);
   const [isRecovering, setIsRecovering] = useState(false);
+
+  // Speaker-labelled turns (Doctor / Patient) for the current transcript. Empty
+  // until the doctor asks for them; cleared whenever the transcript changes so a
+  // stale labelling is never shown against edited text.
+  const [speakerTurns, setSpeakerTurns] = useState<{ speaker: 'Doctor' | 'Patient'; text: string }[]>([]);
+  const [isLabelling, setIsLabelling] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   // Wall-clock start of the current MediaRecorder capture (ms) — used only to
   // log the recording duration for debugging audio-capture issues.
@@ -1671,6 +1678,36 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     setRecovered(null);
   };
 
+  // Split the transcript into Doctor/Patient turns. Read-only: the transcript
+  // text itself is never modified, so this can be toggled off at any time.
+  const handleIdentifySpeakers = async () => {
+    if (isLabelling) return;
+    if (speakerTurns.length) { setSpeakerTurns([]); return; } // toggle back to plain
+    const text = displayedTranscript.trim();
+    if (!text) return;
+    setIsLabelling(true);
+    setError(null);
+    try {
+      const turns = await labelSpeakers(text);
+      if (turns.length === 0) {
+        setError('Could not confidently separate the speakers for this transcript.');
+        return;
+      }
+      setSpeakerTurns(turns);
+    } catch (err) {
+      console.error('[speakers] labelling failed:', err);
+      setError(err instanceof Error && err.message ? err.message : 'Could not identify speakers.');
+    } finally {
+      setIsLabelling(false);
+    }
+  };
+
+  // Any edit to the transcript invalidates an existing labelling.
+  useEffect(() => {
+    setSpeakerTurns([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedTranscript]);
+
   // Prescribing safety — recomputed only when the medicines or allergies change,
   // so it never runs on every keystroke elsewhere in the report.
   const safetyAlerts = React.useMemo(
@@ -2194,13 +2231,58 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
               </label>
             </div>
           </div>
-          <p className="text-xs text-slate-500 mb-3">Review and edit transcript before generating report.</p>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-xs text-slate-500">Review and edit transcript before generating report.</p>
+            {hasTranscript && !isRecording && (
+              <button
+                onClick={handleIdentifySpeakers}
+                disabled={isLabelling || isTranscribing || isTranslating}
+                title="Split the transcript into Doctor / Patient turns"
+                className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-700 bg-white border border-slate-200 hover:border-blue-300 disabled:opacity-50 rounded-lg px-2.5 py-1.5 transition-colors"
+              >
+                <Users size={13} />
+                {isLabelling ? 'Identifying…' : speakerTurns.length ? 'Show plain text' : 'Identify speakers'}
+              </button>
+            )}
+          </div>
 
           {showEmptyState ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
               <Mic size={48} className="mb-4 opacity-50" />
               <p className="text-lg font-medium text-slate-500">Start the consultation</p>
               <p className="text-sm mt-2">Press the mic to record, or upload an audio file. The transcript will appear here.</p>
+            </div>
+          ) : speakerTurns.length > 0 ? (
+            /* Speaker-labelled view — read-only; "Show plain text" returns to the
+               editable transcript. The underlying text is never modified. */
+            <div className="flex-1 w-full bg-white border border-slate-200 rounded-2xl p-5 shadow-sm overflow-y-auto custom-scrollbar mb-24 space-y-4">
+              {speakerTurns.map((t, i) => {
+                const isDoctor = t.speaker === 'Doctor';
+                return (
+                  <div key={i} className="flex gap-3">
+                    <span
+                      className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                        isDoctor ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}
+                    >
+                      {isDoctor ? 'Dr' : 'Pt'}
+                    </span>
+                    <div className="min-w-0">
+                      <p
+                        className={`text-[11px] font-bold uppercase tracking-wide mb-0.5 ${
+                          isDoctor ? 'text-blue-600' : 'text-emerald-600'
+                        }`}
+                      >
+                        {t.speaker}
+                      </p>
+                      <p className="text-[15px] leading-relaxed text-slate-800">{t.text}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100">
+                Speakers identified by AI — please verify. Switch to plain text to edit.
+              </p>
             </div>
           ) : (
             <textarea

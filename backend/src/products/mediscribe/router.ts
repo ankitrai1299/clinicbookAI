@@ -209,6 +209,23 @@ mediscribeRouter.post('/translate-transcript', async (req: Request, res: Respons
   }
 });
 
+// ── Speaker labelling (who said what) ────────────────────────
+// Splits a transcript into Doctor/Patient turns. Additive and read-only: on any
+// failure we return an empty list and the client keeps the plain transcript.
+mediscribeRouter.post('/label-speakers', async (req: Request, res: Response) => {
+  try {
+    const { transcript } = req.body ?? {};
+    if (!transcript || !String(transcript).trim()) {
+      return res.status(400).json({ error: 'transcript is required' });
+    }
+    const { labelSpeakers } = await import('./services/speakerLabels.js');
+    return res.json({ turns: await labelSpeakers(String(transcript)) });
+  } catch (error: any) {
+    console.error('[mediscribe:label-speakers]', error);
+    return res.status(502).json({ error: error?.message || 'Could not identify speakers' });
+  }
+});
+
 // ── Report generation (Sarvam) ───────────────────────────────
 mediscribeRouter.post('/generate-report', async (req: Request, res: Response) => {
   try {

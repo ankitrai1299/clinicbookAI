@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Consultation, UpcomingAppointment } from '../types';
-import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill, CalendarClock, Stethoscope } from 'lucide-react';
+import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill, CalendarClock, Stethoscope, Zap } from 'lucide-react';
 
 interface DashboardViewProps {
   consultations: Consultation[];
@@ -12,6 +12,7 @@ interface DashboardViewProps {
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
+  onQuickRx?: () => void;
 }
 
 // "12 Jul" for a YYYY-MM-DD string (rendered in UTC so the day never slips).
@@ -31,6 +32,7 @@ export default function DashboardView({
   onStartNew,
   onSelectConsultation,
   onScribeAppointment,
+  onQuickRx,
 }: DashboardViewProps) {
   const [searchQuery, setSearchQuery] = React.useState('');
 
@@ -96,13 +98,25 @@ export default function DashboardView({
           <h1 className="text-3xl font-bold tracking-tight mb-2 text-slate-900">Dashboard</h1>
           <p className="text-slate-500 font-medium">Ready for your next patient?</p>
         </div>
-        <button 
-          onClick={onStartNew}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold shadow-sm hover:shadow-md transition-all flex items-center gap-2"
-        >
-          <Mic size={18} />
-          <span>New Consultation</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {onQuickRx && (
+            <button
+              onClick={onQuickRx}
+              title="Prescribe without recording — for refills and quick visits"
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 hover:border-slate-400 px-5 py-3 rounded-xl font-semibold shadow-sm transition-all flex items-center gap-2"
+            >
+              <Zap size={18} className="text-amber-500" />
+              <span>Quick Rx</span>
+            </button>
+          )}
+          <button
+            onClick={onStartNew}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold shadow-sm hover:shadow-md transition-all flex items-center gap-2"
+          >
+            <Mic size={18} />
+            <span>New Consultation</span>
+          </button>
+        </div>
       </div>
 
       {/* TODAY'S QUEUE — the doctor's starting point. One tap = consultation. */}

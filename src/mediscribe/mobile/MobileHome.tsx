@@ -12,6 +12,7 @@ import {
   Search,
   CalendarClock,
   Stethoscope,
+  Zap,
 } from 'lucide-react';
 
 // Native-style mobile dashboard — shown ONLY inside the phone app (WebView).
@@ -28,6 +29,7 @@ interface MobileHomeProps {
   onSelectConsultation: (con: Consultation) => void;
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
   onViewAllSessions: () => void;
+  onQuickRx?: () => void;
 }
 
 const greeting = (): string => {
@@ -63,6 +65,7 @@ export default function MobileHome({
   onSelectConsultation,
   onScribeAppointment,
   onViewAllSessions,
+  onQuickRx,
 }: MobileHomeProps) {
   const [query, setQuery] = React.useState('');
   const now = new Date();
@@ -154,6 +157,16 @@ export default function MobileHome({
           ))}
         </div>
       </button>
+
+      {/* Quick Rx — prescribe without recording (refills, two-minute visits) */}
+      {onQuickRx && (
+        <button
+          onClick={onQuickRx}
+          className="w-full flex items-center justify-center gap-2 mb-6 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 font-bold shadow-sm active:bg-slate-50 transition-colors"
+        >
+          <Zap size={17} className="text-amber-500" /> Quick Prescription
+        </button>
+      )}
 
       {/* Today's queue — one tap starts the consultation for that patient */}
       {todaysQueue.length > 0 && (

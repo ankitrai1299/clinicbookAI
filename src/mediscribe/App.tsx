@@ -20,6 +20,7 @@ import { isMobileApp } from './utils/platform';
 const MobileShell = lazy(() => import('./mobile/MobileShell'));
 const MobileHome = lazy(() => import('./mobile/MobileHome'));
 const DoctorOnlyGate = lazy(() => import('./mobile/DoctorOnlyGate'));
+const QuickPrescription = lazy(() => import('./components/QuickPrescription'));
 // Code-split every view so they are not part of the initial bundle. This also
 // keeps `motion` (the animation lib, only used by the views) off the first-paint
 // path. The dashboard already shows a "Loading…" state during its data fetch, so
@@ -372,6 +373,16 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
     setActiveConsultation(con);
   };
 
+  // Quick Prescription — saves a normal COMPLETED consultation carrying only the
+  // prescription, so the existing pipeline (WhatsApp prescription + medicine
+  // reminders + patient timeline) runs exactly as it does for a recorded visit.
+  const [quickRxOpen, setQuickRxOpen] = useState(false);
+  const handleQuickPrescription = async (con: Consultation) => {
+    await saveConsultation(con);
+    setConsultations(prev => [con, ...prev.filter(c => c.id !== con.id)]);
+    loadData();
+  };
+
   const handleFinishConsultation = (updatedReport: ReportData, transcript: TranscriptLine[]) => {
     if (activeConsultation) {
       const updatedCon: Consultation = {
@@ -420,6 +431,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             onStartNew={handleStartNewConsultation}
             onSelectConsultation={handleSelectExistingConsultation}
             onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName)}
+            onQuickRx={() => setQuickRxOpen(true)}
           />
         );
       case 'patients':
@@ -582,6 +594,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 onSelectConsultation={handleSelectExistingConsultation}
                 onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName)}
                 onViewAllSessions={() => setActiveView('consultations')}
+                onQuickRx={() => setQuickRxOpen(true)}
               />
             ) : (
               renderActiveView()
@@ -595,6 +608,16 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
               onSelect={handleSelectPatientForNewConsultation}
               onAdd={handleAddPatient}
               onClose={() => setIsPatientModalOpen(false)}
+            />
+          </Suspense>
+        )}
+        {quickRxOpen && (
+          <Suspense fallback={null}>
+            <QuickPrescription
+              patients={patients}
+              consultations={consultations}
+              onSave={handleQuickPrescription}
+              onClose={() => setQuickRxOpen(false)}
             />
           </Suspense>
         )}
@@ -683,6 +706,16 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
               onSelect={handleSelectPatientForNewConsultation}
               onAdd={handleAddPatient}
               onClose={() => setIsPatientModalOpen(false)}
+            />
+          </Suspense>
+        )}
+        {quickRxOpen && (
+          <Suspense fallback={null}>
+            <QuickPrescription
+              patients={patients}
+              consultations={consultations}
+              onSave={handleQuickPrescription}
+              onClose={() => setQuickRxOpen(false)}
             />
           </Suspense>
         )}

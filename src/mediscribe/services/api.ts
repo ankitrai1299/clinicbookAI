@@ -275,6 +275,19 @@ export async function getPatientHistory(
   return res.json();
 }
 
+// Split a transcript into labelled Doctor/Patient turns. Returns [] when the
+// transcript can't be segmented — callers keep showing the plain transcript.
+export async function labelSpeakers(transcript: string): Promise<{ speaker: 'Doctor' | 'Patient'; text: string }[]> {
+  const res = await fetch(`${BASE}/label-speakers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ transcript }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, 'Could not identify speakers'));
+  const data = await res.json();
+  return Array.isArray(data?.turns) ? data.turns : [];
+}
+
 // A patient's TIMELINE — the append-only event stream (registered / booked /
 // visited / prescribed / …), newest first.
 export async function getPatientTimeline(patientId: string): Promise<TimelineEvent[]> {
