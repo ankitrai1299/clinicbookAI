@@ -9,6 +9,7 @@ import {
   useSpring,
   useTransform,
 } from 'motion/react';
+import ScribeVisual, { type ScribeScene } from './ScribeVisual';
 
 // One marketing "panel": headline + feature cards + a live WhatsApp mockup, with
 // an optional photograph behind it. Built in code rather than exported as a flat
@@ -73,7 +74,10 @@ export interface ShowcasePanelProps {
   subtitle: string;
   features: PanelFeature[];
   clinicName: string;
-  chat: ChatItem[];
+  /** Patient-side panels show a WhatsApp thread. */
+  chat?: ChatItem[];
+  /** Doctor-side panels show the scribe's own UI instead of a chat. */
+  scene?: ScribeScene;
   /** Optional photograph URL — the panel is designed to look complete without one. */
   photo?: string;
   photoAlt?: string;
@@ -184,7 +188,8 @@ export default function ShowcasePanel({
   subtitle,
   features,
   clinicName,
-  chat,
+  chat = [],
+  scene,
   photo,
   photoAlt,
   reverse,
@@ -314,8 +319,17 @@ export default function ShowcasePanel({
           whileInView={{ opacity: 1, x: 0, scale: 1 }}
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.85, ease: 'easeOut', delay: 0.15 }}
-          className="relative rounded-3xl overflow-hidden min-h-[420px] sm:min-h-[460px] bg-gradient-to-br from-white/60 to-white/20"
         >
+          {scene ? (
+            <ScribeVisual
+              scene={scene}
+              photo={photo}
+              photoAlt={photoAlt}
+              loop={chatLoop}
+              speedMs={Math.max(700, chatSpeedMs - 200)}
+            />
+          ) : (
+            <div className="relative rounded-3xl overflow-hidden min-h-[420px] sm:min-h-[460px] bg-gradient-to-br from-white/60 to-white/20">
           {photo && (
             <motion.img
               src={photo}
@@ -352,7 +366,9 @@ export default function ShowcasePanel({
                 <Bubble key={i} item={item} tone={tone} index={i} float={!reduce} />
               ))}
             </div>
-          </div>
+              </div>
+            </div>
+          )}
         </motion.div>
       </div>
     </motion.div>
