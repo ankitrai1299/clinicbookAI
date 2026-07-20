@@ -78,6 +78,10 @@ export interface ShowcasePanelProps {
   photo?: string;
   photoAlt?: string;
   reverse?: boolean;
+  /** Replay the conversation forever (standalone) or play it once (in a carousel). */
+  chatLoop?: boolean;
+  /** Delay between revealed messages. */
+  chatSpeedMs?: number;
 }
 
 function Bubble({
@@ -184,6 +188,8 @@ export default function ShowcasePanel({
   photo,
   photoAlt,
   reverse,
+  chatLoop = true,
+  chatSpeedMs = 1150,
 }: ShowcasePanelProps) {
   const t = TONES[tone];
   const reduce = useReducedMotion();
@@ -217,11 +223,11 @@ export default function ShowcasePanel({
     if (!inView) return;
     setShown(0);
     const id = setInterval(
-      () => setShown((c) => (c >= chat.length ? 0 : c + 1)),
-      1150,
+      () => setShown((c) => (c >= chat.length ? (chatLoop ? 0 : c) : c + 1)),
+      chatSpeedMs,
     );
     return () => clearInterval(id);
-  }, [inView, chat.length, reduce]);
+  }, [inView, chat.length, reduce, chatLoop, chatSpeedMs]);
 
   return (
     <motion.div

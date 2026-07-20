@@ -1,5 +1,6 @@
 import { Mic, FileText, ShieldAlert, Send, CalendarClock, Users, Clock, Pill } from 'lucide-react';
-import ShowcasePanel, { type ShowcasePanelProps } from './ShowcasePanel';
+import { type ShowcasePanelProps } from './ShowcasePanel';
+import ShowcaseCarousel from './ShowcaseCarousel';
 
 // The doctor-facing story. Same panel component as the patient showcase, but the
 // mockup shows what the DOCTOR sends the patient after a visit — so a doctor
@@ -111,11 +112,7 @@ export default function NovaScribeShowcase() {
           </p>
         </div>
 
-        <div className="space-y-8">
-          {PANELS.map((p, i) => (
-            <ShowcasePanel key={p.title} {...p} photo={PHOTOS[i]} />
-          ))}
-        </div>
+        <ShowcaseCarousel panels={PANELS.map((p, i) => ({ ...p, photo: PHOTOS[i] }))} />
       </div>
     </section>
   );

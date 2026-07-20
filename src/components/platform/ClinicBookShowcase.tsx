@@ -2,7 +2,8 @@ import {
   CalendarCheck, Clock, Bell, ShieldCheck, CalendarClock, LayoutGrid, Zap,
   BellRing, RefreshCcw, HeartPulse, FileText, History, Pill, Stethoscope,
 } from 'lucide-react';
-import ShowcasePanel, { type ShowcasePanelProps } from './ShowcasePanel';
+import { type ShowcasePanelProps } from './ShowcasePanel';
+import ShowcaseCarousel from './ShowcaseCarousel';
 
 // The patient-facing story, told as four panels — booking, live availability,
 // reminders, and the patient's own health journey. Each shows the REAL WhatsApp
@@ -144,11 +145,7 @@ export default function ClinicBookShowcase() {
           </p>
         </div>
 
-        <div className="space-y-8">
-          {PANELS.map((p, i) => (
-            <ShowcasePanel key={p.title} {...p} photo={PHOTOS[i]} />
-          ))}
-        </div>
+        <ShowcaseCarousel panels={PANELS.map((p, i) => ({ ...p, photo: PHOTOS[i] }))} />
       </div>
     </section>
   );
