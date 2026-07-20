@@ -5,9 +5,9 @@ import ShowcasePanel, { type ShowcasePanelProps } from './ShowcasePanel';
 // mockup shows what the DOCTOR sends the patient after a visit — so a doctor
 // reading this sees exactly where their work ends up.
 //
-// PHOTO SLOT (optional): VITE_LANDING_DOCTOR_PHOTO — a photograph of a doctor
-// with a phone/tablet. The panels look finished without one.
-const PHOTO = (import.meta.env.VITE_LANDING_DOCTOR_PHOTO as string | undefined) || undefined;
+// Doctor photography lives in public/images — one distinct face per panel, served
+// from the app itself so nothing depends on an external host.
+const PHOTOS = ['/images/doctor-1.jpg', '/images/doctor-2.jpg', '/images/doctor-4.jpg'];
 
 const PANELS: ShowcasePanelProps[] = [
   {
@@ -18,7 +18,6 @@ const PANELS: ShowcasePanelProps[] = [
     subtitle:
       'Every appointment booked on WhatsApp lands in your queue automatically. Tap a patient and the consultation opens, already linked to their record.',
     clinicName: 'CarePlus Clinic',
-    photo: PHOTO,
     photoAlt: 'A doctor reviewing the day’s appointments',
     features: [
       { icon: CalendarClock, title: 'Today’s queue', desc: 'Bookings arrive on their own' },
@@ -113,8 +112,8 @@ export default function NovaScribeShowcase() {
         </div>
 
         <div className="space-y-8">
-          {PANELS.map((p) => (
-            <ShowcasePanel key={p.title} {...p} />
+          {PANELS.map((p, i) => (
+            <ShowcasePanel key={p.title} {...p} photo={PHOTOS[i]} />
           ))}
         </div>
       </div>

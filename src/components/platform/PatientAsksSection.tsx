@@ -5,11 +5,11 @@ import { FileText, Check } from 'lucide-react';
 // WhatsApp. Composition is a photo (optional) with the conversation floating over
 // it — the conversation is the point, so the layout works with or without a photo.
 //
-// PHOTO SLOT: set VITE_LANDING_PATIENT_PHOTO to a URL of your OWN (or a properly
-// licensed) photograph — ideally a patient/person looking at their phone, shot
-// with space on the left for the bubbles. Without it a clean branded gradient is
-// shown instead, which is deliberately good-looking rather than a broken frame.
-const PHOTO = (import.meta.env.VITE_LANDING_PATIENT_PHOTO as string | undefined) || '';
+// The patient photo sits behind the conversation, anchored right so the bubbles
+// stay over clear space. Served from the app's own /public, and overridable per
+// deployment via VITE_LANDING_PATIENT_PHOTO if a clinic wants its own imagery.
+const PHOTO =
+  (import.meta.env.VITE_LANDING_PATIENT_PHOTO as string | undefined) || '/images/patient-2.jpg';
 
 export default function PatientAsksSection() {
   return (

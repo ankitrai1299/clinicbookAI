@@ -8,9 +8,10 @@ import ShowcasePanel, { type ShowcasePanelProps } from './ShowcasePanel';
 // reminders, and the patient's own health journey. Each shows the REAL WhatsApp
 // flow the bot runs, so the marketing can't drift from the product.
 //
-// PHOTO SLOT (optional): VITE_LANDING_PATIENT_PHOTO — a photograph of a patient
-// looking at their phone. The panels are designed to look finished without one.
-const PHOTO = (import.meta.env.VITE_LANDING_PATIENT_PHOTO as string | undefined) || undefined;
+// Patient photography lives in public/images — one distinct face per panel so the
+// page never repeats a person. Served from the app itself (no external host, no
+// env var), so the images can't disappear on us.
+const PHOTOS = ['/images/patient-1.jpg', '/images/patient-3.jpg', '/images/patient-4.jpg', '/images/patient-5.jpg'];
 
 const PANELS: ShowcasePanelProps[] = [
   {
@@ -21,7 +22,6 @@ const PANELS: ShowcasePanelProps[] = [
     titleTail: 'in a few taps',
     subtitle: 'Simple, fast and secure — no app to install, no form to fill, no call to make.',
     clinicName: 'CarePlus Clinic',
-    photo: PHOTO,
     photoAlt: 'A patient booking an appointment on WhatsApp',
     features: [
       { icon: CalendarCheck, title: 'Check availability', desc: 'Real-time doctor slots' },
@@ -83,7 +83,6 @@ const PANELS: ShowcasePanelProps[] = [
     accent: 'everyone on track',
     subtitle: 'Timely nudges before the visit — and gentle medicine reminders after it.',
     clinicName: 'CarePlus Clinic',
-    photo: PHOTO,
     photoAlt: 'A patient receiving an appointment reminder',
     features: [
       { icon: BellRing, title: 'Appointment reminders', desc: 'Notified before every visit' },
@@ -146,8 +145,8 @@ export default function ClinicBookShowcase() {
         </div>
 
         <div className="space-y-8">
-          {PANELS.map((p) => (
-            <ShowcasePanel key={p.title} {...p} />
+          {PANELS.map((p, i) => (
+            <ShowcasePanel key={p.title} {...p} photo={PHOTOS[i]} />
           ))}
         </div>
       </div>

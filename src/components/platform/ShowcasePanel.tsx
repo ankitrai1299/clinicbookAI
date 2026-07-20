@@ -188,19 +188,27 @@ export default function ShowcasePanel({
           </div>
         </div>
 
-        {/* Phone mockup (+ optional photo behind it) */}
-        <div className="relative flex justify-center">
+        {/* Photo + phone mockup, SIDE BY SIDE — the phone overlaps the photo's
+            edge for depth but never covers the face. Without a photo the mockup
+            simply centres itself. */}
+        <div className={`relative flex justify-center ${photo ? 'md:justify-start md:pl-4' : ''}`}>
           {photo && (
-            <img
-              src={photo}
-              alt={photoAlt || ''}
-              loading="lazy"
-              decoding="async"
-              className="absolute inset-0 w-full h-full object-cover rounded-2xl opacity-90"
-            />
+            <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-[52%] max-w-[240px]">
+              <img
+                src={photo}
+                alt={photoAlt || ''}
+                loading="lazy"
+                decoding="async"
+                className="w-full h-auto rounded-2xl shadow-xl object-cover"
+              />
+            </div>
           )}
 
-          <div className="relative w-full max-w-[300px] rounded-[34px] bg-slate-900 p-2 shadow-2xl border-4 border-slate-800">
+          <div
+            className={`relative z-10 w-full max-w-[300px] rounded-[34px] bg-slate-900 p-2 shadow-2xl border-4 border-slate-800 ${
+              photo ? 'md:max-w-[260px]' : ''
+            }`}
+          >
             <div className="rounded-[26px] overflow-hidden bg-[#efe7de]">
               {/* Status bar */}
               <div className="bg-[#075e54] px-3 pt-2 pb-0 flex items-center justify-between text-[9px] text-white/90">
