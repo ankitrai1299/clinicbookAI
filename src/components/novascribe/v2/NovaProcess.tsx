@@ -10,69 +10,115 @@ import { Reveal, SectionHead, Stagger, staggerItem } from './primitives';
 // actually reasons about a consultation.
 
 // ── S2 · HOW IT WORKS ────────────────────────────────────────
-const STEPS = [
-  { icon: Mic, title: 'Doctor records', desc: 'One tap at the start of the consultation.' },
-  { icon: FileText, title: 'Live transcript', desc: 'Speech becomes text as you talk — Hindi, English, Hinglish.' },
-  { icon: Brain, title: 'Medical AI understands', desc: 'Symptoms, diagnoses, drugs and doses are recognised in context.' },
-  { icon: ClipboardList, title: 'Clinical note generated', desc: 'A structured note written the way a clinician writes.' },
-  { icon: Pill, title: 'Prescription created', desc: 'Medicines, strength, frequency and duration filled in.' },
-  { icon: MessageSquare, title: 'Patient summary', desc: 'A plain-language version the patient can actually follow.' },
-  { icon: Database, title: 'Saved to records', desc: 'Filed against the same patient the clinic already has.' },
-  { icon: Send, title: 'Shared on WhatsApp', desc: 'Prescription PDF delivered, reminders scheduled.' },
+// Eight steps stacked vertically ran to most of a screen, which made a simple
+// process look like a long one. Grouped into the three phases a doctor actually
+// experiences — you talk, it thinks, it goes out — the whole flow fits in a
+// single view, and the eight steps survive as the detail inside each phase.
+const PHASES = [
+  {
+    n: '01',
+    phase: 'You talk',
+    lead: 'One tap at the start of the consultation.',
+    tone: 'emerald' as const,
+    steps: [
+      { icon: Mic, t: 'Doctor records', d: 'No setup, no dictation voice.' },
+      { icon: FileText, t: 'Live transcript', d: 'Speech becomes text as you speak, in its own script.' },
+    ],
+  },
+  {
+    n: '02',
+    phase: 'It understands',
+    lead: 'The visit is read as medicine, not as words.',
+    tone: 'sky' as const,
+    steps: [
+      { icon: Brain, t: 'Medical AI understands', d: 'Symptoms, diagnoses, drugs and doses in context.' },
+      { icon: ClipboardList, t: 'Clinical note generated', d: 'Structured the way a clinician writes.' },
+      { icon: Pill, t: 'Prescription created', d: 'Strength, frequency and duration filled in.' },
+      { icon: MessageSquare, t: 'Patient summary', d: 'A plain-language version they can follow.' },
+    ],
+  },
+  {
+    n: '03',
+    phase: 'It goes out',
+    lead: 'Filed and delivered before the patient stands up.',
+    tone: 'violet' as const,
+    steps: [
+      { icon: Database, t: 'Saved to records', d: 'Against the same patient the clinic already has.' },
+      { icon: Send, t: 'Shared on WhatsApp', d: 'Prescription PDF delivered, reminders scheduled.' },
+    ],
+  },
 ];
+
+const TONE = {
+  emerald: { chip: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: 'bg-emerald-50 text-emerald-600', num: 'text-emerald-500' },
+  sky: { chip: 'bg-sky-50 text-sky-700 border-sky-100', icon: 'bg-sky-50 text-sky-600', num: 'text-sky-500' },
+  violet: { chip: 'bg-violet-50 text-violet-700 border-violet-100', icon: 'bg-violet-50 text-violet-600', num: 'text-violet-500' },
+};
 
 export function HowItWorks() {
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start 0.8', 'end 0.4'] });
-  const lineHeight = useSpring(useTransform(scrollYProgress, [0, 1], ['0%', '100%']), {
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start 0.85', 'end 0.6'] });
+  const lineWidth = useSpring(useTransform(scrollYProgress, [0, 1], ['0%', '100%']), {
     stiffness: 60,
     damping: 22,
   });
 
   return (
-    <section className="py-24 bg-white" id="how-it-works">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-20 bg-white" id="how-it-works">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHead
           eyebrow="How it works"
           title="One recording."
           accent="Everything else is done."
-          sub="From the moment you press record to the prescription landing on the patient's phone."
+          sub="From pressing record to the prescription landing on the patient's phone."
         />
 
-        <div ref={ref} className="relative mt-16 pl-12 sm:pl-16">
-          {/* Rail that fills as you scroll */}
-          <div className="absolute left-[19px] sm:left-[27px] top-2 bottom-2 w-[2px] bg-slate-200 rounded-full" />
-          {!reduce && (
-            <motion.div
-              style={{ height: lineHeight }}
-              className="absolute left-[19px] sm:left-[27px] top-2 w-[2px] rounded-full bg-gradient-to-b from-emerald-500 via-sky-500 to-violet-500"
-            />
-          )}
+        <div ref={ref} className="mt-12">
+          {/* The rail now runs across the three phases instead of down eight steps,
+              so the flow reads left-to-right in one glance on a desktop. */}
+          <div className="hidden lg:block relative h-[2px] bg-slate-100 rounded-full mb-6">
+            {!reduce && (
+              <motion.div
+                style={{ width: lineWidth }}
+                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 via-sky-500 to-violet-500"
+              />
+            )}
+          </div>
 
-          <div className="space-y-8">
-            {STEPS.map((s, i) => {
-              const Icon = s.icon;
+          <div className="grid lg:grid-cols-3 gap-5 lg:gap-6">
+            {PHASES.map((p, i) => {
+              const tone = TONE[p.tone];
               return (
                 <motion.div
-                  key={s.title}
-                  initial={{ opacity: 0, x: reduce ? 0 : -18 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
-                  transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-                  className="relative"
+                  key={p.phase}
+                  initial={{ opacity: 0, y: reduce ? 0 : 18 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ duration: 0.55, delay: i * 0.12, ease: [0.22, 1, 0.36, 1] }}
+                  className="relative rounded-2xl border border-slate-200 bg-white p-5 shadow-xs hover:shadow-lg hover:border-slate-300 transition-all duration-300"
                 >
-                  <span className="absolute -left-12 sm:-left-16 top-0 w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-700">
-                    <Icon className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
-                  </span>
-                  <div className="pt-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold tabular-nums text-slate-300">
-                        {String(i + 1).padStart(2, '0')}
-                      </span>
-                      <h3 className="font-display text-lg font-extrabold text-slate-900">{s.title}</h3>
-                    </div>
-                    <p className="text-slate-600 mt-1 leading-relaxed">{s.desc}</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className={`text-xs font-bold tabular-nums ${tone.num}`}>{p.n}</span>
+                    <h3 className="font-display text-lg font-extrabold text-slate-900">{p.phase}</h3>
+                  </div>
+                  <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">{p.lead}</p>
+
+                  <div className="mt-4 space-y-2.5">
+                    {p.steps.map((s) => {
+                      const Icon = s.icon;
+                      return (
+                        <div key={s.t} className="flex gap-2.5">
+                          <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${tone.icon}`}>
+                            <Icon className="w-3.5 h-3.5" />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-[13px] font-bold text-slate-800 leading-tight">{s.t}</div>
+                            <p className="text-[12px] text-slate-500 leading-snug mt-0.5">{s.d}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </motion.div>
               );
