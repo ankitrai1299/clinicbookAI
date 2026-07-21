@@ -237,6 +237,63 @@ export async function saveConsultation(consultation: Consultation): Promise<void
   if (!res.ok) throw new Error('Failed to save consultation');
 }
 
+/** What the server reports back about a prescription delivery attempt. */
+export interface DeliveryResult {
+  sent: boolean;
+  reason?: 'not-completed' | 'no-medicines' | 'no-phone' | 'already-sent' | 'invalid';
+  channel?: string;
+  pdfSent?: boolean;
+  sentAt?: string;
+}
+
+// Send the prescription to the patient on WhatsApp, on the doctor's instruction.
+// Unlike the automatic send on finalize, this always goes — the doctor asking for
+// it again (because the patient lost it) is the whole point.
+export async function sendPrescriptionToPatient(consultationId: string): Promise<DeliveryResult> {
+  const res = await fetch(`${BASE}/consultations/${encodeURIComponent(consultationId)}/send-prescription`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error || 'Could not send the prescription');
+  }
+  return res.json();
+}
+
+/** A bookable doctor in the clinic (a ClinicBook resource, not a login). */
+export interface ClinicDoctor {
+  id: string;
+  name: string;
+  speciality?: string;
+}
+
+export async function getClinicDoctors(): Promise<ClinicDoctor[]> {
+  try {
+    const res = await fetch(`${BASE}/doctors`, { cache: 'no-store', headers: authHeader() });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+// Book the follow-up this note describes as a real ClinicBook appointment, so it
+// gets reminders like any other booking instead of living as text on a PDF.
+export async function bookFollowUp(
+  consultationId: string,
+  input: { doctorId: string; date: string; time: string },
+): Promise<{ id: string; date: string; time: string }> {
+  const res = await fetch(`${BASE}/consultations/${encodeURIComponent(consultationId)}/follow-up`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error || 'Could not book the follow-up');
+  return body;
+}
+
 // The clinic's still-upcoming appointments (from ClinicBook) — shown on the
 // dashboard so the doctor can start a scribe session for a booked visit.
 export async function getUpcomingAppointments(): Promise<UpcomingAppointment[]> {

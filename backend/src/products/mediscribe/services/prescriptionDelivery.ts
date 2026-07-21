@@ -54,24 +54,46 @@ function buildMessage(opts: {
  * Send the finalized prescription to the patient's WhatsApp (once). No-op unless
  * the note is Completed, has medicines, and the patient has a phone.
  */
-export const sendPrescriptionOnFinalize = async (clinicId: string, consultation: any): Promise<boolean> => {
+/**
+ * The outcome of a delivery attempt. The automatic path only cares whether it
+ * happened, but a doctor pressing Send needs to be told WHY nothing was sent —
+ * "no phone number" and "no medicines" are different problems with different
+ * fixes, and a silent no-op taught the doctor nothing.
+ */
+export interface DeliveryResult {
+  sent: boolean;
+  /** Machine-readable reason when `sent` is false. */
+  reason?: 'not-completed' | 'no-medicines' | 'no-phone' | 'already-sent' | 'invalid';
+  channel?: string;
+  pdfSent?: boolean;
+  sentAt?: string;
+}
+
+export const deliverPrescription = async (
+  clinicId: string,
+  consultation: any,
+  opts: { force?: boolean } = {},
+): Promise<DeliveryResult> => {
   const consultationId = String(consultation?.id ?? '');
   const patientId = String(consultation?.patientId ?? '');
-  if (!consultationId || !patientId) return false;
-  if (consultation?.status !== 'Completed') return false;
+  if (!consultationId || !patientId) return { sent: false, reason: 'invalid' };
+  if (consultation?.status !== 'Completed') return { sent: false, reason: 'not-completed' };
 
   const meds: Array<Record<string, unknown>> =
     (Array.isArray(consultation?.report?.prescribedMedications) && consultation.report.prescribedMedications) ||
     (Array.isArray(consultation?.prescriptions) && consultation.prescriptions) ||
     [];
-  if (!meds.length) return false;
+  if (!meds.length) return { sent: false, reason: 'no-medicines' };
 
-  // Idempotent: skip if this consultation's prescription was already sent.
+  // Idempotent on the automatic path so a re-save never double-sends. A doctor
+  // asking for it again is an explicit instruction, so `force` skips the guard.
   const stored = (await consultationsRepo.findById(consultationId)) as { prescriptionSentAt?: string } | null;
-  if (stored?.prescriptionSentAt) return false;
+  if (stored?.prescriptionSentAt && !opts.force) {
+    return { sent: false, reason: 'already-sent', sentAt: stored.prescriptionSentAt };
+  }
 
   const patient = await prisma.patient.findUnique({ where: { id: patientId }, select: { name: true, phone: true } });
-  if (!patient?.phone) return false;
+  if (!patient?.phone) return { sent: false, reason: 'no-phone' };
 
   const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { name: true } });
   const clinicName = clinic?.name ?? 'your clinic';
@@ -128,7 +150,8 @@ export const sendPrescriptionOnFinalize = async (clinicId: string, consultation:
   });
 
   // Mark as sent so a re-save never double-sends (shallow-merged into the note).
-  await consultationsRepo.upsert({ id: consultationId, prescriptionSentAt: new Date().toISOString() } as any);
+  const sentAt = new Date().toISOString();
+  await consultationsRepo.upsert({ id: consultationId, prescriptionSentAt: sentAt } as any);
   emitEvent({
     clinicId,
     patientId,
@@ -143,5 +166,12 @@ export const sendPrescriptionOnFinalize = async (clinicId: string, consultation:
   console.info(
     `[Prescription] Sent via ${channel}${pdfSent ? ' + PDF' : ''} → ${patientName} (${meds.length} medicine(s))`,
   );
-  return true;
+  return { sent: true, channel, pdfSent, sentAt };
 };
+
+/**
+ * The automatic path, fired when a note is finalized. Unchanged behaviour for
+ * existing callers: idempotent, boolean, never throws the save.
+ */
+export const sendPrescriptionOnFinalize = async (clinicId: string, consultation: any): Promise<boolean> =>
+  (await deliverPrescription(clinicId, consultation)).sent;

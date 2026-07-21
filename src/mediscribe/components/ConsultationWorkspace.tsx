@@ -13,7 +13,7 @@ import {
   Patient,
 } from '../types';
 import { loadDoctorProfile, loadLanguage } from '../utils/settings';
-import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Users } from 'lucide-react';
+import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Users, Send } from 'lucide-react';
 import Logo from './Logo';
 import UploadedAudioPlayer from './UploadedAudioPlayer';
 import PatientSnapshot from './PatientSnapshot';
@@ -32,6 +32,7 @@ import {
   resolveMediaUrl,
   deleteConsultationAudio,
   labelSpeakers,
+  sendPrescriptionToPatient,
 } from '../services/api';
 import {
   REPORT_SECTIONS,
@@ -50,6 +51,7 @@ import {
 } from '../utils/report';
 import { printReport } from '../utils/pdf';
 import { debug } from '../utils/debug';
+import FollowUpBooking from './FollowUpBooking';
 import {
   buildVisitComparison,
   reportHasClinicalContent,
@@ -79,6 +81,17 @@ interface ConsultationWorkspaceProps {
   // Live updates so the parent's session list stays in sync (auto-save).
   onSessionUpdate?: (session: Consultation) => void;
 }
+
+// Why a prescription couldn't be sent, phrased as something the doctor can act
+// on. "no-phone" and "no-medicines" need different fixes, so they can't collapse
+// into one generic failure.
+const SEND_FAILURE: Record<string, string> = {
+  'not-completed': 'Save the report first — only a completed note can be sent.',
+  'no-medicines': 'There are no medicines in this prescription yet.',
+  'no-phone': "This patient has no phone number on file, so WhatsApp can't reach them.",
+  'already-sent': 'Already sent to this patient.',
+  invalid: 'This consultation is not linked to a patient.',
+};
 
 // Whisper language codes. "auto" → let Whisper auto-detect the spoken language.
 const LANGUAGES: { code: string; label: string }[] = [
@@ -213,6 +226,13 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   );
   const [error, setError] = useState<string | null>(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  // Sending the prescription to the patient, and what to tell the doctor after.
+  const [isSending, setIsSending] = useState(false);
+  const [sendStatus, setSendStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  // Set once the note's follow-up has been booked as a real appointment.
+  const [followUpAppointmentId, setFollowUpAppointmentId] = useState<string | undefined>(
+    () => (consultation as { followUpAppointmentId?: string }).followUpAppointmentId,
+  );
   // Doctor's name for the final review / signature block (print + export only).
   // Seeded from the saved Settings profile so the doctor doesn't retype it.
   const [doctorName, setDoctorName] = useState(() => loadDoctorProfile().name || '');
@@ -1207,7 +1227,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
       .catch(() => setError('Download failed. Please try again.'));
   };
 
-  const handleSave = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+  const handleSave = async (e?: React.MouseEvent<HTMLButtonElement>): Promise<boolean> => {
     // Defensive: never let a click trigger a form submit / page reload.
     e?.preventDefault();
 
@@ -1269,7 +1289,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     } catch (err) {
       console.error('Database save error:', err);
       setError('Failed to save to the database. Please try again.');
-      return;
+      return false;
     }
 
     // Save succeeded → this is the only path that marks the session Completed.
@@ -1296,6 +1316,36 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     savedModalTimerRef.current = setTimeout(() => setSavedModalOpen(false), 2500);
 
     onSaveReport(reportData);
+    return true;
+  };
+
+  // Send the prescription to the patient on WhatsApp, now. Saves first, because
+  // the server sends what it has stored — transmitting a note it never received
+  // would deliver yesterday's prescription.
+  const handleSendToPatient = async () => {
+    setSendStatus(null);
+    setIsSending(true);
+    try {
+      if (!(await handleSave())) return; // handleSave already surfaced the error
+      const result = await sendPrescriptionToPatient(consultation.id);
+      if (result.sent) {
+        setSendStatus({
+          ok: true,
+          message: result.pdfSent
+            ? 'Sent on WhatsApp with the prescription PDF.'
+            : 'Sent on WhatsApp. The PDF follows once the patient replies.',
+        });
+      } else {
+        setSendStatus({ ok: false, message: SEND_FAILURE[result.reason ?? 'invalid'] });
+      }
+    } catch (err) {
+      setSendStatus({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Could not send the prescription.',
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const showEmptyState =
@@ -1580,6 +1630,16 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
           />
         </label>
       ))}
+
+      {/* The follow-up date used to print on the PDF and go nowhere. Booking it
+          here makes it a real appointment, with the usual patient reminders. */}
+      <FollowUpBooking
+        consultationId={consultation.id}
+        followUpText={reportData.followUp.date || reportData.followUp.duration}
+        bookedAppointmentId={followUpAppointmentId}
+        doctorName={doctorName}
+        onBooked={setFollowUpAppointmentId}
+      />
     </div>
   );
 
@@ -2521,7 +2581,33 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
                   >
                     <Download size={14} /> Export PDF
                   </button>
+                  {/* Sending used to happen invisibly on the server when a note was
+                      finalized, so the doctor could neither confirm it went nor send
+                      it again when the patient asked. Now it's in their hand. */}
+                  <button
+                    type="button"
+                    onClick={handleSendToPatient}
+                    disabled={isSending}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-colors"
+                  >
+                    <Send size={14} /> {isSending ? 'Sending…' : 'Send to patient'}
+                  </button>
                 </div>
+
+                {sendStatus && (
+                  <p
+                    className={`text-xs mt-2 flex items-start gap-1.5 ${
+                      sendStatus.ok ? 'text-emerald-700' : 'text-amber-700'
+                    }`}
+                  >
+                    {sendStatus.ok ? (
+                      <CheckCircle size={13} className="mt-px flex-shrink-0" />
+                    ) : (
+                      <AlertCircle size={13} className="mt-px flex-shrink-0" />
+                    )}
+                    <span>{sendStatus.message}</span>
+                  </p>
+                )}
               </div>
             </div>
 

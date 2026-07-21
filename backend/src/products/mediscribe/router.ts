@@ -34,8 +34,9 @@ import {
   listUpcomingAppointments
 } from './clinicData.js';
 import { syncFromScribeConsultation } from '../../services/medicineReminder.service.js';
-import { sendPrescriptionOnFinalize } from './services/prescriptionDelivery.js';
+import { sendPrescriptionOnFinalize, deliverPrescription } from './services/prescriptionDelivery.js';
 import { emitEvent, getPatientTimeline } from '../../core/timeline/patientTimeline.service.js';
+import { createAppointment } from '../clinicbook/appointments/appointment.service.js';
 
 // 25 MB ceiling — matches the client-side limit for uploaded audio files.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -343,6 +344,92 @@ mediscribeRouter.get('/consultations', async (req: AuthedRequest, res: Response)
     const me = await resolvePrincipal(req);
     return res.json(me.role === 'doctor' ? items.filter((c) => c.doctorId === me.id) : items);
   } catch (error) { console.error('[mediscribe:consultations]', error); return res.json([]); }
+});
+
+// Send (or re-send) a finalized prescription to the patient on WhatsApp, on the
+// doctor's explicit instruction. The automatic send on finalize stays as it is;
+// this exists because the doctor previously had no way to see whether it went, no
+// way to retry a failure, and no way to send it again when the patient asks.
+mediscribeRouter.post('/consultations/:id/send-prescription', async (req: AuthedRequest, res: Response) => {
+  try {
+    const consultation = (await consultationsRepo.findById(req.params.id)) as { doctorId?: string } | null;
+    if (!consultation) return res.status(404).json({ error: 'Consultation not found' });
+
+    // A doctor may only send their own patients' prescriptions.
+    const me = await resolvePrincipal(req);
+    if (me.role === 'doctor' && consultation.doctorId && consultation.doctorId !== me.id) {
+      return res.status(403).json({ error: 'This consultation belongs to another doctor' });
+    }
+
+    const result = await deliverPrescription(currentClinicId(), consultation, { force: true });
+    return res.json(result);
+  } catch (error) {
+    console.error('[mediscribe:send-prescription]', error);
+    return res.status(500).json({ error: 'Could not send the prescription' });
+  }
+});
+
+// Book the follow-up the note already describes.
+//
+// `followUp.date` has always been free text that printed on the PDF and then did
+// nothing — the doctor said "come back in a week" and someone still had to book it
+// by hand, in an appointment system this app is already connected to. This closes
+// that gap: the note's follow-up becomes a real ClinicBook appointment, which then
+// gets the usual reminders like any other booking.
+mediscribeRouter.post('/consultations/:id/follow-up', async (req: AuthedRequest, res: Response) => {
+  try {
+    const { doctorId, date, time } = req.body ?? {};
+    if (!doctorId || !date || !time) {
+      return res.status(400).json({ error: 'doctorId, date and time are required' });
+    }
+
+    const consultation = (await consultationsRepo.findById(req.params.id)) as
+      | { doctorId?: string; patientId?: string; patientName?: string }
+      | null;
+    if (!consultation) return res.status(404).json({ error: 'Consultation not found' });
+    if (!consultation.patientId) return res.status(400).json({ error: 'This consultation has no patient' });
+
+    const me = await resolvePrincipal(req);
+    if (me.role === 'doctor' && consultation.doctorId && consultation.doctorId !== me.id) {
+      return res.status(403).json({ error: 'This consultation belongs to another doctor' });
+    }
+
+    const clinicId = currentClinicId();
+    const appointment = await createAppointment(clinicId, {
+      doctorId: String(doctorId),
+      patientId: String(consultation.patientId),
+      appointmentDate: String(date),
+      appointmentTime: String(time),
+    });
+
+    // Remember it on the note so the UI can show "already booked" instead of
+    // offering to book the same follow-up twice.
+    await consultationsRepo.upsert({
+      id: req.params.id,
+      followUpAppointmentId: appointment.id,
+      followUpBookedAt: new Date().toISOString(),
+    } as any);
+
+    emitEvent({
+      clinicId,
+      patientId: String(consultation.patientId),
+      type: 'booked',
+      title: `Follow-up booked — ${date} at ${time}`,
+      actorType: 'doctor',
+      actorName: me.name,
+      refType: 'appointment',
+      refId: appointment.id,
+    });
+
+    return res.json({ id: appointment.id, date, time });
+  } catch (error) {
+    // createAppointment throws AppError with a usable message (past slot, clash,
+    // unknown doctor) — pass it through so the doctor can act on it.
+    const status = (error as { statusCode?: number })?.statusCode ?? 500;
+    const message = (error as Error)?.message ?? 'Could not book the follow-up';
+    if (status >= 500) console.error('[mediscribe:follow-up]', error);
+    return res.status(status).json({ error: message });
+  }
 });
 
 mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Response) => {
