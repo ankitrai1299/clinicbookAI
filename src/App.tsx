@@ -16,6 +16,7 @@ import VerifyEmailPage from './components/VerifyEmailPage';
 import WelcomeScreen from './components/WelcomeScreen';
 import PatientRegistration from './components/PatientRegistration';
 import WhatsAppDemo from './components/demo/WhatsAppDemo';
+import NovaScribeDemo from './components/demo/NovaScribeDemo';
 import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
@@ -339,6 +340,9 @@ export default function App() {
   // auth shell so it needs no login and carries no app chrome.
   if (path === '/demo') {
     return <WhatsAppDemo />;
+  }
+  if (path === '/demo/novascribe' || path === '/demo/nova') {
+    return <NovaScribeDemo />;
   }
 
   return (

@@ -319,6 +319,12 @@ export default function WhatsAppDemo() {
               {f.label}
             </a>
           ))}
+          <a
+            href="/demo/novascribe"
+            className="text-xs font-bold rounded-full px-4 py-2 border bg-white text-violet-700 border-violet-200 hover:border-violet-300"
+          >
+            NovaScribe demo →
+          </a>
         </div>
       )}
     </div>
