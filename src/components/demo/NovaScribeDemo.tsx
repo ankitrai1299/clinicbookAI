@@ -62,8 +62,8 @@ export default function NovaScribeDemo() {
             </h2>
             {!isTall && (
               <p className="text-slate-600 mt-3 leading-relaxed">
-                Record the consultation in Hindi, English or Hinglish. The clinical note and prescription are
-                ready before the patient stands up.
+                Record the consultation in any of 10 languages — each transcribed in its own script. The
+                clinical note and prescription are ready before the patient stands up.
               </p>
             )}
           </div>

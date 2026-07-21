@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import NovaHeroV2 from './novascribe/v2/NovaHeroV2';
 import { HowItWorks, BeforeAfter, MedicalReasoning } from './novascribe/v2/NovaProcess';
 import { LiveDemo, RealReport } from './novascribe/v2/NovaDemo';
+import NovaLanguages from './novascribe/v2/NovaLanguages';
 import { Specialties, WhatChanges, PatientJourney, Integrations } from './novascribe/v2/NovaEcosystem';
 import { Testimonials, FAQ, FinalCTA } from './novascribe/v2/NovaClose';
 import NovaPricing from './novascribe/NovaPricing';
@@ -39,7 +40,10 @@ export default function MediScribeLanding({ isLoggedIn, onOpen, onBack }: Props)
       {/* 3 — the product actually running */}
       <LiveDemo />
 
-      {/* 4 — what it replaces */}
+      {/* 4 — the demo just played in Hindi, so answer "and my language?" right here */}
+      <NovaLanguages />
+
+      {/* 5 — what it replaces */}
       <BeforeAfter />
 
       {/* 5 — why it can be trusted with medicine */}

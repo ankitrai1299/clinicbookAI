@@ -1,30 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useInView, useReducedMotion } from 'motion/react';
-import { Mic, Sparkles, Check, FileText, Pill, Send, ShieldCheck, ChevronLeft, MoreVertical } from 'lucide-react';
+import { Mic, Sparkles, Check, FileText, Pill, Send, ShieldCheck, ChevronLeft, MoreVertical, Languages } from 'lucide-react';
+import { SCENES, NOTE, RX, INDIC_FONT } from './scenes';
 
 // NovaScribe running inside a phone — the same animation used on the landing page
 // and for recording vertical footage, so what a doctor sees on the site is exactly
 // what goes into a reel.
 //
-// Plays in beats: mic goes live → the Hinglish transcript lands → the model
-// understands → the note fills in → the prescription drops → it's sent. Then loops.
-
-const TRANSCRIPT = [
-  { who: 'Doctor', text: 'Bataiye, kya taklif ho rahi hai?' },
-  { who: 'Patient', text: 'Do din se gale mein dard hai, bukhar bhi aa raha hai.' },
-  { who: 'Doctor', text: 'Khaansi ya saans mein dikkat?' },
-  { who: 'Patient', text: 'Halki khaansi hai. Saans theek hai.' },
-];
-
-const NOTE = [
-  { h: 'Chief complaint', b: 'Sore throat & fever · 2 days, mild cough.' },
-  { h: 'Assessment', b: 'Acute pharyngitis, likely viral.' },
-];
-
-const RX: [string, string][] = [
-  ['Paracetamol 650mg', 'TDS · 3 days'],
-  ['Warm saline gargle', 'Twice daily'],
-];
+// Plays in beats: mic goes live → the transcript lands IN THE SPOKEN LANGUAGE'S OWN
+// script → the model understands → the note fills in → the prescription drops → the
+// patient gets their copy in their own language. Each loop switches language, which
+// is the clearest way to show the auto-detect actually working.
 
 const B = { idle: 0, rec: 1, l1: 2, l2: 3, l3: 4, l4: 5, think: 6, note: 7, rx: 8, safe: 9, sent: 10 } as const;
 const LAST = B.sent;
@@ -51,8 +37,10 @@ export default function NovaPhoneDemo({
   const reduce = useReducedMotion();
   const [beat, setBeat] = useState(0);
   const [secs, setSecs] = useState(0);
+  const [sceneIdx, setSceneIdx] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const scene = SCENES[sceneIdx];
   const active = autoPlayInView ? inView : true;
 
   useEffect(() => {
@@ -63,7 +51,9 @@ export default function NovaPhoneDemo({
     const wait = (ms: number) => new Promise<void>((r) => timers.push(window.setTimeout(r, ms / speed)));
 
     (async () => {
+      let n = 0;
       while (!cancelled) {
+        setSceneIdx(n % SCENES.length);
         setBeat(0); setSecs(0);
         await wait(700);
         for (let b = 1; b <= LAST && !cancelled; b++) {
@@ -71,6 +61,7 @@ export default function NovaPhoneDemo({
           await wait(b === B.think ? 1700 : 1350);
         }
         await wait(2600);
+        n += 1;
       }
     })();
     return () => { cancelled = true; timers.forEach(clearTimeout); };
@@ -164,6 +155,27 @@ export default function NovaPhoneDemo({
             <MoreVertical className="w-4 h-4 text-white/60" />
           </div>
 
+          {/* Detected language — the chip re-animates on every language switch, which
+              is what sells "we heard which language this was, you never picked it". */}
+          <div className="bg-slate-800 px-4 py-1.5 flex items-center gap-1.5 flex-shrink-0">
+            <Languages className="w-3 h-3 text-sky-400 flex-shrink-0" />
+            <span className="text-[9px] text-slate-400">Auto-detected</span>
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={scene.code}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.3 }}
+                className="text-[11px] font-bold text-white"
+                style={{ fontFamily: INDIC_FONT }}
+              >
+                {scene.native}
+              </motion.span>
+            </AnimatePresence>
+            <span className="text-[9px] text-slate-500 ml-auto">{scene.english}</span>
+          </div>
+
           {/* Stage rail */}
           <div className="flex items-center gap-1 px-3 py-2.5 bg-slate-50 border-b border-slate-100 flex-shrink-0">
             {STEPS.map((s) => {
@@ -226,9 +238,9 @@ export default function NovaPhoneDemo({
                   </div>
 
                   <div ref={scrollRef} className="flex-1 overflow-hidden space-y-3">
-                    {TRANSCRIPT.slice(0, lines).map((l, i) => (
+                    {scene.transcript.slice(0, lines).map((l, i) => (
                       <motion.div
-                        key={i}
+                        key={`${scene.code}-${i}`}
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -241,7 +253,9 @@ export default function NovaPhoneDemo({
                         <div className={`text-[8px] font-bold uppercase tracking-widest mb-0.5 ${l.who === 'Doctor' ? 'text-slate-400' : 'text-emerald-600'}`}>
                           {l.who}
                         </div>
-                        <p className="text-[12px] leading-snug">{l.text}</p>
+                        <p className="text-[12px] leading-relaxed" style={{ fontFamily: INDIC_FONT }}>
+                          {l.text}
+                        </p>
                       </motion.div>
                     ))}
 
@@ -268,6 +282,23 @@ export default function NovaPhoneDemo({
                   transition={{ duration: 0.45 }}
                   className="absolute inset-0 overflow-y-auto p-4 space-y-3 bg-slate-50/40"
                 >
+                  {/* The visit was in one language, the record comes out in another —
+                      spell that out, it is the single most-asked question. */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-1.5 text-[9px] font-semibold text-slate-500"
+                  >
+                    <Languages className="w-3 h-3 text-sky-500 flex-shrink-0" />
+                    <span>
+                      Spoken in{' '}
+                      <span className="text-slate-700" style={{ fontFamily: INDIC_FONT }}>
+                        {scene.native}
+                      </span>{' '}
+                      · note in English
+                    </span>
+                  </motion.div>
+
                   {NOTE.map((s, i) => (
                     <motion.div
                       key={s.h}
@@ -324,16 +355,32 @@ export default function NovaPhoneDemo({
                       initial={{ opacity: 0, y: 14 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ type: 'spring', stiffness: 220, damping: 18 }}
-                      className="flex items-center gap-2 bg-slate-900 rounded-xl px-3 py-2.5"
+                      className="bg-slate-900 rounded-xl px-3 py-2.5 space-y-2"
                     >
-                      <span className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                        <Send className="w-3.5 h-3.5" />
-                      </span>
-                      <div className="leading-tight">
-                        <div className="text-[11px] font-bold text-white">Sent to patient</div>
-                        <div className="text-[9px] text-slate-400">PDF + reminders scheduled</div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                          <Send className="w-3.5 h-3.5" />
+                        </span>
+                        <div className="leading-tight min-w-0">
+                          <div className="text-[11px] font-bold text-white">Sent to patient</div>
+                          <div className="text-[9px] text-slate-400">
+                            PDF + reminders · in{' '}
+                            <span style={{ fontFamily: INDIC_FONT }}>{scene.native}</span>
+                          </div>
+                        </div>
+                        <Check className="w-4 h-4 text-emerald-400 ml-auto flex-shrink-0" />
                       </div>
-                      <Check className="w-4 h-4 text-emerald-400 ml-auto" />
+
+                      {/* What the patient actually reads — their own language, their own script. */}
+                      <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.3 }}
+                        className="text-[10px] leading-relaxed text-slate-300 bg-white/5 rounded-lg px-2.5 py-2"
+                        style={{ fontFamily: INDIC_FONT }}
+                      >
+                        {scene.patientLine}
+                      </motion.p>
                     </motion.div>
                   )}
                 </motion.div>

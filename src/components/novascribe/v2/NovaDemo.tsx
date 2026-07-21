@@ -3,17 +3,15 @@ import { motion, useInView, useReducedMotion } from 'motion/react';
 import { Mic, FileText, Pill, MessageSquare, Sparkles, Check, Printer, Send } from 'lucide-react';
 import { Reveal, SectionHead, Waveform } from './primitives';
 import NovaPhoneDemo from './NovaPhoneDemo';
+import { SCENES, INDIC_FONT } from './scenes';
 
 // Section 3 — the product running, not a screenshot of it. The consultation plays
 // through: the patient speaks, the transcript lands, the note is written, the
 // prescription is filled, the patient summary appears.
 
-const TRANSCRIPT = [
-  { who: 'Doctor', text: 'Aaiye, batayiye — kya taklif ho rahi hai?' },
-  { who: 'Patient', text: 'Do din se gale mein dard hai aur bukhar bhi aa raha hai.' },
-  { who: 'Doctor', text: 'Khaansi ya saans mein dikkat?' },
-  { who: 'Patient', text: 'Halki khaansi hai. Saans theek hai.' },
-];
+// This visit is spoken in Hindi, so the transcript is in Devanagari — the product
+// transcribes into the script the language is actually written in, never romanised.
+const SCENE = SCENES[0];
 
 const TABS = [
   { key: 'note', label: 'Clinical note', icon: FileText },
@@ -34,7 +32,7 @@ export function LiveDemo() {
     return () => clearInterval(id);
   }, [inView, reduce]);
 
-  const linesShown = Math.min(step, TRANSCRIPT.length);
+  const linesShown = Math.min(step, SCENE.transcript.length);
   const thinking = step === 4;
   const tabIndex = step >= 7 ? 2 : step >= 6 ? 1 : step >= 5 ? 0 : -1;
 
@@ -74,13 +72,18 @@ export function LiveDemo() {
                   </span>
                   <div>
                     <div className="text-sm font-bold text-slate-800">Recording</div>
-                    <div className="text-[11px] text-slate-400">Auto-detecting language</div>
+                    <div className="text-[11px] text-slate-400">
+                      Detected:{' '}
+                      <span className="text-slate-600 font-semibold" style={{ fontFamily: INDIC_FONT }}>
+                        {SCENE.native}
+                      </span>
+                    </div>
                   </div>
                   <Waveform active className="text-emerald-500 h-7 ml-auto" bars={20} />
                 </div>
 
                 <div className="space-y-4 min-h-[260px]">
-                  {TRANSCRIPT.slice(0, linesShown).map((l, i) => (
+                  {SCENE.transcript.slice(0, linesShown).map((l, i) => (
                     <motion.div
                       key={i}
                       initial={{ opacity: 0, y: 10 }}
@@ -95,7 +98,9 @@ export function LiveDemo() {
                       >
                         {l.who}
                       </span>
-                      <p className="text-[13px] text-slate-700 leading-relaxed">{l.text}</p>
+                      <p className="text-[13px] text-slate-700 leading-relaxed" style={{ fontFamily: INDIC_FONT }}>
+                        {l.text}
+                      </p>
                     </motion.div>
                   ))}
 
@@ -200,12 +205,21 @@ export function LiveDemo() {
 
                       {tabIndex === 2 && (
                         <div className="bg-white rounded-xl border border-slate-100 p-3 space-y-2">
-                          <p className="text-[12px] text-slate-700 leading-relaxed">
-                            You have a throat infection. Take Paracetamol after food when you have fever, and
-                            gargle with warm salt water twice a day.
+                          {/* The patient reads this, so it goes out in the language they
+                              spoke — not the English the clinical note is filed in. */}
+                          <div className="flex items-center gap-1.5 pb-1">
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">
+                              In the patient's language
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-700" style={{ fontFamily: INDIC_FONT }}>
+                              {SCENE.native}
+                            </span>
+                          </div>
+                          <p className="text-[12.5px] text-slate-700 leading-relaxed" style={{ fontFamily: INDIC_FONT }}>
+                            {SCENE.patientLine}
                           </p>
-                          <p className="text-[12px] text-slate-700 leading-relaxed">
-                            Come back if the fever continues for more than 3 days.
+                          <p className="text-[12.5px] text-slate-700 leading-relaxed" style={{ fontFamily: INDIC_FONT }}>
+                            अगर बुख़ार तीन दिन से ज़्यादा रहे तो दोबारा दिखाएँ।
                           </p>
                           <div className="flex items-center gap-2 pt-1">
                             <span className="text-[10px] font-bold text-white bg-emerald-600 rounded-full px-2.5 py-1 flex items-center gap-1">
