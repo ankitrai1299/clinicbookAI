@@ -19,21 +19,56 @@ import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
 
-// Deep-link support: `?app=novascribe` opens straight into MediScribe (skipping
-// the hub). The mobile WebView shell loads the site with this param so the phone
-// app IS the web NovaScribe — same login, same functions, just mobile-framed.
-const wantsNovaScribe =
-  typeof window !== 'undefined' &&
-  new URLSearchParams(window.location.search).get('app') === 'novascribe';
+// Each product gets its own shareable URL, so a link can be sent to a clinic or a
+// doctor without landing them on the product chooser:
+//
+//   /clinicbook   → ClinicBook AI (patient booking)   — its landing page
+//   /novascribe   → NovaScribe (AI scribe)            — its landing page
+//   ?app=novascribe → opens straight INTO the scribe app (the phone app's
+//                     WebView loads this, so it must keep working)
+//
+// vercel.json already rewrites unknown paths to index.html, so these resolve.
+type Entry = { page: PageType; app: 'dashboard' | 'novascribe' } | null;
+
+function readEntry(): Entry {
+  if (typeof window === 'undefined') return null;
+
+  const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
+  if (path === '/novascribe' || path === '/nova' || path === '/scribe') {
+    return { page: 'novascribe-landing', app: 'novascribe' };
+  }
+  if (path === '/clinicbook' || path === '/booking') {
+    return { page: 'landing', app: 'dashboard' };
+  }
+
+  // Query form — used by the phone app, which wants the APP, not the landing.
+  const app = new URLSearchParams(window.location.search).get('app');
+  if (app === 'novascribe') return { page: 'novascribe', app: 'novascribe' };
+  if (app === 'clinicbook') return { page: 'dashboard', app: 'dashboard' };
+
+  return null;
+}
+
+const ENTRY = readEntry();
+
+// Keep the address bar in step with the product being viewed, so whatever a user
+// is looking at is what they copy out of the URL bar.
+const PAGE_PATHS: Partial<Record<PageType, string>> = {
+  hub: '/',
+  landing: '/clinicbook',
+  dashboard: '/clinicbook',
+  'novascribe-landing': '/novascribe',
+  novascribe: '/novascribe',
+};
 
 function AppShell() {
   const { user, loading, logout, setAuth } = useAuth();
   // The platform launcher (product chooser) is the first screen — unless deep-linked
   // straight to a product (e.g. the mobile app loads `?app=novascribe`).
-  const [currentPage, setCurrentPage] = useState<PageType>(wantsNovaScribe ? 'novascribe' : 'hub');
+  const [currentPage, setCurrentPage] = useState<PageType>(ENTRY?.page ?? 'hub');
   // Which product's app to land on after a successful login.
   const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>(
-    wantsNovaScribe ? 'novascribe' : 'dashboard',
+    ENTRY?.app ?? 'dashboard',
   );
   // Deep-link a specific dashboard tab (e.g. the docs page's "Get an API key"
   // jumps a logged-in clinic straight to Developers & API, not the Overview).
@@ -51,6 +86,18 @@ function AppShell() {
   const [clinicConfig, setClinicConfig] = useState<ClinicConfig>(DEFAULT_CLINIC_CONFIG);
   const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
   const [globalNotification, setGlobalNotification] = useState<string | null>(null);
+
+  // Reflect the current product in the URL (replace, not push, so the back button
+  // still leaves the site rather than walking every in-app screen). The phone
+  // app's `?app=` entry is left alone so its WebView keeps its deep link.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.location.search.includes('app=')) return;
+    const next = PAGE_PATHS[currentPage];
+    if (next && window.location.pathname !== next) {
+      window.history.replaceState(null, '', next);
+    }
+  }, [currentPage]);
 
   // Gate the authenticated apps; after login land on the product the user chose.
   useEffect(() => {
