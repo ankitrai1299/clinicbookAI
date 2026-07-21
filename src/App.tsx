@@ -15,6 +15,7 @@ import LoginPage from './components/LoginPage';
 import VerifyEmailPage from './components/VerifyEmailPage';
 import WelcomeScreen from './components/WelcomeScreen';
 import PatientRegistration from './components/PatientRegistration';
+import WhatsAppDemo from './components/demo/WhatsAppDemo';
 import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
@@ -331,6 +332,13 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const clinicId = params.get('clinic') ?? params.get('c') ?? '';
     return <PatientRegistration clinicId={clinicId} />;
+  }
+
+  // Screen-recordable WhatsApp demo — a looping animation of the booking flow,
+  // sized to a chosen aspect ratio, for capturing marketing footage. Outside the
+  // auth shell so it needs no login and carries no app chrome.
+  if (path === '/demo') {
+    return <WhatsAppDemo />;
   }
 
   return (
