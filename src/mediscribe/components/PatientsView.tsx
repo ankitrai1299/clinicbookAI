@@ -6,6 +6,7 @@ import PreviousConsultationHistory from './PreviousConsultationHistory';
 import PatientTimeline from './PatientTimeline';
 import PatientRecordModal from '../../components/PatientRecordModal';
 import { realPhone } from '../../utils/phone';
+import { searchPatients } from '../utils/patientSearch';
 
 interface PatientsViewProps {
   patients: Patient[];
@@ -21,9 +22,7 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
   const [recordId, setRecordId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
-  const filtered = patients.filter(p =>
-    (p.name || '').toLowerCase().includes(query.trim().toLowerCase()),
-  );
+  const filtered = searchPatients(patients, query);
 
   // Past consultations for a patient, most recent first.
   const historyFor = (patientId: string) =>
@@ -54,7 +53,7 @@ export default function PatientsView({ patients, consultations = [], onOpenConsu
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="text"
-              placeholder="Search patients by name..."
+              placeholder="Search by name or phone number..."
               value={query}
               onChange={e => setQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"

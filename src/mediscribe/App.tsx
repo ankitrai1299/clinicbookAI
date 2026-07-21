@@ -600,6 +600,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             {activeView === 'dashboard' ? (
               <MobileHome
                 consultations={consultations}
+                patients={patients}
                 doctorName={doctorName}
                 upcomingAppointments={upcomingAppointments}
                 onStartNew={handleStartNewConsultation}
@@ -768,6 +769,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 consultation={activeConsultation}
                 patient={patients.find(p => p.id === activeConsultation.patientId)}
                 patientHistory={consultations.filter(c => c.patientId === activeConsultation.patientId)}
+                allConsultations={consultations}
                 onFinish={handleFinishConsultation}
                 onSaveReport={handleSaveReport}
                 onExit={() => setActiveConsultation(null)}

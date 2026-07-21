@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Consultation,
   ReportData,
@@ -53,6 +53,7 @@ import {
 import { printReport } from '../utils/pdf';
 import { debug } from '../utils/debug';
 import FollowUpBooking from './FollowUpBooking';
+import { favouriteMedicines, knownMedicineNames } from '../utils/favouriteMedicines';
 import {
   buildVisitComparison,
   reportHasClinicalContent,
@@ -72,6 +73,9 @@ interface ConsultationWorkspaceProps {
   patient?: Patient;
   // Sessions for the currently selected patient only (scoped by the parent).
   patientHistory: Consultation[];
+  // Every session this doctor has saved — used to work out which medicines they
+  // prescribe most, so the prescription editor can offer them in one tap.
+  allConsultations?: Consultation[];
   onFinish: (updatedReport: ReportData, transcript: TranscriptLine[]) => void;
   onSaveReport: (report: ReportData) => void;
   // Mobile-only: return to the dashboard from the full-screen report page.
@@ -200,7 +204,7 @@ function isLikelyHallucination(text: string): boolean {
   return HALLUCINATION_PHRASES.some(p => lower.includes(p));
 }
 
-export default function ConsultationWorkspace({ consultation, patient, patientHistory, onFinish, onSaveReport, onExit, onNewSession, onSelectSession, onSessionUpdate }: ConsultationWorkspaceProps) {
+export default function ConsultationWorkspace({ consultation, patient, patientHistory, allConsultations, onFinish, onSaveReport, onExit, onNewSession, onSelectSession, onSessionUpdate }: ConsultationWorkspaceProps) {
   const [isRecording, setIsRecording] = useState(false);
   // Live-recording is paused (still the same consultation; transcript retained).
   const [isPaused, setIsPaused] = useState(false);
@@ -231,6 +235,12 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   const [isSending, setIsSending] = useState(false);
   const [sendStatus, setSendStatus] = useState<{ ok: boolean; message: string } | null>(null);
   // Set once the note's follow-up has been booked as a real appointment.
+  // The medicines this doctor prescribes most, and every name they have used —
+  // derived from their own saved consultations, so it is right about their
+  // practice from the first week without any drug database to maintain.
+  const favourites = useMemo(() => favouriteMedicines(allConsultations ?? []), [allConsultations]);
+  const medicineNames = useMemo(() => knownMedicineNames(allConsultations ?? []), [allConsultations]);
+
   // Sections the doctor has opened to add content the visit didn't capture.
   const [revealed, setRevealed] = useState<(keyof ReportData)[]>([]);
   const [followUpAppointmentId, setFollowUpAppointmentId] = useState<string | undefined>(
@@ -1479,8 +1489,42 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   const renderMedEditor = (section: ReportSectionDef) => {
     const cols = section.columns || TREATMENT_COLUMNS;
     const rows = reportData[section.key] as MedicationRow[];
+    const addFavourite = (fav: MedicationRow) =>
+      setReportData(prev => ({
+        ...prev,
+        [section.key]: [...(prev[section.key] as MedicationRow[]), { ...fav }],
+      }));
     return (
       <div className="space-y-2">
+        {/* One tap for the drugs this doctor actually prescribes. The whole line
+            is filled — strength, dose, frequency, timing — because the medicine
+            name was never the slow part. Ranked from their own history. */}
+        {favourites.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mr-0.5">
+              Frequently prescribed
+            </span>
+            {favourites.map(f => (
+              <button
+                key={f.label}
+                type="button"
+                onClick={() => addFavourite(f.row)}
+                title={`Used ${f.uses} time${f.uses === 1 ? '' : 's'}`}
+                className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white hover:bg-blue-50 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-full px-2.5 py-1 transition-colors"
+              >
+                <Plus size={11} /> {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Autocomplete over every medicine name the doctor has used before. */}
+        <datalist id="mediscribe-medicines">
+          {medicineNames.map(n => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
+
         {rows.length === 0 && <p className="text-xs text-slate-400 italic">No medicines added.</p>}
         {rows.map((row, i) => (
           <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1.5">
@@ -1501,6 +1545,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
                   value={(row as Record<string, any>)[col.key] ?? cell(row, col.key)}
                   onChange={e => updateMed(section.key, i, col.key as keyof MedicationRow, e.target.value)}
                   placeholder={col.label}
+                  list={col.key === 'medicine' ? 'mediscribe-medicines' : undefined}
                   className={inputCls}
                 />
               ))}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Consultation, UpcomingAppointment } from '../types';
+import { Consultation, Patient, UpcomingAppointment } from '../types';
 import {
   Sparkles,
   Mic,
@@ -23,6 +23,9 @@ import {
 
 interface MobileHomeProps {
   consultations: Consultation[];
+  // Needed so the recent-visits search can match a phone number, not just a
+  // name — a consultation record carries the patient's name but not their phone.
+  patients?: Patient[];
   doctorName?: string;
   upcomingAppointments?: UpcomingAppointment[];
   onStartNew: () => void;
@@ -59,6 +62,7 @@ const initials = (name?: string): string =>
 
 export default function MobileHome({
   consultations,
+  patients,
   doctorName,
   upcomingAppointments = [],
   onStartNew,
@@ -96,9 +100,19 @@ export default function MobileHome({
     const cur = latestByPatient.get(key);
     if (!cur || sessionTime(c) >= sessionTime(cur)) latestByPatient.set(key, c);
   }
+  // Match on the patient's name OR their phone number, the same way the desktop
+  // lists do — in a clinic the number is often the only thing to hand.
+  const phoneOf = new Map((patients ?? []).map((p) => [p.id, p.phone || '']));
+  const q = query.trim().toLowerCase();
+  const digits = q.replace(/\D/g, '');
   const recent = Array.from(latestByPatient.values())
     .sort((a, b) => sessionTime(b) - sessionTime(a))
-    .filter((c) => (c.patientName || '').toLowerCase().includes(query.toLowerCase()));
+    .filter((c) => {
+      if (!q) return true;
+      if ((c.patientName || '').toLowerCase().includes(q)) return true;
+      if (digits.length < 3) return false;
+      return (phoneOf.get(c.patientId ?? '') || '').replace(/\D/g, '').includes(digits);
+    });
 
   const firstName = (doctorName || 'Doctor').replace(/^dr\.?\s*/i, '').split(' ')[0] || 'Doctor';
 
@@ -241,7 +255,7 @@ export default function MobileHome({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search patients..."
+          placeholder="Search by name or phone..."
           className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
         />
       </div>

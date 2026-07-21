@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Patient } from '../types';
 import { Search, UserPlus, X } from 'lucide-react';
+import { searchPatients } from '../utils/patientSearch';
 
 interface PatientSelectModalProps {
   patients: Patient[];
@@ -18,7 +19,7 @@ export default function PatientSelectModal({ patients, onSelect, onAdd, onClose 
   const [newGender, setNewGender] = useState('Male');
   const [newPhone, setNewPhone] = useState('');
 
-  const filtered = patients.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filtered = searchPatients(patients, searchTerm);
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +54,7 @@ export default function PatientSelectModal({ patients, onSelect, onAdd, onClose 
                 <input 
                   type="text" 
                   autoFocus
-                  placeholder="Search by name..." 
+                  placeholder="Search by name or phone number..." 
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-slate-900"
