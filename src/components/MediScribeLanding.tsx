@@ -1,12 +1,10 @@
 import { ArrowLeft } from 'lucide-react';
-import NovaHero from './novascribe/NovaHero';
-import NovaFeatures from './novascribe/NovaFeatures';
+import NovaHeroV2 from './novascribe/v2/NovaHeroV2';
+import { HowItWorks, BeforeAfter, MedicalReasoning } from './novascribe/v2/NovaProcess';
+import { LiveDemo, RealReport } from './novascribe/v2/NovaDemo';
+import { Specialties, WhatChanges, PatientJourney, Integrations } from './novascribe/v2/NovaEcosystem';
+import { Testimonials, FAQ, FinalCTA } from './novascribe/v2/NovaClose';
 import NovaPricing from './novascribe/NovaPricing';
-import { NovaTrust, NovaFAQ, NovaFinalCTA } from './novascribe/NovaTrust';
-import PlatformStory from './platform/PlatformStory';
-import TrustStrip from './platform/TrustStrip';
-import PatientAsksSection from './platform/PatientAsksSection';
-import NovaScribeShowcase from './platform/NovaScribeShowcase';
 
 interface Props {
   isLoggedIn: boolean;
@@ -14,44 +12,65 @@ interface Props {
   onBack: () => void; // back to the platform hub
 }
 
-// The Android APK download link. Set VITE_MEDISCRIBE_APK_URL (Vercel env) to the
-// URL of the EAS-built APK; until then the hero shows a "coming soon" state.
-const APK_URL = (import.meta.env.VITE_MEDISCRIBE_APK_URL as string | undefined) || '';
-
-// NovaScribe's landing page — the full product story (hero with a live
-// consultation simulation, how it works, clinical intelligence, report quality,
-// pricing, trust, FAQ, closing CTA) rendered in the SAME theme as the ClinicBook
-// landing: slate-50 / white alternating sections, sky→teal accents, font-display
-// headings. One platform, one look.
+// NovaScribe's landing page, told as one continuous story rather than a stack of
+// feature blocks: what it does (hero + live demo), how it works (timeline), what
+// it replaces (before/after), why it can be trusted with medicine (reasoning +
+// a real report), who it's for (specialties), how it fits (journey +
+// integrations), and then the ask.
 export default function MediScribeLanding({ isLoggedIn, onOpen, onBack }: Props) {
   return (
-    <div className="bg-slate-50 min-h-screen" id="novascribe-landing-root">
-      {/* Back to the platform hub — sits on the hero's white ground. */}
-      <div className="bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" /> All apps
-          </button>
-        </div>
+    <div className="bg-white min-h-screen" id="novascribe-landing-root">
+      {/* Back to the platform hub */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" /> All apps
+        </button>
       </div>
 
-      <NovaHero isLoggedIn={isLoggedIn} onOpen={onOpen} apkUrl={APK_URL} />
-      <TrustStrip />
-      <NovaFeatures />
-      {/* A clinic day end-to-end, shown as WhatsApp panels */}
-      <NovaScribeShowcase />
-      {/* The same "one platform, two apps" story the ClinicBook landing tells —
-          so a doctor landing here understands where the patient side fits. */}
-      <PlatformStory />
-      {/* Where the doctor's prescription actually ends up — in the patient's chat. */}
-      <PatientAsksSection />
+      {/* 1 — the promise, shown running */}
+      <NovaHeroV2 isLoggedIn={isLoggedIn} onOpen={onOpen} />
+
+      {/* 2 — the flow, step by step */}
+      <HowItWorks />
+
+      {/* 3 — the product actually running */}
+      <LiveDemo />
+
+      {/* 4 — what it replaces */}
+      <BeforeAfter />
+
+      {/* 5 — why it can be trusted with medicine */}
+      <MedicalReasoning />
+
+      {/* 6 — the document it produces */}
+      <RealReport />
+
+      {/* 7 — who it's for */}
+      <Specialties />
+
+      {/* 8 — what measurably changes */}
+      <WhatChanges />
+
+      {/* 9 — the loop with ClinicBook */}
+      <PatientJourney />
+
+      {/* 10 — what it connects to */}
+      <Integrations />
+
+      {/* 11 — voices from the OPD */}
+      <Testimonials />
+
+      {/* Pricing sits just before the questions, where intent is highest */}
       <NovaPricing onOpen={onOpen} />
-      <NovaTrust />
-      <NovaFAQ />
-      <NovaFinalCTA isLoggedIn={isLoggedIn} onOpen={onOpen} />
+
+      {/* 12 — objections */}
+      <FAQ />
+
+      {/* 13 — the ask */}
+      <FinalCTA isLoggedIn={isLoggedIn} onOpen={onOpen} />
     </div>
   );
 }
