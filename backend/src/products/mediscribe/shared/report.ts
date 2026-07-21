@@ -30,10 +30,12 @@ export interface ReportSectionDef {
   no: number;
   title: string;
   kind: ReportSectionKind;
-  // Editable sections show input controls in the editor and are always visible
-  // there (so the doctor can add data). Read-only sections render as static text
-  // and are hidden when empty.
-  editable: boolean;
+  // EVERY section is editable — an AI-written note the clinician cannot correct
+  // is worse than no note. This flag only controls VISIBILITY: `alwaysShow`
+  // sections are present in the editor even when empty (so there is somewhere to
+  // type), while the rest stay hidden until they have content, and can be
+  // revealed on demand. Otherwise all 18 sections would be on screen at once.
+  alwaysShow: boolean;
   // Column set for `medications` sections.
   columns?: ColumnDef[];
 }
@@ -99,24 +101,24 @@ export const FOLLOWUP_FIELDS: { key: keyof FollowUp; label: string }[] = [
 // editor, the PDF/DOCX exports, the print HTML, the empty-report builder and the
 // normalizer.
 export const REPORT_SECTIONS: ReportSectionDef[] = [
-  { key: 'clinicalOverview', no: 1, title: 'Patient Clinical Overview', kind: 'overview', editable: false },
-  { key: 'chiefComplaints', no: 2, title: 'Chief Complaints', kind: 'complaints', editable: false },
-  { key: 'historyOfPresentIllness', no: 3, title: 'History of Present Illness', kind: 'bullets', editable: false },
-  { key: 'pastMedicalHistory', no: 4, title: 'Past Medical History', kind: 'bullets', editable: false },
-  { key: 'surgicalHistory', no: 5, title: 'Surgical / Procedure History', kind: 'bullets', editable: false },
-  { key: 'medicationHistory', no: 6, title: 'Medication History', kind: 'medications', editable: true, columns: MED_HISTORY_COLUMNS },
-  { key: 'allergies', no: 7, title: 'Allergy Profile', kind: 'allergies', editable: false },
-  { key: 'familyHistory', no: 8, title: 'Family History', kind: 'bullets', editable: false },
-  { key: 'socialHistory', no: 9, title: 'Social & Lifestyle History', kind: 'bullets', editable: false },
-  { key: 'reviewOfSystems', no: 10, title: 'Review of Systems', kind: 'groups', editable: false },
-  { key: 'clinicalMeasurements', no: 11, title: 'Clinical Measurements', kind: 'vitals', editable: true },
-  { key: 'physicalExamination', no: 12, title: 'Physical Examination Findings', kind: 'groups', editable: false },
-  { key: 'assessment', no: 13, title: 'Clinical Impression / Assessment', kind: 'bullets', editable: false },
-  { key: 'prescribedMedications', no: 14, title: 'Treatment & Medication Plan', kind: 'medications', editable: true, columns: TREATMENT_COLUMNS },
-  { key: 'ordersDiagnostics', no: 15, title: 'Orders & Diagnostic Plan', kind: 'groups', editable: false },
-  { key: 'advice', no: 16, title: 'Care Plan & Patient Instructions', kind: 'bullets', editable: true },
-  { key: 'redFlags', no: 17, title: 'Warning Signs / Red Flags', kind: 'bullets', editable: false },
-  { key: 'followUp', no: 18, title: 'Follow-up Plan', kind: 'followup', editable: true },
+  { key: 'clinicalOverview', no: 1, title: 'Patient Clinical Overview', kind: 'overview', alwaysShow: false },
+  { key: 'chiefComplaints', no: 2, title: 'Chief Complaints', kind: 'complaints', alwaysShow: false },
+  { key: 'historyOfPresentIllness', no: 3, title: 'History of Present Illness', kind: 'bullets', alwaysShow: false },
+  { key: 'pastMedicalHistory', no: 4, title: 'Past Medical History', kind: 'bullets', alwaysShow: false },
+  { key: 'surgicalHistory', no: 5, title: 'Surgical / Procedure History', kind: 'bullets', alwaysShow: false },
+  { key: 'medicationHistory', no: 6, title: 'Medication History', kind: 'medications', alwaysShow: true, columns: MED_HISTORY_COLUMNS },
+  { key: 'allergies', no: 7, title: 'Allergy Profile', kind: 'allergies', alwaysShow: false },
+  { key: 'familyHistory', no: 8, title: 'Family History', kind: 'bullets', alwaysShow: false },
+  { key: 'socialHistory', no: 9, title: 'Social & Lifestyle History', kind: 'bullets', alwaysShow: false },
+  { key: 'reviewOfSystems', no: 10, title: 'Review of Systems', kind: 'groups', alwaysShow: false },
+  { key: 'clinicalMeasurements', no: 11, title: 'Clinical Measurements', kind: 'vitals', alwaysShow: true },
+  { key: 'physicalExamination', no: 12, title: 'Physical Examination Findings', kind: 'groups', alwaysShow: false },
+  { key: 'assessment', no: 13, title: 'Clinical Impression / Assessment', kind: 'bullets', alwaysShow: false },
+  { key: 'prescribedMedications', no: 14, title: 'Treatment & Medication Plan', kind: 'medications', alwaysShow: true, columns: TREATMENT_COLUMNS },
+  { key: 'ordersDiagnostics', no: 15, title: 'Orders & Diagnostic Plan', kind: 'groups', alwaysShow: false },
+  { key: 'advice', no: 16, title: 'Care Plan & Patient Instructions', kind: 'bullets', alwaysShow: true },
+  { key: 'redFlags', no: 17, title: 'Warning Signs / Red Flags', kind: 'bullets', alwaysShow: false },
+  { key: 'followUp', no: 18, title: 'Follow-up Plan', kind: 'followup', alwaysShow: true },
 ];
 
 // ── Empty-value builders ─────────────────────────────────────

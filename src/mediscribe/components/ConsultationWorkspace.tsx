@@ -4,8 +4,6 @@ import {
   Consultation,
   ReportData,
   MedicationRow,
-  ComplaintRow,
-  AllergyRow,
   SystemGroup,
   Vitals,
   FollowUp,
@@ -41,6 +39,9 @@ import {
   createEmptyReport,
   normalizeReport,
   emptyMedicationRow,
+  emptyComplaintRow,
+  emptyAllergyRow,
+  emptyGroup,
   sectionHasContent,
   buildReportHtml,
   VITALS_FIELDS,
@@ -230,6 +231,8 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   const [isSending, setIsSending] = useState(false);
   const [sendStatus, setSendStatus] = useState<{ ok: boolean; message: string } | null>(null);
   // Set once the note's follow-up has been booked as a real appointment.
+  // Sections the doctor has opened to add content the visit didn't capture.
+  const [revealed, setRevealed] = useState<(keyof ReportData)[]>([]);
   const [followUpAppointmentId, setFollowUpAppointmentId] = useState<string | undefined>(
     () => (consultation as { followUpAppointmentId?: string }).followUpAppointmentId,
   );
@@ -1469,59 +1472,8 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   const cell = (r: Record<string, any>, key: string): string =>
     (typeof r[key] === 'string' && r[key]) || (key === 'dose' ? (r.dosage as string) || '' : '');
 
-  // Read-only: bullet list.
-  const renderBulletsRO = (items: string[]) => (
-    <ul className="space-y-1">
-      {items.filter(Boolean).map((it, i) => (
-        <li key={i} className="flex gap-2 text-sm text-slate-700">
-          <span className="text-blue-400 leading-none mt-1.5">•</span>
-          <span className="flex-1">{it}</span>
-        </li>
-      ))}
-    </ul>
-  );
-
-  // Read-only: simple table (chief complaints, allergies).
-  const renderTableRO = (cols: ColumnDef[], rows: Record<string, any>[]) => (
-    <div className="overflow-x-auto -mx-0.5 px-0.5">
-      <table className="w-full text-xs border-collapse">
-        <thead>
-          <tr>
-            {cols.map(c => (
-              <th key={c.key} className="border border-slate-200 bg-slate-50 px-2 py-1 text-left font-semibold text-slate-600">
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              {cols.map(c => (
-                <td key={c.key} className="border border-slate-200 px-2 py-1 text-slate-700 align-top">
-                  {cell(r, c.key)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-
-  // Read-only: grouped findings (ROS, physical exam, orders).
-  const renderGroupsRO = (groups: SystemGroup[]) => (
-    <div className="space-y-2.5">
-      {groups
-        .filter(g => g.findings.filter(Boolean).length || g.name.trim())
-        .map((g, i) => (
-          <div key={i}>
-            <p className="text-[11px] font-bold text-slate-600 mb-0.5">{g.name || 'Findings'}</p>
-            {renderBulletsRO(g.findings)}
-          </div>
-        ))}
-    </div>
-  );
+  // The read-only renderers that lived here are gone: every section is now
+  // editable, so nothing renders as static text any more.
 
   // Editable: medication table (cards with one input per column).
   const renderMedEditor = (section: ReportSectionDef) => {
@@ -1599,6 +1551,134 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     );
   };
 
+  // Editable: the AI-written summary paragraph.
+  const renderOverviewEditor = () => (
+    <textarea
+      value={reportData.clinicalOverview}
+      onChange={e => setReportData(prev => ({ ...prev, clinicalOverview: e.target.value }))}
+      rows={4}
+      placeholder="Summary of the visit…"
+      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-y"
+    />
+  );
+
+  // Editable: a table of fixed-shape rows (complaints, allergies). One card per
+  // row so it stays usable on a phone, where a real table would need scrolling.
+  const renderRowEditor = <T extends object>(
+    section: ReportSectionDef,
+    cols: ColumnDef[],
+    makeEmpty: () => T,
+    noun: string,
+  ) => {
+    const rows = (reportData[section.key] as unknown as Record<string, string>[]) || [];
+    const write = (next: Record<string, string>[]) =>
+      setReportData(prev => ({ ...prev, [section.key]: next }));
+    return (
+      <div className="space-y-2">
+        {rows.length === 0 && <p className="text-xs text-slate-400 italic">Nothing added.</p>}
+        {rows.map((row, i) => (
+          <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                {noun} {i + 1}
+              </span>
+              <button
+                onClick={() => write(rows.filter((_, n) => n !== i))}
+                className="text-slate-400 hover:text-red-600 transition-colors"
+                title={`Remove ${noun.toLowerCase()}`}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {cols.map(col => (
+                <input
+                  key={col.key}
+                  value={row[col.key] ?? ''}
+                  onChange={e =>
+                    write(rows.map((r, n) => (n === i ? { ...r, [col.key]: e.target.value } : r)))
+                  }
+                  placeholder={col.label}
+                  className={inputCls}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+        <button
+          onClick={() => write([...rows, makeEmpty() as unknown as Record<string, string>])}
+          className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+        >
+          <Plus size={14} /> Add {noun.toLowerCase()}
+        </button>
+      </div>
+    );
+  };
+
+  // Editable: named groups of findings (review of systems, examination, orders).
+  const renderGroupsEditor = (section: ReportSectionDef) => {
+    const groups = (reportData[section.key] as SystemGroup[]) || [];
+    const write = (next: SystemGroup[]) => setReportData(prev => ({ ...prev, [section.key]: next }));
+    const setGroup = (i: number, patch: Partial<SystemGroup>) =>
+      write(groups.map((g, n) => (n === i ? { ...g, ...patch } : g)));
+    return (
+      <div className="space-y-2.5">
+        {groups.length === 0 && <p className="text-xs text-slate-400 italic">Nothing added.</p>}
+        {groups.map((g, i) => (
+          <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <input
+                value={g.name}
+                onChange={e => setGroup(i, { name: e.target.value })}
+                placeholder="Group (e.g. Respiratory)"
+                className={`${inputCls} font-semibold flex-1`}
+              />
+              <button
+                onClick={() => write(groups.filter((_, n) => n !== i))}
+                className="text-slate-400 hover:text-red-600 transition-colors"
+                title="Remove group"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+            {g.findings.map((f, fi) => (
+              <div key={fi} className="flex items-start gap-2 pl-2">
+                <span className="text-slate-400 mt-2 leading-none">•</span>
+                <input
+                  value={f}
+                  onChange={e =>
+                    setGroup(i, { findings: g.findings.map((x, n) => (n === fi ? e.target.value : x)) })
+                  }
+                  placeholder="Finding"
+                  className={`${inputCls} flex-1`}
+                />
+                <button
+                  onClick={() => setGroup(i, { findings: g.findings.filter((_, n) => n !== fi) })}
+                  className="text-slate-400 hover:text-red-600 transition-colors mt-1.5"
+                  title="Remove finding"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setGroup(i, { findings: [...g.findings, ''] })}
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 hover:text-blue-700 transition-colors pl-2"
+            >
+              <Plus size={12} /> Add finding
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => write([...groups, emptyGroup()])}
+          className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+        >
+          <Plus size={14} /> Add group
+        </button>
+      </div>
+    );
+  };
+
   // Editable: vitals key/value grid.
   const renderVitalsEditor = () => (
     <div className="grid grid-cols-2 gap-2">
@@ -1645,38 +1725,38 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
 
   // Dispatch a section to the right renderer (editable vs read-only).
   const renderSectionBody = (section: ReportSectionDef) => {
-    const value = reportData[section.key];
-    if (section.editable) {
-      switch (section.kind) {
-        case 'medications':
-          return renderMedEditor(section);
-        case 'vitals':
-          return renderVitalsEditor();
-        case 'followup':
-          return renderFollowUpEditor();
-        default:
-          return renderBulletEditor(section);
-      }
-    }
+    // Every section is editable now. Thirteen of the eighteen used to render as
+    // static text, so when the model got a history or an assessment wrong the
+    // doctor could see the error and had no way to fix it — they could only
+    // regenerate the whole note and hope. Correcting the record is the one thing
+    // a clinician must always be able to do.
     switch (section.kind) {
       case 'overview':
-        return <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{value as string}</p>;
+        return renderOverviewEditor();
       case 'complaints':
-        return renderTableRO(COMPLAINT_COLUMNS, value as ComplaintRow[]);
+        return renderRowEditor(section, COMPLAINT_COLUMNS, emptyComplaintRow, 'Complaint');
       case 'allergies':
-        return renderTableRO(ALLERGY_COLUMNS, value as AllergyRow[]);
+        return renderRowEditor(section, ALLERGY_COLUMNS, emptyAllergyRow, 'Allergy');
       case 'groups':
-        return renderGroupsRO(value as SystemGroup[]);
+        return renderGroupsEditor(section);
+      case 'medications':
+        return renderMedEditor(section);
+      case 'vitals':
+        return renderVitalsEditor();
+      case 'followup':
+        return renderFollowUpEditor();
       default:
-        return renderBulletsRO(value as string[]);
+        return renderBulletEditor(section);
     }
   };
 
-  // Sections visible in the editor: editable ones always show (so the doctor can
-  // add data); read-only ones only when they contain content (no empty sections).
+  // Sections on screen: the core ones always, the rest once they have content —
+  // otherwise all eighteen would be open at once and the note would be unreadable.
+  // `revealed` holds sections the doctor has explicitly opened to add something.
   const visibleSections = REPORT_SECTIONS.filter(
-    s => s.editable || sectionHasContent(reportData, s),
+    s => s.alwaysShow || revealed.includes(s.key) || sectionHasContent(reportData, s),
   );
+  const hiddenSections = REPORT_SECTIONS.filter(s => !visibleSections.includes(s));
 
   // ── Crash recovery ──────────────────────────────────────────
   // On open, look for audio that was recorded for this consultation but never
@@ -2529,21 +2609,39 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
 
               {visibleSections.map((section, idx) => (
                 <div key={section.key as string}>
-                  <div className="flex items-center justify-between gap-2 mb-2 border-b border-slate-100 pb-1">
+                  {/* No Editable/Read-only badge any more — every section is
+                      editable, so the distinction it drew no longer exists. */}
+                  <div className="mb-2 border-b border-slate-100 pb-1">
                     <h4 className="text-xs font-bold text-blue-700 uppercase tracking-wide">
                       {idx + 1}. {section.title}
                     </h4>
-                    <span
-                      className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                        section.editable ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
-                      }`}
-                    >
-                      {section.editable ? 'Editable' : 'Read-only'}
-                    </span>
                   </div>
                   {renderSectionBody(section)}
                 </div>
               ))}
+
+              {/* Sections the visit didn't produce. They stay out of the way until
+                  the doctor wants one — an empty Family History on every note is
+                  noise, but not being able to add one is a missing record. */}
+              {hiddenSections.length > 0 && (
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                    Add a section
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {hiddenSections.map(s => (
+                      <button
+                        key={s.key as string}
+                        type="button"
+                        onClick={() => setRevealed(prev => [...prev, s.key])}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-white hover:bg-slate-50 hover:text-blue-700 border border-slate-200 hover:border-blue-200 rounded-full px-2.5 py-1 transition-colors"
+                      >
+                        <Plus size={11} /> {s.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Doctor Final Review */}
               <div>
