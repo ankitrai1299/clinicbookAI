@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, useInView, useReducedMotion } from 'motion/react';
 import { Mic, FileText, Pill, MessageSquare, Sparkles, Check, Printer, Send } from 'lucide-react';
 import { Reveal, SectionHead, Waveform } from './primitives';
+import NovaPhoneDemo from './NovaPhoneDemo';
 
 // Section 3 — the product running, not a screenshot of it. The consultation plays
 // through: the patient speaks, the transcript lands, the note is written, the
@@ -47,8 +48,16 @@ export function LiveDemo() {
           sub="No screenshots — this is the flow exactly as it runs in the app."
         />
 
+        {/* The phone version leads — it's the same animation we record for reels,
+            so the site and the marketing footage never drift apart. */}
+        <Reveal delay={0.08}>
+          <div className="mt-14 mb-14 flex justify-center">
+            <NovaPhoneDemo />
+          </div>
+        </Reveal>
+
         <Reveal delay={0.1}>
-          <div className="mt-14 rounded-3xl bg-white border border-slate-200 shadow-2xl shadow-slate-900/5 overflow-hidden">
+          <div className="rounded-3xl bg-white border border-slate-200 shadow-2xl shadow-slate-900/5 overflow-hidden">
             <div className="grid lg:grid-cols-2">
               {/* Left — the room */}
               <div className="p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-slate-100">
