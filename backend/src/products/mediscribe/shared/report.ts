@@ -362,6 +362,8 @@ export interface ReportMeta {
   patientName?: string;
   date?: string;
   doctorName?: string;
+  /** The clinic's own name — printed as the letterhead on the patient's copy. */
+  clinicName?: string;
 }
 
 function tableHtml(columns: ColumnDef[], rows: Record<string, any>[]): string {
@@ -465,7 +467,8 @@ export function buildReportHtml(report: ReportData, meta: ReportMeta = {}): stri
 </head>
 <body>
   <div class="header">
-    <div class="brand">NovaScribe AI</div>
+    <!-- The clinic's name leads when we know it: this is their document. -->
+    <div class="brand">${escapeHtml(meta.clinicName || 'NovaScribe AI')}</div>
     <h1>Clinical Report</h1>
     ${sub ? `<div class="sub">${sub}</div>` : ''}
   </div>

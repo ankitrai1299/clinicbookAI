@@ -367,6 +367,8 @@ export interface ReportMeta {
   doctorName?: string;
   doctorQualification?: string;
   doctorRegNo?: string;
+  /** The clinic's own name, from Settings — printed as the letterhead. */
+  clinicName?: string;
   // Concise previous-visit comparison baked into the report (print + PDF). Shape
   // matches compareVisits.PreviousVisitPdf (kept structural to avoid an import
   // cycle). null/undefined → the section prints "No previous consultation available."
@@ -571,7 +573,10 @@ ${FONT_LINK}
 </head>
 <body>
   <div class="header">
-    <div class="brand">MediScribe AI</div>
+    <!-- The clinic's name leads when it has been set — this is the clinic's
+         document, not ours. We fall back to the product name only when Settings
+         is still empty. -->
+    <div class="brand">${escapeHtml(meta.clinicName || 'MediScribe AI')}</div>
     <h1>Clinical Report</h1>
     ${sub ? `<div class="sub">${sub}</div>` : ''}
   </div>

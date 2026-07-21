@@ -26,7 +26,10 @@ export function prescriptionFileName(patientName?: string, date?: string): strin
  * is nothing worth sending / rendering fails. Never throws: a PDF failure must
  * never break the save or the text message that accompanies it.
  */
-export async function buildPrescriptionPdf(consultation: any): Promise<Buffer | null> {
+export async function buildPrescriptionPdf(
+  consultation: any,
+  clinicName?: string,
+): Promise<Buffer | null> {
   try {
     const raw = consultation?.report;
     if (!raw) return null;
@@ -41,6 +44,7 @@ export async function buildPrescriptionPdf(consultation: any): Promise<Buffer | 
       patientName: consultation?.patientName || undefined,
       date: consultation?.date || undefined,
       doctorName: consultation?.doctorName || undefined,
+      clinicName: clinicName || undefined,
     });
     return await renderHtmlToPdf(html);
   } catch (error) {

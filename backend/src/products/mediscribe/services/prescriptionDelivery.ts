@@ -101,7 +101,7 @@ export const sendPrescriptionOnFinalize = async (clinicId: string, consultation:
   // prescription skill can then deliver the file on request).
   let pdfSent = false;
   if (await isConversationWindowOpen(clinicId, patient.phone)) {
-    const pdf = await buildPrescriptionPdf(consultation);
+    const pdf = await buildPrescriptionPdf(consultation, clinicName);
     if (pdf) {
       pdfSent = await sendWhatsAppDocument({
         to: patient.phone,

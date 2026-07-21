@@ -12,7 +12,7 @@ import {
   TranscriptLine,
   Patient,
 } from '../types';
-import { loadDoctorProfile } from '../utils/settings';
+import { loadDoctorProfile, loadLanguage } from '../utils/settings';
 import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Users } from 'lucide-react';
 import Logo from './Logo';
 import UploadedAudioPlayer from './UploadedAudioPlayer';
@@ -48,6 +48,8 @@ import {
   ALLERGY_COLUMNS,
   TREATMENT_COLUMNS,
 } from '../utils/report';
+import { printReport } from '../utils/pdf';
+import { debug } from '../utils/debug';
 import {
   buildVisitComparison,
   reportHasClinicalContent,
@@ -191,7 +193,11 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   // Live auto-save feedback for the transcript while recording.
   const [transcriptSaveStatus, setTranscriptSaveStatus] =
     useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
-  const [language, setLanguage] = useState<string>('auto');
+  // Settings promises "new recordings use this language", so honour it here —
+  // the picker below still overrides it for a one-off visit in another language.
+  const [language, setLanguage] = useState<string>(
+    () => LANGUAGES.find((l) => l.label === loadLanguage())?.code ?? 'auto',
+  );
   const [timer, setTimer] = useState(0);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
@@ -224,6 +230,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     return {
       doctorQualification: p.qualification || undefined,
       doctorRegNo: p.regNo || undefined,
+      clinicName: p.clinicName || undefined,
     };
   })();
 
@@ -391,7 +398,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
 
   // Log the loaded status once when the session opens.
   useEffect(() => {
-    console.log('[session] loaded', {
+    debug('[session] loaded', {
       sessionId: consultation.id,
       patientId: consultation.patientId,
       status: consultation.status || 'Draft',
@@ -415,7 +422,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     autoSaveTimerRef.current = setTimeout(() => {
       const doc = buildSessionDoc('Draft');
       onSessionUpdate?.(doc);
-      console.log('[session] auto-save', {
+      debug('[session] auto-save', {
         sessionId: doc.id,
         patientId: doc.patientId,
         status: doc.status,
@@ -493,21 +500,21 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
       // sounds are real speech vs. brief noise; it never gates the recording.
       try {
         vadRef.current = createVAD(stream, {
-          onSpeechStart: () => console.log('[vad] speech detected'),
-          onSpeechEnd: () => console.log('[vad] pause (silence)'),
+          onSpeechStart: () => debug('[vad] speech detected'),
+          onSpeechEnd: () => debug('[vad] pause (silence)'),
         });
       } catch (e) {
         vadRef.current = null; // fail-open: never suppress real speech
       }
 
       const track = stream.getAudioTracks()[0];
-      console.log('[record] microphone:', track?.label || 'unknown device');
-      console.log('[record] audio track settings:', track?.getSettings?.() ?? {});
+      debug('[record] microphone:', track?.label || 'unknown device');
+      debug('[record] audio track settings:', track?.getSettings?.() ?? {});
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
-      console.log('[record] MIME:', mimeType);
+      debug('[record] MIME:', mimeType);
 
       const mediaRecorder = mimeType
         ? new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 128000 })
@@ -550,9 +557,9 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         const durationSec = recordStartMsRef.current
           ? (Date.now() - recordStartMsRef.current) / 1000
           : 0;
-        console.log('[record] duration (s):', durationSec.toFixed(1));
-        console.log('[record] blob size (bytes):', blob.size);
-        console.log('[record] blob mimetype:', blob.type || mimeType);
+        debug('[record] duration (s):', durationSec.toFixed(1));
+        debug('[record] blob size (bytes):', blob.size);
+        debug('[record] blob mimetype:', blob.type || mimeType);
         resolve(blob);
       };
       // Flush any buffered audio into a final chunk so the blob is complete.
@@ -610,10 +617,10 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
       setIsTranscribing(true);
       const blob = await stopAudioCaptureGetBlob();
       if (blob && blob.size >= 2000) {
-        console.log('[transcribe] sending recorded blob to backend — size (bytes):', blob.size, '| type:', blob.type);
+        debug('[transcribe] sending recorded blob to backend — size (bytes):', blob.size, '| type:', blob.type);
         const result = await transcribeAudio(blob);
         const whisperText = (result.rawText || '').trim();
-        console.log('[transcribe] backend response — text length:', whisperText.length);
+        debug('[transcribe] backend response — text length:', whisperText.length);
         if (whisperText && !isLikelyHallucination(whisperText)) {
           // Append the accurate transcription after any pre-recording transcript.
           finalText = (recordingBaseRef.current
@@ -836,14 +843,14 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
 
       // Log what the browser actually granted (constraints are best-effort hints).
       const settings = stream.getAudioTracks()[0]?.getSettings?.() ?? {};
-      console.log('[record] audio track settings:', settings);
+      debug('[record] audio track settings:', settings);
 
       // Prefer Opus-in-WebM (best quality/compatibility for Whisper), else plain webm.
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
 
-      console.log('[record] MIME:', mimeType);
+      debug('[record] MIME:', mimeType);
 
       const mediaRecorder = mimeType
         ? // Higher bitrate keeps speaker-played audio intelligible for Whisper.
@@ -897,15 +904,10 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         : 0;
 
       // ── Debug logs for audio-capture diagnosis ──────────────────────────
-      console.log('[record] duration (s):', durationSec.toFixed(1));
-      console.log('[record] chunks:', chunks.length);
-      console.log('[record] blob size (bytes):', audioBlob.size);
-      console.log('[record] blob mimetype:', audioBlob.type || mimeType);
-
-      // DEBUG: preview the actual recorded audio (paste this URL in a new tab to
-      // listen and confirm it captured real voice, not silence).
-      const previewUrl = URL.createObjectURL(audioBlob);
-      console.log('[record] audio preview:', previewUrl);
+      debug('[record] duration (s):', durationSec.toFixed(1));
+      debug('[record] chunks:', chunks.length);
+      debug('[record] blob size (bytes):', audioBlob.size);
+      debug('[record] blob mimetype:', audioBlob.type || mimeType);
 
       // Guard against empty recordings (silence / mic not captured), which make
       // Whisper return generic hallucinated text. Kept low so short but real
@@ -921,10 +923,10 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         // Whisper AUTO-DETECTS the spoken language and returns the exact spoken
         // words from THIS recording (best accuracy for mixed Hindi/English/Urdu).
         // Conversion into the selected output language happens afterwards.
-        console.log('[transcribe] sending file — size (bytes):', audioBlob.size, '| type:', audioBlob.type || mimeType);
+        debug('[transcribe] sending file — size (bytes):', audioBlob.size, '| type:', audioBlob.type || mimeType);
         const result = await transcribeAudio(audioBlob);
         const text = (result.rawText || '').trim();
-        console.log('[transcribe] API response — text length:', text.length);
+        debug('[transcribe] API response — text length:', text.length);
 
         // Never insert a known hallucination phrase into the transcript.
         if (text && isLikelyHallucination(text)) {
@@ -1007,7 +1009,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     // video/mpeg) being wrongly rejected by an extension/MIME-only check.
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const { accepted, reason } = checkAudioFile(file.name, file.type);
-    console.log('[audio-upload] selected file', {
+    debug('[audio-upload] selected file', {
       originalName: file.name,
       mimetype: file.type,
       extension: ext,
@@ -1169,25 +1171,23 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     }));
   };
 
+  // Print goes through the shared helper, which hands off to the phone app's
+  // NATIVE print dialog when we're inside the WebView. Doing it inline here meant
+  // the app fell back to window.open(), which a WebView blocks — so Print simply
+  // failed on the phone even though the bridge for it already existed.
   const handlePrint = () => {
-    const html = buildReportHtml(reportData, {
-      patientName: consultation.patientName,
-      ...reportPatientMeta,
-      date: consultation.date,
-      doctorName: doctorName.trim() || undefined,
-      ...letterhead,
-      previousVisit: previousVisitPdf,
-    });
-    const w = window.open('', '_blank');
-    if (!w) {
-      setError('Unable to open the print window. Please allow pop-ups and try again.');
-      return;
+    try {
+      printReport(reportData, {
+        patientName: consultation.patientName,
+        ...reportPatientMeta,
+        date: consultation.date,
+        doctorName: doctorName.trim() || undefined,
+        ...letterhead,
+        previousVisit: previousVisitPdf,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to print. Please try again.');
     }
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    // Give the new document a tick to render before printing.
-    setTimeout(() => w.print(), 250);
   };
 
   // Export metadata + download dispatcher for the transcript/report files.
@@ -1279,7 +1279,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     lastSavedSnapshotRef.current = contentSnapshot();
     setSessionStatus('Completed');
     onSessionUpdate?.(consultationDoc as unknown as Consultation);
-    console.log('[session] saved', {
+    debug('[session] saved', {
       sessionId: consultationDoc.id,
       patientId: consultationDoc.patientId,
       status: consultationDoc.status,

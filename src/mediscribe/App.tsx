@@ -119,6 +119,13 @@ interface MediscribeAppProps {
   doctorName?: string;
 }
 
+/** "Dr. Anita Rao" → "AR". Falls back to a single letter, never to empty. */
+function initialsOf(name: string): string {
+  const parts = name.replace(/^dr\.?\s*/i, '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '·';
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
 export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}) {
   // Mounted inside the host app shell (the platform hub owns URL routing), so the
   // view is plain in-memory state starting at the dashboard.
@@ -130,6 +137,11 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // role that lands on (or deep-links to) a view it can't access is redirected to
   // its first allowed view. Access is entirely from the authenticated session.
   const { user, hasPermission, logout } = useAuth();
+
+  // Whoever is actually signed in — the prop from the host, else the session, and
+  // only then a neutral fallback. Never an invented name.
+  const signedInName = doctorName || user?.name || 'Your account';
+
   const VIEW_PERM: Record<ViewState, Permission> = {
     dashboard: 'dashboard.view',
     patients: 'patients.view',
@@ -661,12 +673,15 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
               <Logo onClick={() => setActiveConsultation(null)} />
             </div>
 
+            {/* The signed-in doctor — this used to be a stock photo and an invented
+                name, which is not something to show a clinician about their own
+                account. Initials avoid needing a photo we don't have. */}
             {!activeConsultation && (
-              <div className="flex items-center gap-4 text-sm font-semibold">
-                <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-600 overflow-hidden">
-                  <img src="https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&q=80&w=64" alt="Doctor" width={32} height={32} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              <div className="flex items-center gap-3 text-sm font-semibold">
+                <div className="w-8 h-8 rounded-full bg-sky-100 border border-sky-200 flex items-center justify-center text-sky-700 text-xs font-bold">
+                  {initialsOf(signedInName)}
                 </div>
-                <span className="text-slate-700 hidden sm:inline-block">Dr. E. Martinez</span>
+                <span className="text-slate-700 hidden sm:inline-block">{signedInName}</span>
               </div>
             )}
           </div>
