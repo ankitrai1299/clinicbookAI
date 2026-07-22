@@ -74,8 +74,10 @@ async function fetchWithTimeout(
     if (err?.name === 'AbortError') {
       throw new Error('The request timed out. Please check your connection and try again.');
     }
+    // This reaches a doctor mid-consultation, not a developer at a terminal —
+    // "run npm run dev:all" was advice they cannot act on.
     throw new Error(
-      'Could not reach the server. Make sure the backend is running (npm run dev:all), then try again.',
+      "Could not reach the server. Check your internet connection — the server may also be down or restarting.",
     );
   } finally {
     clearTimeout(timer);
