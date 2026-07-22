@@ -9,6 +9,7 @@
 import { saveAs } from 'file-saver';
 
 import { buildReportHtml, buildTranscriptHtml, type ReportMeta } from './report.js';
+import { loadPrintSettings, type PrintScope } from './printSettings';
 import { renderReportPdf } from '../services/api';
 import type { ReportData } from '../types';
 
@@ -58,27 +59,82 @@ function bridgePrint(html: string): void {
     .ReactNativeWebView?.postMessage(JSON.stringify({ type: 'print', html }));
 }
 
-// Open the SAME report/transcript HTML in a print window. Same HTML the PDF is
-// built from → the print preview and the downloaded PDF are the same document.
+// Print the SAME HTML the PDF is built from, so the print preview and the
+// downloaded PDF are the same document.
+//
+// This used to open a new tab with window.open(). Two problems, both of which a
+// clinic hits daily: pop-up blockers silently killed it (Print appeared to do
+// nothing), and when it did work the doctor was left with an extra tab to close
+// after every prescription.
+//
+// A hidden same-document iframe has neither problem — nothing to block, nothing
+// to close, and the doctor never leaves the consultation. The iframe is removed
+// once the print dialog closes; `onafterprint` fires on cancel too, and the
+// timeout is a backstop for browsers that don't fire it at all.
 function printHtml(html: string): void {
-  const w = window.open('', '_blank');
-  if (!w) throw new Error('Unable to open the print window. Please allow pop-ups and try again.');
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  setTimeout(() => w.print(), 300);
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  document.body.appendChild(frame);
+
+  const cleanup = () => {
+    if (frame.parentNode) frame.parentNode.removeChild(frame);
+  };
+
+  frame.onload = () => {
+    const win = frame.contentWindow;
+    if (!win) {
+      cleanup();
+      throw new Error('Unable to prepare the document for printing.');
+    }
+    win.onafterprint = cleanup;
+    // Give fonts and the Unicode/Indic faces a moment to load, or the first page
+    // can print with fallback glyphs.
+    setTimeout(() => {
+      try {
+        win.focus();
+        win.print();
+      } finally {
+        // Backstop: some browsers never fire onafterprint.
+        setTimeout(cleanup, 60_000);
+      }
+    }, 350);
+  };
+
+  const doc = frame.contentDocument;
+  if (!doc) {
+    cleanup();
+    throw new Error('Unable to prepare the document for printing.');
+  }
+  doc.open();
+  doc.write(html);
+  doc.close();
 }
 
 // ── Public API — the ONLY report/transcript PDF + print entry points ──────────
-export const printReport = (report: ReportData, meta: ReportMeta = {}): void =>
-  inMobileApp()
-    ? bridgePrint(buildReportHtml(report, meta))
-    : printHtml(buildReportHtml(report, meta));
 
-export const printTranscript = (text: string, meta: ReportMeta = {}): void =>
-  inMobileApp()
-    ? bridgePrint(buildTranscriptHtml(text, meta))
-    : printHtml(buildTranscriptHtml(text, meta));
+/**
+ * Print the report, laid out for THIS clinic's paper.
+ *
+ * The device's print settings are applied here rather than at every call site,
+ * so paper size, margins and pre-printed-stationery handling can never be
+ * forgotten by one button and remembered by another. `scope` overrides the
+ * configured default for a one-off (e.g. "print the full record just this once").
+ */
+export const printReport = (
+  report: ReportData,
+  meta: ReportMeta = {},
+  opts: { scope?: PrintScope } = {},
+): void => {
+  const print = loadPrintSettings();
+  const html = buildReportHtml(report, { ...meta, print }, { scope: opts.scope ?? print.scope });
+  return inMobileApp() ? bridgePrint(html) : printHtml(html);
+};
+
+export const printTranscript = (text: string, meta: ReportMeta = {}): void => {
+  const html = buildTranscriptHtml(text, { ...meta, print: loadPrintSettings() });
+  return inMobileApp() ? bridgePrint(html) : printHtml(html);
+};
 
 export const downloadReportPdf = (report: ReportData, meta: ReportMeta = {}): Promise<void> =>
   htmlToPdf(buildReportHtml(report, meta), fileName('report', meta, 'pdf'));

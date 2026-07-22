@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { User, Stethoscope, Globe, LogOut, Check, Building2, BadgeCheck } from 'lucide-react';
 import { loadDoctorProfile, saveDoctorProfile, loadLanguage, saveLanguage, LANGUAGES, type DoctorProfile } from '../utils/settings';
+import PrinterSetup from './PrinterSetup';
 
 interface SettingsViewProps {
   // Falls back into the profile's name field when the doctor hasn't set one yet.
@@ -105,6 +106,12 @@ export default function SettingsView({ doctorName, onLogout }: SettingsViewProps
           ))}
         </select>
         <p className="text-xs text-slate-400 mt-2">New recordings use this language. You can still change it per session.</p>
+      </section>
+
+      {/* Printing — set up once so prescriptions come out right on this clinic's
+          paper. Lives next to the letterhead profile it depends on. */}
+      <section className="mb-5">
+        <PrinterSetup />
       </section>
 
       {/* Account */}

@@ -1208,7 +1208,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   // NATIVE print dialog when we're inside the WebView. Doing it inline here meant
   // the app fell back to window.open(), which a WebView blocks — so Print simply
   // failed on the phone even though the bridge for it already existed.
-  const handlePrint = () => {
+  const handlePrint = (scope?: 'prescription' | 'full') => {
     try {
       printReport(reportData, {
         patientName: consultation.patientName,
@@ -1217,7 +1217,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         doctorName: doctorName.trim() || undefined,
         ...letterhead,
         previousVisit: previousVisitPdf,
-      });
+      }, { scope });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to print. Please try again.');
     }
@@ -2622,7 +2622,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
                 )}
               </div>
               <button
-                onClick={handlePrint}
+                onClick={() => handlePrint()}
                 className="p-2 text-slate-500 hover:bg-slate-100 rounded-md transition-colors"
                 title="Export / Print PDF"
               >
@@ -2712,7 +2712,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
                   </button>
                   <button
                     type="button"
-                    onClick={handlePrint}
+                    onClick={() => handlePrint()}
                     className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
                   >
                     <Printer size={14} /> Print Prescription

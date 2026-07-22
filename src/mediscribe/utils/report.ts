@@ -7,6 +7,7 @@ import {
   Vitals,
   FollowUp,
 } from '../types';
+import { pageCss, DEFAULT_PRINT_SETTINGS, type PrintSettings, type PrintScope } from './printSettings';
 
 // The kinds of content a Premium Clinical Report section can hold. The editor,
 // the print/HTML export and the PDF/DOCX exports all switch on this.
@@ -371,6 +372,12 @@ export interface ReportMeta {
   doctorRegNo?: string;
   /** The clinic's own name, from Settings — printed as the letterhead. */
   clinicName?: string;
+  /**
+   * How this clinic's paper is set up. Omitted → the built-in A4 defaults, which
+   * is what the server-side renderer uses (it has no access to a device's
+   * preferences). Supplied by the browser when the doctor prints.
+   */
+  print?: PrintSettings;
   // Concise previous-visit comparison baked into the report (print + PDF). Shape
   // matches compareVisits.PreviousVisitPdf (kept structural to avoid an import
   // cycle). null/undefined → the section prints "No previous consultation available."
@@ -425,6 +432,7 @@ export const FONT_LINK =
  *  Same styling language as the report so both exports look like one product, and the
  *  Unicode font stack keeps every language readable (no corrupted glyphs). */
 export function buildTranscriptHtml(text: string, meta: ReportMeta = {}): string {
+  const printCss = pageCss(meta.print ?? DEFAULT_PRINT_SETTINGS);
   const demographics = [
     typeof meta.patientAge === 'number' && meta.patientAge > 0 ? `${meta.patientAge} yrs` : '',
     meta.patientGender
@@ -439,7 +447,7 @@ export function buildTranscriptHtml(text: string, meta: ReportMeta = {}): string
 ${FONT_LINK}
 <title>Consultation Transcript</title>
 <style>
-  @page { size: A4; margin: 20mm; }
+${printCss}
   * { box-sizing: border-box; }
   body { font-family: ${FONT_STACK}; color: #1e293b; font-size: 12.5px; line-height: 1.65; background: #fff; margin: 0; }
   .header { text-align: center; border-bottom: 2px solid #1d4ed8; padding-bottom: 10px; margin-bottom: 16px; }
@@ -514,11 +522,41 @@ function sectionBodyHtml(report: ReportData, s: ReportSectionDef): string {
   }
 }
 
-/** Build a clean, paginating A4 HTML document for the report (print / PDF export). */
-export function buildReportHtml(report: ReportData, meta: ReportMeta = {}): string {
+// What a patient's prescription sheet needs. The other thirteen sections are the
+// clinical record — useful in the file and in a referral, but printing all of
+// them for every visit means several sheets of paper for what is usually four
+// lines of medicine.
+const PRESCRIPTION_KEYS: (keyof ReportData)[] = [
+  'assessment',
+  'prescribedMedications',
+  'advice',
+  'redFlags',
+  'followUp',
+];
+
+/**
+ * Build a clean, paginating HTML document for the report (print / PDF export).
+ *
+ * `scope: 'prescription'` narrows it to the sheet the patient walks out with;
+ * 'full' (the default, and what the PDF export uses) is the whole record.
+ */
+export function buildReportHtml(
+  report: ReportData,
+  meta: ReportMeta = {},
+  opts: { scope?: PrintScope } = {},
+): string {
+  const scope = opts.scope ?? 'full';
+  const printCss = pageCss(meta.print ?? DEFAULT_PRINT_SETTINGS);
+  // On pre-printed stationery the clinic's own header is already on the paper.
+  // Printing ours on top of it is what makes the sheet unusable.
+  const ownLetterhead = (meta.print ?? DEFAULT_PRINT_SETTINGS).letterhead === 'print';
+  const docTitle = scope === 'prescription' ? 'Prescription' : 'Clinical Report';
   let n = 0;
-  const sections = REPORT_SECTIONS.filter(s => sectionHasContent(report, s));
-  const pvHtml = previousVisitSectionHtml(meta.previousVisit);
+  const sections = REPORT_SECTIONS.filter(
+    s => sectionHasContent(report, s) && (scope === 'full' || PRESCRIPTION_KEYS.includes(s.key)),
+  );
+  // A previous-visit comparison belongs in the record, not on the patient's sheet.
+  const pvHtml = scope === 'full' ? previousVisitSectionHtml(meta.previousVisit) : '';
   const parts = sections.map((s, idx) => {
     n += 1;
     const sec = `<section>
@@ -543,9 +581,9 @@ export function buildReportHtml(report: ReportData, meta: ReportMeta = {}): stri
 <head>
 <meta charset="utf-8" />
 ${FONT_LINK}
-<title>Clinical Report</title>
+<title>${docTitle}</title>
 <style>
-  @page { size: A4; margin: 20mm; }
+${printCss}
   * { box-sizing: border-box; }
   body { font-family: ${FONT_STACK}; color: #1e293b; font-size: 12px; line-height: 1.5; background: #fff; margin: 0; }
   .previous-visit .pv-row { font-size: 11px; margin: 2px 0; }
@@ -577,9 +615,13 @@ ${FONT_LINK}
   <div class="header">
     <!-- The clinic's name leads when it has been set — this is the clinic's
          document, not ours. We fall back to the product name only when Settings
-         is still empty. -->
-    <div class="brand">${escapeHtml(meta.clinicName || 'MediScribe AI')}</div>
-    <h1>Clinical Report</h1>
+         is still empty.
+         On pre-printed stationery the paper ALREADY carries the clinic's name and
+         address, so printing ours over it is what ruins the sheet. The @page rule
+         reserves blank space at the top instead; only the patient line stays,
+         because that is the part the stationery cannot know. -->
+    ${ownLetterhead ? `<div class="brand">${escapeHtml(meta.clinicName || 'MediScribe AI')}</div>` : ''}
+    ${ownLetterhead ? `<h1>${docTitle}</h1>` : ''}
     ${sub ? `<div class="sub">${sub}</div>` : ''}
   </div>
   ${sectionsHtml}
