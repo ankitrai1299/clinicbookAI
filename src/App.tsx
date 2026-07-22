@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { PageType, DashboardTab, Appointment, WaitlistPatient, ReminderLog, ClinicConfig, Doctor } from './types';
+import { isMobileApp } from './mediscribe/utils/platform';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
@@ -53,6 +54,20 @@ function readEntry(): Entry {
 
 const ENTRY = readEntry();
 
+// The installed phone app is NovaScribe and nothing else.
+//
+// It loads `/?app=novascribe`, but the platform shell around it still existed:
+// logging out landed on the product hub, the scribe's sidebar offered "All Apps",
+// and the marketing pages were all still reachable. On a phone that reads as the
+// wrong app entirely — the doctor installed a scribe, not a product launcher.
+//
+// So in the WebView the hub, both landing pages and the ClinicBook dashboard are
+// simply not part of the app. Web and mobile browsers are untouched.
+const APP_ONLY = isMobileApp();
+
+// Pages that only make sense on the full platform.
+const PLATFORM_ONLY_PAGES: PageType[] = ['hub', 'landing', 'novascribe-landing', 'dashboard', 'developers'];
+
 // Keep the address bar in step with the product being viewed, so whatever a user
 // is looking at is what they copy out of the URL bar.
 const PAGE_PATHS: Partial<Record<PageType, string>> = {
@@ -67,10 +82,10 @@ function AppShell() {
   const { user, loading, logout, setAuth } = useAuth();
   // The platform launcher (product chooser) is the first screen — unless deep-linked
   // straight to a product (e.g. the mobile app loads `?app=novascribe`).
-  const [currentPage, setCurrentPage] = useState<PageType>(ENTRY?.page ?? 'hub');
+  const [currentPage, setCurrentPage] = useState<PageType>(ENTRY?.page ?? (APP_ONLY ? 'novascribe' : 'hub'));
   // Which product's app to land on after a successful login.
   const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>(
-    ENTRY?.app ?? 'dashboard',
+    ENTRY?.app ?? (APP_ONLY ? 'novascribe' : 'dashboard'),
   );
   // Deep-link a specific dashboard tab (e.g. the docs page's "Get an API key"
   // jumps a logged-in clinic straight to Developers & API, not the Overview).
@@ -100,6 +115,13 @@ function AppShell() {
       window.history.replaceState(null, '', next);
     }
   }, [currentPage]);
+
+  // In the phone app, a platform page is never a valid destination — bounce back
+  // to the scribe (or its login) if anything ever routes there.
+  useEffect(() => {
+    if (!APP_ONLY) return;
+    if (PLATFORM_ONLY_PAGES.includes(currentPage)) setCurrentPage(user ? 'novascribe' : 'login');
+  }, [currentPage, user]);
 
   // Gate the authenticated apps; after login land on the product the user chose.
   useEffect(() => {
@@ -168,8 +190,10 @@ function AppShell() {
 
   const handleLogout = () => {
     logout();
-    setCurrentPage('hub');
-    setIntendedApp('dashboard');
+    // The app has one product, so logging out means its login screen — not a
+    // launcher for products this build doesn't contain.
+    setCurrentPage(APP_ONLY ? 'login' : 'hub');
+    setIntendedApp(APP_ONLY ? 'novascribe' : 'dashboard');
     // Clear dashboard state on logout (no demo data)
     setAppointments([]);
     setWaitlist([]);
@@ -220,7 +244,7 @@ function AppShell() {
   // MediScribe is a full-screen app (own sidebar). Render it as a takeover — the
   // "All Apps" item in its sidebar returns to the platform hub.
   if (user && currentPage === 'novascribe') {
-    return <MediscribeApp onExitToHub={openHub} doctorName={user.name} />;
+    return <MediscribeApp onExitToHub={APP_ONLY ? undefined : openHub} doctorName={user.name} />;
   }
 
   return (
@@ -233,18 +257,23 @@ function AppShell() {
         </div>
       )}
 
-      <Navigation
-        currentPage={currentPage}
-        setCurrentPage={handleSetPage}
-        clinicName={clinicConfig.name}
-        user={user}
-        onLogout={handleLogout}
-        activeProduct={activeProduct}
-        onOpenHub={openHub}
-      />
+      {/* The platform navbar carries the product switcher and "All apps", which
+          the single-product phone build must not offer. Its screens (login,
+          verification) carry their own branding. */}
+      {!APP_ONLY && (
+        <Navigation
+          currentPage={currentPage}
+          setCurrentPage={handleSetPage}
+          clinicName={clinicConfig.name}
+          user={user}
+          onLogout={handleLogout}
+          activeProduct={activeProduct}
+          onOpenHub={openHub}
+        />
+      )}
 
       <div className="flex-1">
-        {currentPage === 'hub' && (
+        {!APP_ONLY && currentPage === 'hub' && (
           <ProductHub
             userName={user?.name}
             onOpenClinicBook={openClinicBook}
@@ -252,7 +281,7 @@ function AppShell() {
           />
         )}
 
-        {currentPage === 'novascribe-landing' && (
+        {!APP_ONLY && currentPage === 'novascribe-landing' && (
           <MediScribeLanding
             isLoggedIn={!!user}
             onOpen={() => handleSetPage('novascribe')}
@@ -260,13 +289,13 @@ function AppShell() {
           />
         )}
 
-        {currentPage === 'landing' && (
+        {!APP_ONLY && currentPage === 'landing' && (
           <LandingPage setCurrentPage={handleSetPage} />
         )}
 
         {/* Public API docs — reachable without a login so a partner's developer
             can evaluate the integration before signing up. */}
-        {currentPage === 'developers' && (
+        {!APP_ONLY && currentPage === 'developers' && (
           <DeveloperDocs setCurrentPage={handleSetPage} onGetApiKey={openDeveloperKeys} isLoggedIn={!!user} />
         )}
 
@@ -297,11 +326,11 @@ function AppShell() {
           <WelcomeScreen
             clinicName={clinicConfig.name}
             ownerName={clinicConfig.ownerName || user.name}
-            onContinue={() => handleSetPage('dashboard')}
+            onContinue={() => handleSetPage(APP_ONLY ? 'novascribe' : 'dashboard')}
           />
         )}
 
-        {currentPage === 'dashboard' && user && (
+        {!APP_ONLY && currentPage === 'dashboard' && user && (
           <ClinicDashboard
             appointments={appointments}
             setAppointments={setAppointments}
