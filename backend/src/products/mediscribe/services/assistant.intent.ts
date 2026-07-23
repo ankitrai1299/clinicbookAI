@@ -34,66 +34,83 @@ export interface ParsedQuestion {
 
 // Hindi, English and the Hinglish mix people actually speak. Devanagari included
 // because the transcript comes back in the script the question was asked in.
+// IMPORTANT about Devanagari and `\b`.
+// JavaScript's `\b` word boundary is defined over [A-Za-z0-9_] only. Devanagari
+// characters are not "word" characters to it, so a pattern like /\bकब आया\b/
+// NEVER matches — which is exactly why "ये पेशेंट कब आया था" fell through to
+// "I didn't catch that". Hindi patterns below therefore use plain substring
+// matching (no `\b`); only the romanised/English ones use `\b`.
 const PATTERNS: { intent: AskIntent; any: RegExp[] }[] = [
   {
     intent: 'allergies',
-    any: [/\ballerg/i, /एलर्जी/, /\bस्किन रिएक्शन/],
+    any: [/\ballerg/i, /एलर्जी/, /एलर्जि/, /रिएक्शन/],
   },
   {
     intent: 'current_medications',
     any: [
-      /\b(abhi|currently|already|pehle se)\b.{0,25}\b(le raha|le rahi|leti|leta|taking|medicine|dawa|dawai)/i,
+      /\b(abhi|currently|already|pehle se)\b.{0,25}(le raha|le rahi|leti|leta|taking|medicine|dawa|dawai)/i,
       /\bcurrent (medication|medicine)/i,
-      /\bchal rah[ie]\b.{0,15}\b(dawa|dawai|medicine)/i,
-      /\b(पहले से|अभी).{0,20}(दवा|दवाई)/,
+      /\bchal rah[ie]\b.{0,15}(dawa|dawai|medicine)/i,
+      /(पहले से|अभी|इस समय).{0,20}(दवा|दवाई|ले रह|खा रह)/,
+      /कौन(सी| सी).{0,15}दवा.{0,15}(ले रह|खा रह|चल रह)/,
       /\bmedication history\b/i,
     ],
   },
   {
     intent: 'last_prescription',
     any: [
-      /\b(kya|what).{0,25}\b(diya|likha|prescrib)/i,
-      /\b(last|pichhli|pichli|previous).{0,20}\b(prescription|dawa|dawai|medicine)/i,
+      /\b(kya|what).{0,25}(diya|likha|prescrib)/i,
+      /\b(last|pichhli|pichli|previous).{0,20}(prescription|dawa|dawai|medicine)/i,
       /\bprescription\b/i,
       /\bparcha\b/i,
-      /(पिछली|पिछले).{0,20}(दवा|दवाई|पर्चा)/,
-      /\bक्या दिया\b/,
+      /(पिछली|पिछले|पिछल|last).{0,20}(दवा|दवाई|पर्चा|prescription)/i,
+      /क्या (दिया|दी|लिखा|लिख)/,
+      /कौन(सी| सी) दवा दी/,
+      /पर्चा|पर्ची/,
     ],
   },
   {
     intent: 'last_visit',
     any: [
-      /\b(kab|when).{0,25}\b(aaya|aayi|aae|visit|came|aaya tha|aayi thi)/i,
+      /\b(kab|when).{0,25}(aaya|aayi|aae|visit|came|aaya tha|aayi thi)/i,
       /\blast visit\b/i,
       /\b(pichhli|pichli) baar kab\b/i,
-      /\bकब आय[ाी]\b/,
+      // "कब आया/आयी/आये" with anything in between — the visit question, in the
+      // exact shape the doctor just spoke it.
+      /कब.{0,20}(आया|आयी|आई|आये|aya|aaya)/,
+      /(पिछली|पिछल).{0,15}(बार|विजिट|visit)/,
+      /कब.{0,15}(विजिट|visit|मिल)/,
     ],
   },
   {
     intent: 'last_diagnosis',
     any: [
       /\bdiagnos/i,
-      /\b(kya|what).{0,20}\b(hua tha|bimari|bimaari|problem thi)/i,
+      /\b(kya|what).{0,20}(hua tha|bimari|bimaari|problem thi)/i,
       /\bassessment\b/i,
-      /\bनिदान\b/,
-      /\bक्या बीमारी\b/,
+      /निदान/,
+      /क्या (बीमारी|बिमारी|रोग|प्रॉब्लम|problem|हुआ था)/i,
+      /बीमारी क्या/,
     ],
   },
   {
     intent: 'my_drafts',
     any: [
       /\b(draft|drafts)\b/i,
-      /\b(adhoor|adhur|incomplete|pending|baaki)\b.{0,20}\b(note|report|consultation)/i,
-      /\b(note|report)s?\b.{0,20}\b(pending|incomplete|adhoor)/i,
-      /\bअधूर[ेा]\b/,
+      /\b(adhoor|adhur|incomplete|pending|baaki)\b.{0,20}(note|report|consultation)/i,
+      /\b(note|report)s?\b.{0,20}(pending|incomplete|adhoor)/i,
+      /अधूर[ेाी]/,
+      /(कितने|कितनी).{0,15}(अधूर|पेंडिंग|बाकी|draft)/i,
     ],
   },
   {
     intent: 'patient_summary',
     any: [
       /\b(history|summary|itihaas)\b/i,
-      /\b(batao|bataiye|tell me).{0,25}\b(about|ke baare|ki poori)/i,
-      /\bपूरी (हिस्ट्री|जानकारी)\b/,
+      /\b(batao|bataiye|tell me).{0,25}(about|ke baare|ki poori)/i,
+      /पूरी (हिस्ट्री|जानकारी|डिटेल|history)/i,
+      /(हिस्ट्री|इतिहास|समरी|जानकारी)/,
+      /इस (पेशेंट|मरीज़|मरीज).{0,15}(बारे|बारें|के बारे)/,
     ],
   },
 ];

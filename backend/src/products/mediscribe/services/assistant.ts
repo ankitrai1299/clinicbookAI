@@ -165,15 +165,21 @@ export async function askAssistant(opts: {
   // patient a colleague also saw. Admins (who legitimately see everything) get
   // the full record. This mirrors the scoping the Sessions/Reports lists apply.
   const visits = await buildPatientHistory(patient.id, 'desc', isDoctor ? { doctorId } : {});
+
+  // If we still couldn't tell what was asked but a patient IS open, a short
+  // summary is far more useful than "I didn't catch that" — the doctor opened
+  // this patient for a reason, and it beats making them rephrase.
+  const effectiveIntent: AskIntent = parsed.intent === 'unknown' ? 'patient_summary' : parsed.intent;
+
   const a: Answer = buildAnswer({
-    intent: parsed.intent,
+    intent: effectiveIntent,
     patientName: patient.name,
     visits,
   });
 
   return {
     answer: a.text,
-    intent: parsed.intent,
+    intent: effectiveIntent,
     patient: { id: patient.id, name: patient.name },
     visitDate: a.visitDate,
     isAbsence: a.isAbsence,

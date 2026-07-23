@@ -33,6 +33,14 @@ describe('question classification', () => {
     ['What was the diagnosis?', 'last_diagnosis'],
     ['Does this patient have any allergies?', 'allergies'],
     ['इसको कोई एलर्जी है?', 'allergies'],
+    // Real transcripts from the phone — Devanagari, as STT returns them. These
+    // are the exact shapes that fell through to "I didn't catch that" because
+    // `\b` doesn't work on Devanagari.
+    ['ये पेशेंट कब आया था यहां पे?', 'last_visit'],
+    ['इस मरीज़ को पिछली बार क्या दिया था?', 'last_prescription'],
+    ['इसको क्या बीमारी थी?', 'last_diagnosis'],
+    ['अभी ये कौनसी दवा ले रहा है?', 'current_medications'],
+    ['इस पेशेंट की पूरी हिस्ट्री बताओ', 'patient_summary'],
     ['What is he currently taking?', 'current_medications'],
     ['abhi kya dawa le raha hai?', 'current_medications'],
     ['How many drafts do I have?', 'my_drafts'],
