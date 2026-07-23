@@ -133,6 +133,16 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   // True while a consultation recording owns the microphone.
   const [micBusy, setMicBusy] = useState(false);
+  // The assistant chat is an overlay, not a view — the sidebar "Assistant" entry
+  // and the floating button both open this.
+  const [assistantOpen, setAssistantOpen] = useState(false);
+
+  // Sidebar/nav clicks. "assistant" opens the chat overlay instead of switching
+  // the content view; everything else navigates normally.
+  const navigate = (v: string) => {
+    if (v === 'assistant') { setAssistantOpen(true); return; }
+    setActiveView(v as ViewState);
+  };
 
   // ── RBAC ──────────────────────────────────────────────────────────────────
   // The logged-in user's role decides which views are visible/accessible. Each
@@ -647,7 +657,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
       {!activeConsultation && (
         <Sidebar
           activeView={activeView}
-          onNavigate={(v) => setActiveView(v as ViewState)}
+          onNavigate={navigate}
           onExitToHub={onExitToHub}
           doctorName={doctorName}
           canView={canView}
@@ -701,7 +711,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                     <button
                       key={item.id}
                       onClick={() => {
-                        setActiveView(item.id);
+                        navigate(item.id);
                         setIsMobileMenuOpen(false);
                       }}
                       className={`w-full text-left px-6 py-3 font-medium transition-colors ${
@@ -798,6 +808,8 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             patientId={activeConsultation?.patientId}
             patientName={activeConsultation?.patientName}
             recordingInProgress={micBusy}
+            open={assistantOpen}
+            onOpenChange={setAssistantOpen}
           />
         </Suspense>
       )}

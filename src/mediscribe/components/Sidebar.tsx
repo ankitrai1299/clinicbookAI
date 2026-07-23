@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Clock, Settings, Shield, LayoutGrid } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, Settings, Shield, LayoutGrid, Sparkles } from 'lucide-react';
 import Logo from './Logo';
 import type { Permission } from '../contracts';
 
@@ -21,6 +21,8 @@ export const NAV_ITEMS: { id: string; label: string; icon: typeof LayoutDashboar
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
   { id: 'patients', label: 'Patients', icon: Users, permission: 'patients.view' },
   { id: 'consultations', label: 'Sessions', icon: Clock, permission: 'consultations.view' },
+  // Opens the assistant chat rather than a content view — App intercepts this id.
+  { id: 'assistant', label: 'Assistant', icon: Sparkles, permission: 'reports.view' },
   { id: 'settings', label: 'Settings', icon: Settings, permission: 'settings.view' },
   { id: 'admin', label: 'Admin', icon: Shield, permission: 'analytics.view' },
 ];
