@@ -166,10 +166,13 @@ export async function askAssistant(opts: {
   // the full record. This mirrors the scoping the Sessions/Reports lists apply.
   const visits = await buildPatientHistory(patient.id, 'desc', isDoctor ? { doctorId } : {});
 
-  // If we still couldn't tell what was asked but a patient IS open, a short
-  // summary is far more useful than "I didn't catch that" — the doctor opened
-  // this patient for a reason, and it beats making them rephrase.
-  const effectiveIntent: AskIntent = parsed.intent === 'unknown' ? 'patient_summary' : parsed.intent;
+  // If we still couldn't tell what was asked but a patient IS open, fall back to
+  // a short summary — the doctor opened this patient for a reason, and it beats
+  // making them rephrase. But SAY it's a fallback: a summary handed back silently
+  // reads as though the app answered a different question (which is exactly the
+  // confusion that prompted this — "kuch aur bata raha").
+  const fellBack = parsed.intent === 'unknown';
+  const effectiveIntent: AskIntent = fellBack ? 'patient_summary' : parsed.intent;
 
   const a: Answer = buildAnswer({
     intent: effectiveIntent,
@@ -177,8 +180,12 @@ export async function askAssistant(opts: {
     visits,
   });
 
+  const answer = fellBack
+    ? `I'm not sure exactly what you asked — here's ${patient.name} at a glance. ${a.text}`
+    : a.text;
+
   return {
-    answer: a.text,
+    answer,
     intent: effectiveIntent,
     patient: { id: patient.id, name: patient.name },
     visitDate: a.visitDate,

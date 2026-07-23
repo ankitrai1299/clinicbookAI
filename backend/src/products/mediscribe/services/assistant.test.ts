@@ -41,6 +41,13 @@ describe('question classification', () => {
     ['इसको क्या बीमारी थी?', 'last_diagnosis'],
     ['अभी ये कौनसी दवा ले रहा है?', 'current_medications'],
     ['इस पेशेंट की पूरी हिस्ट्री बताओ', 'patient_summary'],
+    // STT mishears दवा (medicine) as दबा (press) — व/ब sound alike. This exact
+    // transcript was returned as a summary because नो pattern caught "दबा".
+    ['पिछली बार हमने इसे कौन सा दबा दिया था?', 'last_prescription'],
+    ['इसको कौन सी दवाई दी थी?', 'last_prescription'],
+    ['पिछली बार क्या दवा मिली थी?', 'last_prescription'],
+    // "पिछली बार" alone must NOT hijack a prescription question into last_visit.
+    ['पिछली बार कब आया था?', 'last_visit'],
     ['What is he currently taking?', 'current_medications'],
     ['abhi kya dawa le raha hai?', 'current_medications'],
     ['How many drafts do I have?', 'my_drafts'],

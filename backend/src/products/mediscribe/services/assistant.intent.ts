@@ -51,8 +51,8 @@ const PATTERNS: { intent: AskIntent; any: RegExp[] }[] = [
       /\b(abhi|currently|already|pehle se)\b.{0,25}(le raha|le rahi|leti|leta|taking|medicine|dawa|dawai)/i,
       /\bcurrent (medication|medicine)/i,
       /\bchal rah[ie]\b.{0,15}(dawa|dawai|medicine)/i,
-      /(पहले से|अभी|इस समय).{0,20}(दवा|दवाई|ले रह|खा रह)/,
-      /कौन(सी| सी).{0,15}दवा.{0,15}(ले रह|खा रह|चल रह)/,
+      /(पहले से|अभी|इस समय).{0,25}(दवा|दवाई|दबा|दबाई|ले रह|खा रह)/,
+      /(दवा|दवाई|दबा|दबाई).{0,15}(ले रह|खा रह|चल रह)/,
       /\bmedication history\b/i,
     ],
   },
@@ -63,10 +63,15 @@ const PATTERNS: { intent: AskIntent; any: RegExp[] }[] = [
       /\b(last|pichhli|pichli|previous).{0,20}(prescription|dawa|dawai|medicine)/i,
       /\bprescription\b/i,
       /\bparcha\b/i,
-      /(पिछली|पिछले|पिछल|last).{0,20}(दवा|दवाई|पर्चा|prescription)/i,
-      /क्या (दिया|दी|लिखा|लिख)/,
-      /कौन(सी| सी) दवा दी/,
       /पर्चा|पर्ची/,
+      // दवा / दवाई, plus the दबा / दबाई the STT often mishears them as (व and ब
+      // sound alike). "कौन सा दबा दिया था" IS "कौन सी दवा दी थी".
+      /(दवा|दवाई|दबा|दबाई)/,
+      // "पिछली बार … दिया/दी/मिला" — the classic "what did we give last time",
+      // even when the word दवा was dropped or misheard entirely.
+      /पिछली बार.{0,40}(दिया|दी|मिला|मिली)/,
+      /कौन ?स[ाी].{0,25}(दिया|दी|मिला|मिली|दवा|दवाई|दबा|दबाई)/,
+      /क्या (दिया|दी|लिखा|लिख)/,
     ],
   },
   {
@@ -75,11 +80,13 @@ const PATTERNS: { intent: AskIntent; any: RegExp[] }[] = [
       /\b(kab|when).{0,25}(aaya|aayi|aae|visit|came|aaya tha|aayi thi)/i,
       /\blast visit\b/i,
       /\b(pichhli|pichli) baar kab\b/i,
-      // "कब आया/आयी/आये" with anything in between — the visit question, in the
-      // exact shape the doctor just spoke it.
+      // "कब आया/आयी/आये" — the visit question. Kept tight (must contain कब or
+      // an explicit "visit") so a prescription question that merely opens with
+      // "पिछली बार" is NOT swallowed here — that one is caught above.
       /कब.{0,20}(आया|आयी|आई|आये|aya|aaya)/,
-      /(पिछली|पिछल).{0,15}(बार|विजिट|visit)/,
-      /कब.{0,15}(विजिट|visit|मिल)/,
+      /कब.{0,15}(विजिट|visit|मिल|दिखा)/,
+      /पिछली.{0,10}(विजिट|visit)/,
+      /पिछली बार कब/,
     ],
   },
   {
