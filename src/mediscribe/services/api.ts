@@ -263,6 +263,32 @@ export async function sendPrescriptionToPatient(consultationId: string): Promise
   return res.json();
 }
 
+/** What the assistant answers with. Read-only — it can never change anything. */
+export interface AskResult {
+  answer: string;
+  intent: string;
+  patient?: { id: string; name: string };
+  /** Several patients matched a spoken name; the doctor picks one. */
+  choices?: { id: string; name: string; phone?: string }[];
+  visitDate?: string;
+  /** The answer reports missing data rather than a finding — show it cautiously. */
+  isAbsence?: boolean;
+}
+
+// Ask about your own patients. `patientId` is the patient currently on screen:
+// what the doctor is looking at is a stronger signal than a name speech
+// recognition may have misheard.
+export async function askAssistant(question: string, patientId?: string): Promise<AskResult> {
+  const res = await fetch(`${BASE}/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ question, patientId }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error || 'Could not answer that just now');
+  return body;
+}
+
 /** A bookable doctor in the clinic (a ClinicBook resource, not a login). */
 export interface ClinicDoctor {
   id: string;

@@ -36,6 +36,16 @@ export interface ConsultationHistoryItem {
   chiefComplaints: string[];
   diagnosis: string[];
   medicines: HistoryMedicine[];
+  // Allergies and the medicines the patient was ALREADY taking at this visit.
+  // The AI extracts both into the report, but nothing surfaced them — so the
+  // safety question a doctor most wants answered before prescribing ("is this
+  // patient allergic to anything?") had no way to be asked.
+  //
+  // IMPORTANT for any caller: these are only known if they were SPOKEN during a
+  // consultation. An empty list means "nothing was recorded", NEVER "the patient
+  // has no allergies". Phrase it that way to a clinician.
+  allergies: HistoryAllergy[];
+  currentMedications: HistoryMedicine[];
   reportStatus: 'Draft' | 'Completed';
   followUp: string;
   reportId: string | null;
@@ -44,6 +54,13 @@ export interface ConsultationHistoryItem {
   // any additional round-trips. Optional in the documented contract.
   hasReport: boolean;
   transcriptText: string;
+}
+
+/** An allergy as recorded in a visit's report. */
+export interface HistoryAllergy {
+  allergy: string;
+  reaction: string;
+  severity: string;
 }
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -66,6 +83,38 @@ function extractChiefComplaints(report: any): string[] {
       .filter(Boolean);
   }
   return [];
+}
+
+// Allergies are AllergyRow[] on the report. Tolerates a legacy plain-string list.
+function extractAllergies(report: any): HistoryAllergy[] {
+  const rows = Array.isArray(report?.allergies) ? report.allergies : [];
+  return rows
+    .map((a: any) =>
+      typeof a === 'string'
+        ? { allergy: a.trim(), reaction: '', severity: '' }
+        : {
+            allergy: asString(a?.allergy),
+            reaction: asString(a?.reaction),
+            severity: asString(a?.severity),
+          },
+    )
+    .filter((a: HistoryAllergy) => a.allergy);
+}
+
+// What the patient was ALREADY on when they arrived — distinct from what was
+// prescribed at this visit (`medicines`).
+function extractCurrentMedications(report: any): HistoryMedicine[] {
+  const rows = Array.isArray(report?.medicationHistory) ? report.medicationHistory : [];
+  return rows
+    .map((m: any) => ({
+      medicine: asString(m?.medicine),
+      strength: asString(m?.strength),
+      dose: asString(m?.dose) || asString(m?.dosage),
+      frequency: asString(m?.frequency),
+      duration: asString(m?.duration),
+      instructions: asString(m?.instructions),
+    }))
+    .filter((m: HistoryMedicine) => m.medicine);
 }
 
 // Diagnosis / assessment is stored as a string[] under `assessment`.
@@ -113,8 +162,16 @@ const toReportStatus = (status: unknown): 'Draft' | 'Completed' =>
   status === 'Completed' ? 'Completed' : 'Draft';
 
 // Best timestamp for chronological ordering / display.
+// WHEN THE VISIT HAPPENED — deliberately not `updatedAt`.
+//
+// `updatedAt` is the ROW's last-write time, bumped by every edit and every
+// debounced auto-save. Reopening a January note in July to fix a typo made that
+// visit look like it happened today: "last seen today" for a six-month-old visit,
+// and worse, the stale note sorted to the front and was reported as the patient's
+// most recent prescription. `createdAt` is when the note was first written, which
+// is the visit; `date` is the day the clinician recorded for it.
 const visitTimeOf = (c: any): string =>
-  asString(c?.updatedAt) || asString(c?.createdAt) || asString(c?.date);
+  asString(c?.createdAt) || asString(c?.date) || asString(c?.updatedAt);
 
 /**
  * Assemble the full, chronologically-ordered (oldest → newest) consultation
@@ -123,6 +180,12 @@ const visitTimeOf = (c: any): string =>
 export async function buildPatientHistory(
   patientId: string,
   order: 'asc' | 'desc' = 'asc',
+  // Restrict to one doctor's own consultations. Two doctors in a clinic can see
+  // the same patient, and the rest of this module deliberately keeps their notes
+  // apart — a GP has no business reading a psychiatrist's assessment just because
+  // they share a patient. Callers that legitimately need the whole record (the
+  // patient's own history view, admin) simply omit it.
+  opts: { doctorId?: string } = {},
 ): Promise<ConsultationHistoryItem[]> {
   // Pull everything for this patient in parallel from the existing collections.
   const [consultations, reports, transcripts] = await Promise.all([
@@ -144,7 +207,11 @@ export async function buildPatientHistory(
     if (t?.consultationId) transcriptById.set(t.consultationId, t);
   }
 
-  const items: ConsultationHistoryItem[] = (consultations as any[]).map((c) => {
+  const scoped = opts.doctorId
+    ? (consultations as any[]).filter((c) => c?.doctorId === opts.doctorId)
+    : (consultations as any[]);
+
+  const items: ConsultationHistoryItem[] = scoped.map((c) => {
     const report = c?.report || {};
     const transcript = transcriptById.get(c.id);
     const hasReportRecord = reportIds.has(c.id);
@@ -157,6 +224,8 @@ export async function buildPatientHistory(
       chiefComplaints: extractChiefComplaints(report),
       diagnosis: extractDiagnosis(report),
       medicines: extractMedicines(report, c),
+      allergies: extractAllergies(report),
+      currentMedications: extractCurrentMedications(report),
       reportStatus: toReportStatus(c?.status),
       followUp: extractFollowUp(report),
       reportId: hasReportRecord ? c.id : null,

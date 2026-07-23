@@ -85,6 +85,9 @@ interface ConsultationWorkspaceProps {
   onSelectSession?: (session: Consultation) => void;
   // Live updates so the parent's session list stays in sync (auto-save).
   onSessionUpdate?: (session: Consultation) => void;
+  // Raised while this consultation holds the microphone, so the shell can stand
+  // the voice assistant down rather than have two features fight over the mic.
+  onRecordingChange?: (recording: boolean) => void;
 }
 
 // Why a prescription couldn't be sent, phrased as something the doctor can act
@@ -204,7 +207,7 @@ function isLikelyHallucination(text: string): boolean {
   return HALLUCINATION_PHRASES.some(p => lower.includes(p));
 }
 
-export default function ConsultationWorkspace({ consultation, patient, patientHistory, allConsultations, onFinish, onSaveReport, onExit, onNewSession, onSelectSession, onSessionUpdate }: ConsultationWorkspaceProps) {
+export default function ConsultationWorkspace({ consultation, patient, patientHistory, allConsultations, onFinish, onSaveReport, onExit, onNewSession, onSelectSession, onSessionUpdate, onRecordingChange }: ConsultationWorkspaceProps) {
   const [isRecording, setIsRecording] = useState(false);
   // Live-recording is paused (still the same consultation; transcript retained).
   const [isPaused, setIsPaused] = useState(false);
@@ -1815,6 +1818,13 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consultation.id]);
+
+  useEffect(() => {
+    onRecordingChange?.(isRecording);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording]);
+
+  useEffect(() => () => onRecordingChange?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Warn before leaving mid-recording — the audio is saved, but the doctor almost
   // certainly meant to press Stop first.

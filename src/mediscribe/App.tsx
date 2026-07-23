@@ -33,6 +33,7 @@ const ConsultationWorkspace = lazy(() => import('./components/ConsultationWorksp
 const PatientsView = lazy(() => import('./components/PatientsView'));
 const GenericListView = lazy(() => import('./components/GenericListView'));
 const SettingsView = lazy(() => import('./components/SettingsView'));
+const VoiceAsk = lazy(() => import('./components/VoiceAsk'));
 const AdminApp = lazy(() => import('./components/admin/AdminApp'));
 import {
   getPatients,
@@ -130,6 +131,8 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // Mounted inside the host app shell (the platform hub owns URL routing), so the
   // view is plain in-memory state starting at the dashboard.
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
+  // True while a consultation recording owns the microphone.
+  const [micBusy, setMicBusy] = useState(false);
 
   // ── RBAC ──────────────────────────────────────────────────────────────────
   // The logged-in user's role decides which views are visible/accessible. Each
@@ -776,11 +779,28 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 onNewSession={handleNewSession}
                 onSelectSession={handleSelectExistingConsultation}
                 onSessionUpdate={handleSessionUpdate}
+                onRecordingChange={setMicBusy}
               />
             </Suspense>
           )}
         </main>
       </div>
+
+      {/* Ask about the patient's own records — read-only, so it can sit on every
+          screen without risk. It knows which patient is open, and steps aside
+          while a consultation is recording (that recording owns the mic). */}
+      {/* Clinical content only — a receptionist has patients.view but must not
+          read diagnoses/prescriptions, so gate on reports.view to match the
+          server. */}
+      {canView('reports.view') && (
+        <Suspense fallback={null}>
+          <VoiceAsk
+            patientId={activeConsultation?.patientId}
+            patientName={activeConsultation?.patientName}
+            recordingInProgress={micBusy}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

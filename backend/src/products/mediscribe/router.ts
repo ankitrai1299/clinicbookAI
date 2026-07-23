@@ -37,6 +37,7 @@ import { syncFromScribeConsultation } from '../../services/medicineReminder.serv
 import { sendPrescriptionOnFinalize, deliverPrescription } from './services/prescriptionDelivery.js';
 import { emitEvent, getPatientTimeline } from '../../core/timeline/patientTimeline.service.js';
 import { createAppointment } from '../clinicbook/appointments/appointment.service.js';
+import { askAssistant } from './services/assistant.js';
 
 // 25 MB ceiling — matches the client-side limit for uploaded audio files.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -310,13 +311,18 @@ mediscribeRouter.get('/appointments/upcoming', async (req: Request, res: Respons
   catch (error) { console.error('[mediscribe:upcoming]', error); return res.json([]); }
 });
 
-mediscribeRouter.get('/patients/:patientId/history', async (req: Request, res: Response) => {
+mediscribeRouter.get('/patients/:patientId/history', async (req: AuthedRequest, res: Response) => {
   try {
     const { patientId } = req.params;
     if (!patientId) return res.status(400).json({ error: 'patientId is required' });
     const order = req.query.order === 'desc' ? 'desc' : 'asc';
     const { buildPatientHistory } = await import('./services/patientHistory.js');
-    return res.json(await buildPatientHistory(patientId, order));
+    // A doctor sees only their OWN consultations for this patient — the same rule
+    // the Sessions and Reports lists apply. Two doctors sharing a patient must not
+    // read each other's notes just by opening the patient's history.
+    const me = await resolvePrincipal(req);
+    const scope = me.role === 'doctor' ? { doctorId: me.id } : {};
+    return res.json(await buildPatientHistory(patientId, order, scope));
   } catch (error) {
     console.error('[mediscribe:patient-history]', error);
     return res.status(500).json({ error: 'Failed to load consultation history' });
@@ -344,6 +350,41 @@ mediscribeRouter.get('/consultations', async (req: AuthedRequest, res: Response)
     const me = await resolvePrincipal(req);
     return res.json(me.role === 'doctor' ? items.filter((c) => c.doctorId === me.id) : items);
   } catch (error) { console.error('[mediscribe:consultations]', error); return res.json([]); }
+});
+
+// Ask the assistant a question about your own patients — spoken or typed.
+//
+// READ-ONLY by construction: this reaches no write path at all. A misheard word
+// costs the doctor a re-ask, never a wrong prescription on someone's phone.
+mediscribeRouter.post('/ask', async (req: AuthedRequest, res: Response) => {
+  try {
+    const question = String(req.body?.question ?? '').trim();
+    if (!question) return res.status(400).json({ error: 'question is required' });
+    if (question.length > 500) return res.status(400).json({ error: 'question is too long' });
+
+    const me = await resolvePrincipal(req);
+
+    // The assistant answers with clinical content — diagnoses, prescriptions,
+    // allergies. A receptionist has patients.view (names/phones) but NOT
+    // reports.view or consultations.view, and must not reach clinical records
+    // through this side door. Only clinical roles may ask.
+    const CLINICAL_ROLES = new Set<Role>(['doctor', 'hospital_admin', 'superadmin']);
+    if (!CLINICAL_ROLES.has(me.role)) {
+      return res.status(403).json({ error: 'Not permitted to read clinical records' });
+    }
+
+    const result = await askAssistant({
+      clinicId: currentClinicId(),
+      doctorId: me.id,
+      isDoctor: me.role === 'doctor',
+      question,
+      patientId: req.body?.patientId ? String(req.body.patientId) : undefined,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('[mediscribe:ask]', error);
+    return res.status(500).json({ error: 'Could not answer that just now' });
+  }
 });
 
 // Send (or re-send) a finalized prescription to the patient on WhatsApp, on the
