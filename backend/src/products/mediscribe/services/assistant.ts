@@ -14,7 +14,7 @@ import { sarvamChat } from './sarvam.js';
 import {
   parseQuestionLocally,
   CLASSIFIER_PROMPT,
-  MODEL_INTENTS,
+  MODEL_LABELS,
   type AskIntent,
   type ParsedQuestion,
 } from './assistant.intent.js';
@@ -65,8 +65,13 @@ export function matchPatients(patients: ScribePatient[], spokenName: string): Sc
   });
 }
 
-/** Ask the model to classify, accepting ONLY a known label. */
-async function classifyWithModel(question: string): Promise<AskIntent> {
+/**
+ * Ask the model to classify, accepting ONLY a known label. Returns a parsed
+ * question so an `out_of_scope` verdict carries a refusal reason. The model can
+ * classify but never write an answer — that is what keeps it from talking
+ * nonsense to a clinician.
+ */
+async function classifyWithModel(question: string): Promise<ParsedQuestion> {
   try {
     const raw = await sarvamChat(
       [
@@ -80,11 +85,15 @@ async function classifyWithModel(question: string): Promise<AskIntent> {
       { maxTokens: 24, disableThinking: true },
     );
     const label = String(raw || '').trim().toLowerCase().replace(/[^a-z_]/g, '');
-    return (MODEL_INTENTS as string[]).includes(label) ? (label as AskIntent) : 'unknown';
+    if (!(MODEL_LABELS as readonly string[]).includes(label)) return { intent: 'unknown' };
+    if (label === 'out_of_scope') {
+      return { intent: 'unsupported', unsupportedReason: 'I only read records — I can’t advise on treatment or answer general questions' };
+    }
+    return { intent: label as AskIntent };
   } catch {
     // The assistant degrading to "I didn't catch that" is fine; failing the
     // request because a classifier was unreachable is not.
-    return 'unknown';
+    return { intent: 'unknown' };
   }
 }
 
@@ -105,8 +114,11 @@ export async function askAssistant(opts: {
 
   let parsed: ParsedQuestion = parseQuestionLocally(question);
   if (parsed.intent === 'unknown') {
-    const modelIntent = await classifyWithModel(question);
-    if (modelIntent !== 'unknown') parsed = { ...parsed, intent: modelIntent };
+    const fromModel = await classifyWithModel(question);
+    if (fromModel.intent !== 'unknown') {
+      // Keep any patient name the local parse already found.
+      parsed = { ...fromModel, patientName: parsed.patientName };
+    }
   }
 
   // Questions that aren't about a patient.

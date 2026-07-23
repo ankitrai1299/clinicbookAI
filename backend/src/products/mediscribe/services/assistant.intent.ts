@@ -122,6 +122,52 @@ const PATTERNS: { intent: AskIntent; any: RegExp[] }[] = [
   },
 ];
 
+// OUT OF SCOPE — checked BEFORE anything else, and the most important guard here.
+//
+// The assistant reads records. It must never be a clinical-decision tool, never
+// take an action, and never answer general questions. These are checked first
+// because they overlap the clinical patterns: "कौन सी दवा देनी चाहिए" (what should
+// I PRESCRIBE) shares the word दवा with "पिछली बार क्या दवा दी" (what WAS given) —
+// the first is advice we must refuse, the second is a record lookup. Tense and
+// modality ("देनी चाहिए / should give" vs "दी थी / was given") separate them.
+const OUT_OF_SCOPE: { any: RegExp[]; reason: string }[] = [
+  {
+    // Treatment / dosing / "what should I give" — clinical advice. This is the
+    // line the assistant must not cross: a doctor's decision, never the app's.
+    any: [
+      /\b(deni chahiye|dena chahiye|doon|doo?n|dena hai|kya doon|kya likhu|kya prescribe)\b/i,
+      /(दवा|दवाई|दबा|दबाई|इलाज|ट्रीटमेंट|treatment).{0,15}(देनी चाहिए|देना चाहिए|दूं|दूँ|क्या दूं|बताओ)/,
+      /कौन ?स[ीि].{0,15}(दवा|दवाई|दबा).{0,15}(दूं|दूँ|देनी|देना|चाहिए)/,
+      /क्या (देना|देनी) चाहिए/,
+      /\b(what|which).{0,20}(should i|to)\s+(give|prescribe|start)/i,
+      /\b(ilaj|इलाज|علاج|treatment|cure).{0,12}(kya|kaise|batao|क्या|कैसे|है)/i,
+      /\b(how|kaise).{0,15}(to treat|treat kar|theek kar|cure|ठीक)/i,
+      /\b(dose|khurak|खुराक|मात्रा)\b.{0,15}(kya|kitni|kitna|deni|doon|क्या|कितनी|दूं)/i,
+      /\b(kitni|kitna|how much)\b.{0,15}(dose|dawa|dawai|khurak|deni|doon)/i,
+      /(recommend|suggest|advise|salah|सलाह)/i,
+    ],
+    reason: 'I only read records — treatment and dosing are your clinical call, not mine',
+  },
+  {
+    // Actions. Everything that changes state goes through the note's own buttons,
+    // never a spoken command a mishear could fire.
+    any: [
+      /\b(bhej ?do|bhejo|send|book kar|book ?karo|appointment (laga|book|banao)|cancel|reschedule|save kar|delete|likh ?do)\b/i,
+      /(भेज ?दो|भेजो|बुक कर|अपॉइंटमेंट|कैंसिल|सेव कर|डिलीट|लिख ?दो|रिमाइंडर लगा)/,
+    ],
+    reason: 'I only read records — use the buttons on the note to send, save or book',
+  },
+  {
+    // Plainly general / chit-chat. Can't enumerate all of it, but catch the
+    // obvious probes so they get a clean "not my job" instead of a patient summary.
+    any: [
+      /\b(weather|mausam|मौसम|capital|joke|kaise ho|how are you|kya haal|time kya|kitne baje)\b/i,
+      /\b(news|cricket|score|movie|song|shayari)\b/i,
+    ],
+    reason: 'I can only answer from your patients’ records',
+  },
+];
+
 // Questions we understand but hold no real data for. Being explicit here is the
 // whole point: each of these maps to a field that is permanently empty or faked
 // (consultation duration is never written, arrival is never recorded, ICD codes
@@ -188,9 +234,14 @@ export function parseQuestionLocally(question: string): ParsedQuestion {
   const q = (question || '').trim();
   if (!q) return { intent: 'unknown' };
 
-  // Unsupported is checked FIRST. "How long did the consultation take" contains
-  // "consultation", and we would rather decline honestly than match a
-  // near-miss intent and answer a question that wasn't asked.
+  // Out-of-scope FIRST — treatment advice, actions, chit-chat. Must beat the
+  // clinical patterns: "कौन सी दवा देनी चाहिए" would otherwise match a prescription
+  // lookup, and answering it would turn a record reader into a treatment adviser.
+  for (const s of OUT_OF_SCOPE) {
+    if (looksLike(q, s.any)) return { intent: 'unsupported', unsupportedReason: s.reason };
+  }
+
+  // Then questions we understand but hold no data for.
   for (const u of UNSUPPORTED) {
     if (looksLike(q, u.any)) return { intent: 'unsupported', unsupportedReason: u.reason };
   }
@@ -203,8 +254,10 @@ export function parseQuestionLocally(question: string): ParsedQuestion {
   return { intent: 'unknown', patientName: extractPatientName(q) };
 }
 
-/** The intent names the model is allowed to return — nothing else is accepted. */
-export const MODEL_INTENTS: AskIntent[] = [
+// Labels the model may return. 'out_of_scope' lets it route a treatment-advice or
+// off-topic question the keyword layer missed to a refusal, instead of being
+// forced to pick a clinical intent. The caller maps it to a decline.
+export const MODEL_LABELS = [
   'last_prescription',
   'last_visit',
   'last_diagnosis',
@@ -212,19 +265,23 @@ export const MODEL_INTENTS: AskIntent[] = [
   'current_medications',
   'patient_summary',
   'my_drafts',
+  'out_of_scope',
   'unknown',
-];
+] as const;
 
-export const CLASSIFIER_PROMPT = `You label a doctor's spoken question with ONE intent.
+export const CLASSIFIER_PROMPT = `You label a doctor's question about their PAST RECORDS with ONE intent.
 Reply with ONLY the label, nothing else. Valid labels:
 
-last_prescription  - what medicines were given to a patient last time
+last_prescription  - what medicines were GIVEN to a patient last time (past tense)
 last_visit         - when a patient last came
-last_diagnosis     - what the diagnosis/assessment was
+last_diagnosis     - what the diagnosis/assessment WAS
 allergies          - whether a patient has recorded allergies
 current_medications- what a patient is already taking
 patient_summary    - a general summary of a patient's history
 my_drafts          - the doctor's unfinished/draft notes
-unknown            - anything else
+out_of_scope       - asks for TREATMENT ADVICE / what to prescribe / a dose / how
+                     to treat, OR asks to send/book/change something, OR is general
+                     chit-chat. You read records; you never advise on treatment.
+unknown            - a record question that fits none of the above
 
 The question may be in Hindi, English or a mix. Output the label only.`;

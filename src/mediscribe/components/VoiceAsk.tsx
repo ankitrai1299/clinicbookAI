@@ -321,8 +321,11 @@ export default function VoiceAsk({ patientId, patientName, recordingInProgress, 
               <Sparkles size={20} />
             </div>
             <p className="text-sm font-semibold text-slate-700">Ask about your patients</p>
-            <p className="text-[12px] text-slate-500 mt-1 mb-4 leading-relaxed">
+            <p className="text-[12px] text-slate-500 mt-1 mb-1 leading-relaxed">
               Last visit, prescription, diagnosis, allergies, current medicines — in Hindi or English.
+            </p>
+            <p className="text-[11px] text-slate-400 mb-4 leading-relaxed">
+              It looks things up — it won’t advise on treatment or dosing.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center">
               {EXAMPLES.map((ex) => (

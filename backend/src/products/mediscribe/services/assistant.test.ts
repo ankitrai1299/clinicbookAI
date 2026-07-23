@@ -71,8 +71,49 @@ describe('question classification', () => {
   });
 
   it('returns unknown rather than guessing', () => {
-    expect(parseQuestionLocally('what is the weather today').intent).toBe('unknown');
     expect(parseQuestionLocally('').intent).toBe('unknown');
+  });
+
+  // THE line the assistant must not cross: it reads records, it does not advise
+  // on treatment. "what should I give" must be refused even though it contains
+  // the same words as a prescription lookup.
+  describe('refuses clinical advice, still answers record lookups', () => {
+    it.each([
+      'What should I give this patient?',
+      'इसको कौन सी दवा देनी चाहिए?',
+      'क्या दवा दूं?',
+      'iske liye kya dawa deni chahiye',
+      'diabetes ka ilaj kya hai',
+      'how to treat this fever',
+      'kitni dose deni chahiye',
+      'koi medicine recommend karo',
+    ])('refuses advice: %s', (q) => {
+      const p = parseQuestionLocally(q);
+      expect(p.intent).toBe('unsupported');
+      expect(p.unsupportedReason).toMatch(/clinical call|only read records/i);
+    });
+
+    it.each([
+      ['पिछली बार क्या दवा दी थी?', 'last_prescription'],
+      ['इसको कौन सी दवाई दी थी?', 'last_prescription'],
+      ['what did I prescribe last time', 'last_prescription'],
+    ])('still answers the record lookup: %s', (q, intent) => {
+      expect(parseQuestionLocally(q).intent).toBe(intent);
+    });
+  });
+
+  it('refuses actions — they belong to the note buttons, not a spoken command', () => {
+    for (const q of ['prescription bhej do', 'appointment book karo', 'ise cancel kar do', 'रिमाइंडर लगा दो']) {
+      const p = parseQuestionLocally(q);
+      expect(p.intent).toBe('unsupported');
+      expect(p.unsupportedReason).toMatch(/buttons on the note|only read records/i);
+    }
+  });
+
+  it('declines chit-chat instead of forcing a clinical answer', () => {
+    for (const q of ['what is the weather today', 'aaj cricket ka score kya hai', 'ek joke sunao']) {
+      expect(parseQuestionLocally(q).intent).toBe('unsupported');
+    }
   });
 
   it('extracts a patient name only from an explicit cue', () => {
