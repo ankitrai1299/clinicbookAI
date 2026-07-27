@@ -40,15 +40,18 @@ export function LiveDemo() {
 
   return (
     <section ref={ref} id="live-demo" className="relative py-20 bg-slate-50 border-y border-slate-100 overflow-hidden">
-      {/* A doctor using their phone, faint in the background — the human behind the
-          flow. Very low opacity + a scrim so it's a natural backdrop, not noise. */}
+      {/* A doctor using their phone, behind the flow — the human it's built for.
+          Sits on the right (where the layout is emptiest), clearly visible but
+          scrimmed toward the copy so the phone and card stay readable. */}
       <div aria-hidden className="absolute inset-0 pointer-events-none">
         <img
           src="/images/doctor-1.jpg"
           alt=""
-          className="absolute right-0 top-0 h-full w-full lg:w-3/5 object-cover object-center opacity-[0.07]"
+          className="absolute right-0 top-0 h-full w-full lg:w-[55%] object-cover object-center opacity-30"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-50 via-slate-50/85 to-slate-50/60" />
+        {/* Fade the photo into the section on its left edge and soften the rest. */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-50 via-slate-50/80 to-slate-50/25" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-50/70 via-transparent to-slate-50/40" />
       </div>
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
