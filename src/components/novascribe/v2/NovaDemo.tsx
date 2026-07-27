@@ -47,11 +47,11 @@ export function LiveDemo() {
         <img
           src="/images/doctor-1.jpg"
           alt=""
-          className="absolute right-0 top-0 h-full w-full lg:w-[55%] object-cover object-center opacity-[0.15]"
+          className="absolute right-0 top-0 h-full w-full lg:w-[55%] object-cover object-center opacity-[0.22]"
         />
         {/* Fade the photo into the section on its left edge and soften the rest. */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-50 via-slate-50/85 to-slate-50/45" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-50/75 via-transparent to-slate-50/50" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-50 via-slate-50/80 to-slate-50/35" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-50/70 via-transparent to-slate-50/45" />
       </div>
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
