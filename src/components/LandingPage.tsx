@@ -120,11 +120,11 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                 keeps that overlap fixed instead of guessing at absolute offsets. */}
             <div className="lg:col-span-5 flex items-center justify-center relative">
 
-              {/* What the bot did — floats to the LEFT of the phone (in the gutter,
-                  NOT over the chat) and each card slides in one after another, so
-                  the conversation is readable on open and the outcomes appear as
-                  the booking completes. */}
-              <div className="hidden lg:flex flex-col gap-3 absolute -left-6 xl:-left-16 top-1/2 -translate-y-1/2 z-20">
+              {/* What the bot did — floats over the RIGHT of the scene (the patient
+                  photo, at mid-height so it's clear of her face), NEVER over the
+                  phone. The chat is fully readable; each card slides in from the
+                  right one after another as the booking completes. */}
+              <div className="hidden lg:flex flex-col gap-2.5 absolute right-0 xl:-right-6 top-1/2 -translate-y-1/2 z-30">
                 {[
                   { icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50', title: 'Appointment confirmed', time: '10:32 AM' },
                   { icon: Bell, tone: 'text-sky-600 bg-sky-50', title: 'Reminder sent', time: '09:00 AM' },
@@ -134,10 +134,10 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                   return (
                     <motion.div
                       key={c.title}
-                      initial={{ opacity: 0, x: -24, scale: 0.92 }}
+                      initial={{ opacity: 0, x: 24, scale: 0.92 }}
                       animate={{ opacity: 1, x: 0, scale: 1 }}
                       transition={{ delay: 1.2 + i * 0.9, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                      className="flex items-center gap-2.5 bg-white rounded-xl border border-slate-100 shadow-lg px-3 py-2.5"
+                      className="flex items-center gap-2.5 bg-white/95 backdrop-blur rounded-xl border border-white shadow-xl px-3 py-2.5"
                     >
                       <motion.div
                         animate={{ y: [0, -5, 0] }}
