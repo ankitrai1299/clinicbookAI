@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useInView, useReducedMotion } from 'motion/react';
-import { Mic, FileText, Pill, MessageSquare, Sparkles, Check, Printer, Send } from 'lucide-react';
-import { Reveal, SectionHead, Waveform } from './primitives';
+import { FileText, Pill, MessageSquare, Check, Printer, Send } from 'lucide-react';
+import { Reveal, SectionHead } from './primitives';
 import NovaPhoneDemo from './NovaPhoneDemo';
 import { SCENES, INDIC_FONT } from './scenes';
 
-// Section 3 — the product running, not a screenshot of it. The consultation plays
-// through: the patient speaks, the transcript lands, the note is written, the
-// prescription is filled, the patient summary appears.
+// Section 3 — the product running, not a screenshot of it. Two panels, side by
+// side: the phone plays the consultation (record → transcript → note), and beside
+// it the outputs it produces (clinical note, prescription, patient summary).
+//
+// It used to stack the phone ABOVE a second full desktop demo of the same flow —
+// the same thing twice, and a very tall section. The phone is the flow; this keeps
+// only the phone plus what it produces.
 
 // This visit is spoken in Hindi, so the transcript is in Devanagari — the product
 // transcribes into the script the language is actually written in, never romanised.
@@ -32,12 +36,10 @@ export function LiveDemo() {
     return () => clearInterval(id);
   }, [inView, reduce]);
 
-  const linesShown = Math.min(step, SCENE.transcript.length);
-  const thinking = step === 4;
   const tabIndex = step >= 7 ? 2 : step >= 6 ? 1 : step >= 5 ? 0 : -1;
 
   return (
-    <section ref={ref} id="live-demo" className="py-24 bg-slate-50 border-y border-slate-100">
+    <section ref={ref} id="live-demo" className="py-20 bg-slate-50 border-y border-slate-100">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHead
           eyebrow="Live demo"
@@ -46,88 +48,22 @@ export function LiveDemo() {
           sub="No screenshots — this is the flow exactly as it runs in the app."
         />
 
-        {/* The phone version leads — it's the same animation we record for reels,
-            so the site and the marketing footage never drift apart. */}
-        <Reveal delay={0.08}>
-          <div className="mt-14 mb-14 flex justify-center">
-            <NovaPhoneDemo />
-          </div>
-        </Reveal>
+        {/* Two panels, side by side: the phone plays the flow; beside it, what it
+            produces. On mobile they stack, phone first. */}
+        <div className="mt-12 grid lg:grid-cols-2 gap-8 lg:gap-10 items-center">
+          <Reveal delay={0.05}>
+            <div className="flex justify-center">
+              <NovaPhoneDemo autoPlayInView />
+            </div>
+          </Reveal>
 
-        <Reveal delay={0.1}>
-          <div className="rounded-3xl bg-white border border-slate-200 shadow-2xl shadow-slate-900/5 overflow-hidden">
-            <div className="grid lg:grid-cols-2">
-              {/* Left — the room */}
-              <div className="p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-slate-100">
-                <div className="flex items-center gap-3 mb-6">
-                  <span className="relative flex-shrink-0">
-                    <motion.span
-                      animate={reduce ? undefined : { scale: [1, 1.4, 1], opacity: [0.45, 0, 0.45] }}
-                      transition={reduce ? undefined : { duration: 2, repeat: Infinity }}
-                      className="absolute inset-0 rounded-full bg-red-400"
-                    />
-                    <span className="relative w-10 h-10 rounded-full bg-red-500 text-white flex items-center justify-center">
-                      <Mic className="w-4.5 h-4.5" />
-                    </span>
-                  </span>
-                  <div>
-                    <div className="text-sm font-bold text-slate-800">Recording</div>
-                    <div className="text-[11px] text-slate-400">
-                      Detected:{' '}
-                      <span className="text-slate-600 font-semibold" style={{ fontFamily: INDIC_FONT }}>
-                        {SCENE.native}
-                      </span>
-                    </div>
-                  </div>
-                  <Waveform active className="text-emerald-500 h-7 ml-auto" bars={20} />
+          <Reveal delay={0.12}>
+            <div className="rounded-3xl bg-white border border-slate-200 shadow-xl shadow-slate-900/5 overflow-hidden">
+              <div className="p-6 sm:p-7">
+                <div className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-4">
+                  What it produces
                 </div>
-
-                <div className="space-y-4 min-h-[260px]">
-                  {SCENE.transcript.slice(0, linesShown).map((l, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4 }}
-                      className="space-y-1"
-                    >
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-widest ${
-                          l.who === 'Doctor' ? 'text-slate-400' : 'text-emerald-600'
-                        }`}
-                      >
-                        {l.who}
-                      </span>
-                      <p className="text-[13px] text-slate-700 leading-relaxed" style={{ fontFamily: INDIC_FONT }}>
-                        {l.text}
-                      </p>
-                    </motion.div>
-                  ))}
-
-                  {thinking && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex items-center gap-2 pt-2"
-                    >
-                      <motion.span
-                        animate={reduce ? undefined : { rotate: 360 }}
-                        transition={reduce ? undefined : { duration: 3, repeat: Infinity, ease: 'linear' }}
-                        className="w-6 h-6 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                      </motion.span>
-                      <span className="text-[12px] font-semibold text-slate-500">
-                        Understanding symptoms, duration and severity…
-                      </span>
-                    </motion.div>
-                  )}
-                </div>
-              </div>
-
-              {/* Right — what gets produced */}
-              <div className="p-6 sm:p-8 bg-slate-50/50">
-                <div className="flex gap-1.5 mb-5">
+                <div className="flex flex-wrap gap-1.5 mb-5">
                   {TABS.map((t, i) => {
                     const Icon = t.icon;
                     const active = tabIndex === i;
@@ -234,8 +170,8 @@ export function LiveDemo() {
                 </div>
               </div>
             </div>
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
       </div>
     </section>
   );
