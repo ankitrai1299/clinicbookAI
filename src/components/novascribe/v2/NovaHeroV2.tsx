@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useInView, useReducedMotion } from 'motion/react';
 import { ArrowRight, PlayCircle, Mic, FileText, Pill, Send, Check, Sparkles, Stethoscope } from 'lucide-react';
-import { AmbientBackdrop, Reveal, Waveform } from './primitives';
+import { Reveal, Waveform } from './primitives';
 
 // Hero. The whole promise in one moving picture: a consultation is spoken, the
 // transcript lands, the note writes itself, the prescription appears. A doctor
@@ -39,12 +39,24 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
   const at = (n: number) => stage >= n;
 
   return (
-    <section ref={ref} className="relative overflow-hidden bg-white pt-14 pb-20 lg:pt-20 lg:pb-28">
-      <AmbientBackdrop />
+    <section ref={ref} className="relative overflow-hidden bg-white">
+      {/* The clinic scene fills the WHOLE hero. The copy side is held on white by
+          the scrim so it stays readable; the doctor shows through on the right. */}
+      <div aria-hidden className="absolute inset-0">
+        <img
+          src="/images/doctor-hero.jpg"
+          alt=""
+          className="w-full h-full object-cover object-[78%_22%]"
+        />
+        {/* Left→right: solid white under the copy, clearing toward the doctor. */}
+        <div className="absolute inset-0 bg-gradient-to-r from-white via-white/95 to-white/45 lg:from-white lg:via-white/88 lg:to-transparent" />
+        {/* Gentle top/bottom lift so the section edges melt into the page. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-transparent to-white/35" />
+      </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-12 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-20 lg:pt-20 lg:pb-28 grid lg:grid-cols-12 gap-10 items-center">
         {/* Copy */}
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-6">
           <Reveal>
             <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1.5">
               <Stethoscope className="w-3.5 h-3.5" /> AI medical scribe
@@ -98,52 +110,16 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
           </Reveal>
         </div>
 
-        {/* The scene: a doctor at work, with the app floating over it. The photo
-            is masked into the page on its left edge so it reads as part of the
-            hero, not a rectangle pasted beside the copy. */}
-        <div className="lg:col-span-7">
+        {/* Over the clinic scene: the live app, and the status rail. The doctor is
+            the section background now, so nothing here covers his face. */}
+        <div className="lg:col-span-6 relative lg:min-h-[460px]">
           <Reveal delay={0.15} y={40}>
-            <div className="relative lg:min-h-[540px] lg:pl-8">
-              {/* Ambient glow behind the scene — picks up the clinic's cool light
-                  so the photo sits in a soft field of colour, not on flat white. */}
-              <div
-                aria-hidden
-                className="absolute -inset-10 bg-[radial-gradient(60%_60%_at_70%_35%,rgba(56,189,248,0.22),transparent_70%),radial-gradient(50%_50%_at_40%_80%,rgba(16,185,129,0.18),transparent_70%)] blur-2xl rounded-full pointer-events-none"
-              />
-
-              {/* Doctor photo — the human the product is for. Its edges are
-                  FEATHERED into the page with a mask (not a hard rounded box), so
-                  the scene melts into the hero instead of sitting in a rectangle.
-                  A gentle cool grade + a soft inner vignette give it depth. */}
-              <div
-                className="relative lg:absolute lg:top-0 lg:right-0 lg:h-full lg:w-[68%] overflow-hidden aspect-[16/10] lg:aspect-auto"
-                style={{
-                  WebkitMaskImage:
-                    'radial-gradient(135% 125% at 68% 42%, #000 55%, rgba(0,0,0,0.35) 80%, transparent 100%)',
-                  maskImage:
-                    'radial-gradient(135% 125% at 68% 42%, #000 55%, rgba(0,0,0,0.35) 80%, transparent 100%)',
-                }}
-              >
-                <img
-                  src="/images/doctor-hero.jpg"
-                  alt="Dr. Arjun Verma using NovaScribe during a consultation"
-                  className="w-full h-full object-cover object-center"
-                  loading="eager"
-                  decoding="async"
-                />
-                {/* Left edge still melts toward the copy for text safety. */}
-                <div className="absolute inset-0 bg-gradient-to-r from-white/70 via-transparent to-transparent" />
-                {/* Cool clinical grade + a soft vignette so the plain background
-                    reads as depth rather than flat blur. */}
-                <div className="absolute inset-0 bg-gradient-to-t from-sky-900/15 via-transparent to-white/10" />
-                <div className="absolute inset-0 shadow-[inset_0_0_80px_20px_rgba(15,23,42,0.10)]" />
-              </div>
-
-              {/* The app, floating in front of the scene — the live consultation. */}
+            <>
+              {/* The app, floating over the desk — the live consultation. */}
               <motion.div
                 animate={reduce ? undefined : { y: [0, -9, 0] }}
                 transition={reduce ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-                className="relative -mt-16 mx-auto w-[92%] sm:w-[80%] lg:mt-0 lg:mx-0 lg:absolute lg:left-0 lg:bottom-10 lg:w-[58%] rounded-2xl bg-white shadow-2xl shadow-slate-900/20 ring-1 ring-slate-200/70 overflow-hidden"
+                className="relative mx-auto w-[94%] sm:w-[78%] lg:mx-0 lg:absolute lg:left-0 lg:top-1/2 lg:-translate-y-1/2 lg:w-[66%] rounded-2xl bg-white shadow-2xl shadow-slate-900/25 ring-1 ring-slate-200/70 overflow-hidden"
               >
                 {/* chrome */}
                 <div className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-50 border-b border-slate-100">
@@ -234,9 +210,10 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
                 </div>
               </motion.div>
 
-              {/* Status rail — floats over the top-right of the scene, filling in
-                  as the work completes, like the reference. */}
-              <div className="hidden lg:flex flex-col gap-2 absolute right-4 top-8 z-10">
+              {/* Status rail — pinned to the far-right edge, vertically centred so
+                  it sits beside the doctor (over his side, never his face) and
+                  fills in as the work completes. */}
+              <div className="hidden lg:flex flex-col gap-2 absolute right-0 top-1/2 -translate-y-1/2 z-10">
                 {TOASTS.map((t, i) => {
                   const Icon = t.icon;
                   const visible = at(t.at);
@@ -257,7 +234,7 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
                   );
                 })}
               </div>
-            </div>
+            </>
           </Reveal>
         </div>
       </div>
