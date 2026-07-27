@@ -27,20 +27,31 @@ export function LiveDemo() {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { amount: 0.3 });
   const reduce = useReducedMotion();
-  const [step, setStep] = useState(0); // 0..7
+  // The right panel cycles through the three outputs continuously. It used to sit
+  // empty (skeleton bars) for the first few beats while it waited to "catch up"
+  // with the phone — which just read as a blank card. Now it always shows one.
+  const [tabIndex, setTabIndex] = useState(0);
 
   useEffect(() => {
-    if (reduce) { setStep(7); return; }
-    if (!inView) return;
-    const id = setInterval(() => setStep((s) => (s >= 7 ? 0 : s + 1)), 1500);
+    if (reduce || !inView) return;
+    const id = setInterval(() => setTabIndex((t) => (t + 1) % TABS.length), 2800);
     return () => clearInterval(id);
   }, [inView, reduce]);
 
-  const tabIndex = step >= 7 ? 2 : step >= 6 ? 1 : step >= 5 ? 0 : -1;
-
   return (
-    <section ref={ref} id="live-demo" className="py-20 bg-slate-50 border-y border-slate-100">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section ref={ref} id="live-demo" className="relative py-20 bg-slate-50 border-y border-slate-100 overflow-hidden">
+      {/* A doctor using their phone, faint in the background — the human behind the
+          flow. Very low opacity + a scrim so it's a natural backdrop, not noise. */}
+      <div aria-hidden className="absolute inset-0 pointer-events-none">
+        <img
+          src="/images/doctor-1.jpg"
+          alt=""
+          className="absolute right-0 top-0 h-full w-full lg:w-3/5 object-cover object-center opacity-[0.07]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-50 via-slate-50/85 to-slate-50/60" />
+      </div>
+
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHead
           eyebrow="Live demo"
           title="Watch a consultation"
@@ -67,33 +78,25 @@ export function LiveDemo() {
                   {TABS.map((t, i) => {
                     const Icon = t.icon;
                     const active = tabIndex === i;
-                    const done = tabIndex > i;
                     return (
-                      <div
+                      <button
                         key={t.key}
+                        type="button"
+                        onClick={() => setTabIndex(i)}
                         className={`flex items-center gap-1.5 text-[11px] font-bold rounded-full px-3 py-1.5 transition-colors duration-300 ${
                           active
                             ? 'bg-slate-900 text-white'
-                            : done
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                              : 'bg-white text-slate-400 border border-slate-200'
+                            : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        {done ? <Check className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
+                        <Icon className="w-3 h-3" />
                         {t.label}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
 
                 <div className="min-h-[260px]">
-                  {tabIndex < 0 && (
-                    <div className="space-y-2.5 pt-2">
-                      {[0, 1, 2].map((i) => (
-                        <div key={i} className="h-12 rounded-xl bg-slate-200/70 animate-pulse" />
-                      ))}
-                    </div>
-                  )}
 
                   {tabIndex >= 0 && (
                     <motion.div
