@@ -104,14 +104,26 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
         <div className="lg:col-span-7">
           <Reveal delay={0.15} y={40}>
             <div className="relative lg:min-h-[540px] lg:pl-8">
-              {/* Ambient glow behind the scene */}
+              {/* Ambient glow behind the scene — picks up the clinic's cool light
+                  so the photo sits in a soft field of colour, not on flat white. */}
               <div
                 aria-hidden
-                className="absolute -inset-6 bg-gradient-to-tr from-emerald-200/30 via-sky-200/20 to-violet-200/30 blur-3xl rounded-full pointer-events-none"
+                className="absolute -inset-10 bg-[radial-gradient(60%_60%_at_70%_35%,rgba(56,189,248,0.22),transparent_70%),radial-gradient(50%_50%_at_40%_80%,rgba(16,185,129,0.18),transparent_70%)] blur-2xl rounded-full pointer-events-none"
               />
 
-              {/* Doctor photo — the human the product is for. */}
-              <div className="relative lg:absolute lg:top-0 lg:right-0 lg:h-full lg:w-[64%] rounded-[28px] overflow-hidden shadow-2xl shadow-slate-900/15 ring-1 ring-slate-200/50 aspect-[4/5] sm:aspect-[16/12] lg:aspect-auto">
+              {/* Doctor photo — the human the product is for. Its edges are
+                  FEATHERED into the page with a mask (not a hard rounded box), so
+                  the scene melts into the hero instead of sitting in a rectangle.
+                  A gentle cool grade + a soft inner vignette give it depth. */}
+              <div
+                className="relative lg:absolute lg:top-0 lg:right-0 lg:h-full lg:w-[64%] overflow-hidden aspect-[4/5] sm:aspect-[16/12] lg:aspect-auto"
+                style={{
+                  WebkitMaskImage:
+                    'radial-gradient(125% 115% at 72% 38%, #000 52%, rgba(0,0,0,0.35) 78%, transparent 100%)',
+                  maskImage:
+                    'radial-gradient(125% 115% at 72% 38%, #000 52%, rgba(0,0,0,0.35) 78%, transparent 100%)',
+                }}
+              >
                 <img
                   src="/images/doctor-1.jpg"
                   alt="A doctor using NovaScribe during a consultation"
@@ -119,10 +131,12 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
                   loading="eager"
                   decoding="async"
                 />
-                {/* Left edge melts into the white page; a soft bottom scrim lifts
-                    the floating card. No hard photo border anywhere it meets copy. */}
-                <div className="absolute inset-0 bg-gradient-to-r from-white via-white/10 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/15 to-transparent" />
+                {/* Left edge still melts toward the copy for text safety. */}
+                <div className="absolute inset-0 bg-gradient-to-r from-white/70 via-transparent to-transparent" />
+                {/* Cool clinical grade + a soft vignette so the plain background
+                    reads as depth rather than flat blur. */}
+                <div className="absolute inset-0 bg-gradient-to-t from-sky-900/15 via-transparent to-white/10" />
+                <div className="absolute inset-0 shadow-[inset_0_0_80px_20px_rgba(15,23,42,0.10)]" />
               </div>
 
               {/* The app, floating in front of the scene — the live consultation. */}
