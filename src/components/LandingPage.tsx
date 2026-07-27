@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import {
   ArrowRight, CheckCircle2, MessageSquare, AlertCircle, Sparkles,
   Globe, Calendar, Bell, Users, Plus, Star, Landmark, ShieldCheck, HelpCircle,
@@ -119,28 +120,39 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                 keeps that overlap fixed instead of guessing at absolute offsets. */}
             <div className="lg:col-span-5 flex items-center justify-center relative">
 
-              {/* What the bot did, floating around the phone — the outcomes a
-                  clinic cares about, not just the chat UI. */}
-              <div className="hidden lg:flex flex-col gap-3 absolute left-0 top-1/2 -translate-y-1/2 z-20">
+              {/* What the bot did — floats to the LEFT of the phone (in the gutter,
+                  NOT over the chat) and each card slides in one after another, so
+                  the conversation is readable on open and the outcomes appear as
+                  the booking completes. */}
+              <div className="hidden lg:flex flex-col gap-3 absolute -left-6 xl:-left-16 top-1/2 -translate-y-1/2 z-20">
                 {[
                   { icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50', title: 'Appointment confirmed', time: '10:32 AM' },
                   { icon: Bell, tone: 'text-sky-600 bg-sky-50', title: 'Reminder sent', time: '09:00 AM' },
                   { icon: Calendar, tone: 'text-violet-600 bg-violet-50', title: 'Follow-up scheduled', time: 'After 3 days' },
-                ].map((c) => {
+                ].map((c, i) => {
                   const Icon = c.icon;
                   return (
-                    <div
+                    <motion.div
                       key={c.title}
+                      initial={{ opacity: 0, x: -24, scale: 0.92 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      transition={{ delay: 1.2 + i * 0.9, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
                       className="flex items-center gap-2.5 bg-white rounded-xl border border-slate-100 shadow-lg px-3 py-2.5"
                     >
-                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${c.tone}`}>
-                        <Icon className="w-4 h-4" />
-                      </span>
-                      <div className="leading-tight whitespace-nowrap">
-                        <div className="text-xs font-bold text-slate-900">{c.title}</div>
-                        <div className="text-[10px] text-slate-400">{c.time}</div>
-                      </div>
-                    </div>
+                      <motion.div
+                        animate={{ y: [0, -5, 0] }}
+                        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.5 }}
+                        className="flex items-center gap-2.5"
+                      >
+                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${c.tone}`}>
+                          <Icon className="w-4 h-4" />
+                        </span>
+                        <div className="leading-tight whitespace-nowrap">
+                          <div className="text-xs font-bold text-slate-900">{c.title}</div>
+                          <div className="text-[10px] text-slate-400">{c.time}</div>
+                        </div>
+                      </motion.div>
+                    </motion.div>
                   );
                 })}
               </div>
