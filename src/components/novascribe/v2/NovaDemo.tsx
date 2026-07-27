@@ -47,11 +47,11 @@ export function LiveDemo() {
         <img
           src="/images/doctor-1.jpg"
           alt=""
-          className="absolute right-0 top-0 h-full w-full lg:w-[55%] object-cover object-center opacity-[0.22]"
+          className="absolute right-0 top-0 h-full w-full lg:w-[58%] object-cover object-center opacity-[0.55]"
         />
-        {/* Fade the photo into the section on its left edge and soften the rest. */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-50 via-slate-50/80 to-slate-50/35" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-50/70 via-transparent to-slate-50/45" />
+        {/* Strong scrim on the LEFT so the phone stays readable, clearing toward
+            the RIGHT where the layout is empty and the doctor can show properly. */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-50 via-slate-50/60 to-transparent" />
       </div>
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
