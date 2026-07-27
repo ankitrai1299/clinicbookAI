@@ -116,18 +116,18 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
                   the scene melts into the hero instead of sitting in a rectangle.
                   A gentle cool grade + a soft inner vignette give it depth. */}
               <div
-                className="relative lg:absolute lg:top-0 lg:right-0 lg:h-full lg:w-[64%] overflow-hidden aspect-[4/5] sm:aspect-[16/12] lg:aspect-auto"
+                className="relative lg:absolute lg:top-0 lg:right-0 lg:h-full lg:w-[68%] overflow-hidden aspect-[16/10] lg:aspect-auto"
                 style={{
                   WebkitMaskImage:
-                    'radial-gradient(125% 115% at 72% 38%, #000 52%, rgba(0,0,0,0.35) 78%, transparent 100%)',
+                    'radial-gradient(135% 125% at 68% 42%, #000 55%, rgba(0,0,0,0.35) 80%, transparent 100%)',
                   maskImage:
-                    'radial-gradient(125% 115% at 72% 38%, #000 52%, rgba(0,0,0,0.35) 78%, transparent 100%)',
+                    'radial-gradient(135% 125% at 68% 42%, #000 55%, rgba(0,0,0,0.35) 80%, transparent 100%)',
                 }}
               >
                 <img
-                  src="/images/doctor-1.jpg"
-                  alt="A doctor using NovaScribe during a consultation"
-                  className="w-full h-full object-cover object-top"
+                  src="/images/doctor-hero.jpg"
+                  alt="Dr. Arjun Verma using NovaScribe during a consultation"
+                  className="w-full h-full object-cover object-center"
                   loading="eager"
                   decoding="async"
                 />
