@@ -120,45 +120,41 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                 keeps that overlap fixed instead of guessing at absolute offsets. */}
             <div className="lg:col-span-5 flex items-center justify-center relative">
 
-              {/* What the bot did — floats over the RIGHT of the scene (the patient
-                  photo, mid-height, clear of her face), NEVER over the phone. Each
-                  card appears as the booking advances and clears when the chat
-                  loops back to the start, so the whole thing keeps replaying. */}
-              <div className="hidden lg:flex flex-col gap-2.5 absolute right-0 xl:-right-6 top-1/2 -translate-y-1/2 z-30">
-                <AnimatePresence>
-                  {[
-                    { icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50', title: 'Appointment confirmed', time: '10:32 AM' },
-                    { icon: Bell, tone: 'text-sky-600 bg-sky-50', title: 'Reminder sent', time: '09:00 AM' },
-                    { icon: Calendar, tone: 'text-violet-600 bg-violet-50', title: 'Follow-up scheduled', time: 'After 3 days' },
-                  ].map((c, i) => {
+              {/* What the bot did — ONE card at a time, over the right of the scene
+                  (clear of the phone and her face). Each booking step swaps the card:
+                  appointment → reminder → follow-up, the previous one sliding out as
+                  the next slides in, looping with the chat. */}
+              <div className="hidden lg:block absolute right-0 xl:-right-6 top-1/2 -translate-y-1/2 z-30">
+                <AnimatePresence mode="wait">
+                  {(() => {
+                    const cards = [
+                      { icon: CheckCircle2, tone: 'text-emerald-600 bg-emerald-50', title: 'Appointment confirmed', time: '10:32 AM' },
+                      { icon: Bell, tone: 'text-sky-600 bg-sky-50', title: 'Reminder sent', time: '09:00 AM' },
+                      { icon: Calendar, tone: 'text-violet-600 bg-violet-50', title: 'Follow-up scheduled', time: 'After 3 days' },
+                    ];
+                    // Show the card for the current booking step; none before it starts.
+                    const c = currentStep >= 1 && currentStep <= cards.length ? cards[currentStep - 1] : null;
+                    if (!c) return null;
                     const Icon = c.icon;
-                    // Reveal one per booking step; all clear on the loop reset.
-                    if (currentStep <= i) return null;
                     return (
                       <motion.div
                         key={c.title}
-                        initial={{ opacity: 0, x: 24, scale: 0.92 }}
+                        initial={{ opacity: 0, x: 26, scale: 0.9 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: 24, scale: 0.92 }}
-                        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                        className="flex items-center gap-2.5 bg-white/95 backdrop-blur rounded-xl border border-white shadow-xl px-3 py-2.5"
+                        exit={{ opacity: 0, x: 26, scale: 0.9 }}
+                        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                        className="flex items-center gap-2.5 bg-white/95 backdrop-blur rounded-xl border border-white shadow-xl px-3.5 py-3"
                       >
-                        <motion.div
-                          animate={{ y: [0, -5, 0] }}
-                          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.5 }}
-                          className="flex items-center gap-2.5"
-                        >
-                          <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${c.tone}`}>
-                            <Icon className="w-4 h-4" />
-                          </span>
-                          <div className="leading-tight whitespace-nowrap">
-                            <div className="text-xs font-bold text-slate-900">{c.title}</div>
-                            <div className="text-[10px] text-slate-400">{c.time}</div>
-                          </div>
-                        </motion.div>
+                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${c.tone}`}>
+                          <Icon className="w-4 h-4" />
+                        </span>
+                        <div className="leading-tight whitespace-nowrap">
+                          <div className="text-xs font-bold text-slate-900">{c.title}</div>
+                          <div className="text-[10px] text-slate-400">{c.time}</div>
+                        </div>
                       </motion.div>
                     );
-                  })}
+                  })()}
                 </AnimatePresence>
               </div>
 
