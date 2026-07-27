@@ -98,148 +98,131 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
           </Reveal>
         </div>
 
-        {/* Laptop with the live consultation */}
+        {/* The scene: a doctor at work, with the app floating over it. The photo
+            is masked into the page on its left edge so it reads as part of the
+            hero, not a rectangle pasted beside the copy. */}
         <div className="lg:col-span-7">
           <Reveal delay={0.15} y={40}>
-            <motion.div
-              animate={reduce ? undefined : { y: [0, -10, 0] }}
-              transition={reduce ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-              className="relative"
-            >
-              {/* Screen */}
-              <div className="rounded-[20px] bg-slate-900 p-2.5 shadow-2xl shadow-slate-900/25 ring-1 ring-slate-800">
-                <div className="rounded-[12px] bg-white overflow-hidden">
-                  {/* App chrome */}
-                  <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-                    <span className="flex gap-1.5">
-                      {['bg-red-400', 'bg-amber-400', 'bg-emerald-400'].map((c) => (
-                        <span key={c} className={`w-2.5 h-2.5 rounded-full ${c}`} />
-                      ))}
-                    </span>
-                    <span className="ml-2 text-[11px] font-semibold text-slate-400">NovaScribe — Consultation</span>
-                    <span className="ml-auto flex items-center gap-1.5">
-                      <motion.span
-                        animate={reduce ? undefined : { opacity: [1, 0.35, 1] }}
-                        transition={reduce ? undefined : { duration: 1.6, repeat: Infinity }}
-                        className="w-2 h-2 rounded-full bg-red-500"
-                      />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        {STAGES[Math.min(stage, STAGES.length - 1)].label}
-                      </span>
-                    </span>
-                  </div>
+            <div className="relative lg:min-h-[540px] lg:pl-8">
+              {/* Ambient glow behind the scene */}
+              <div
+                aria-hidden
+                className="absolute -inset-6 bg-gradient-to-tr from-emerald-200/30 via-sky-200/20 to-violet-200/30 blur-3xl rounded-full pointer-events-none"
+              />
 
-                  <div className="grid sm:grid-cols-2 min-h-[330px]">
-                    {/* Left: listening + transcript */}
-                    <div className="p-4 sm:p-5 border-b sm:border-b-0 sm:border-r border-slate-100">
-                      <div className="flex items-center gap-2.5 mb-4">
-                        <span className="w-9 h-9 rounded-full bg-red-500 text-white flex items-center justify-center flex-shrink-0">
-                          <Mic className="w-4 h-4" />
-                        </span>
-                        <Waveform active={at(0)} className="text-sky-500 h-6" bars={24} />
-                        <span className="ml-auto text-[10px] font-mono text-slate-400">02:41</span>
-                      </div>
-
-                      <div className="space-y-3">
-                        {at(1) && (
-                          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-0.5">
-                            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Doctor</span>
-                            <p className="text-[12px] text-slate-700 leading-snug">
-                              Subah ki dizziness ab kaisi hai?
-                            </p>
-                          </motion.div>
-                        )}
-                        {at(2) && (
-                          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-0.5">
-                            <span className="text-[9px] font-bold uppercase tracking-widest text-sky-600">Patient</span>
-                            <p className="text-[12px] text-slate-600 leading-snug">
-                              Pehle se kaafi kam hai, ab sirf uthte waqt.
-                            </p>
-                          </motion.div>
-                        )}
-                        {stage === 3 && (
-                          <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex items-center gap-2 pt-1"
-                          >
-                            <motion.span
-                              animate={reduce ? undefined : { rotate: 360 }}
-                              transition={reduce ? undefined : { duration: 3, repeat: Infinity, ease: 'linear' }}
-                              className="w-5 h-5 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center"
-                            >
-                              <Sparkles className="w-3 h-3" />
-                            </motion.span>
-                            <span className="text-[11px] font-semibold text-slate-500">
-                              Understanding the consultation…
-                            </span>
-                          </motion.div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right: the note being written */}
-                    <div className="p-4 sm:p-5 bg-slate-50/50">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
-                        Clinical note
-                      </span>
-
-                      <div className="mt-3 space-y-2.5">
-                        {['Subjective', 'Assessment'].map((h, i) => (
-                          <div key={h}>
-                            <p className="text-[9px] font-bold uppercase tracking-wide text-sky-600 mb-1">{h}</p>
-                            {at(4) ? (
-                              <motion.p
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.15 }}
-                                className="text-[11px] text-slate-700 leading-snug bg-white rounded-lg border border-slate-100 p-2"
-                              >
-                                {i === 0
-                                  ? 'Morning dizziness improving; now only on standing.'
-                                  : 'Orthostatic hypotension, secondary to Lisinopril adjustment.'}
-                              </motion.p>
-                            ) : (
-                              <div className="h-9 rounded-lg bg-slate-200/70 animate-pulse" />
-                            )}
-                          </div>
-                        ))}
-
-                        <div>
-                          <p className="text-[9px] font-bold uppercase tracking-wide text-violet-600 mb-1">
-                            Prescription
-                          </p>
-                          {at(5) ? (
-                            <motion.div
-                              initial={{ opacity: 0, y: 6 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="bg-white rounded-lg border border-slate-100 p-2 space-y-1"
-                            >
-                              {[
-                                ['Lisinopril 5mg', 'Once daily'],
-                                ['BP monitoring', 'Morning & evening'],
-                              ].map(([d, s]) => (
-                                <div key={d} className="flex justify-between text-[10px]">
-                                  <span className="font-semibold text-slate-700">{d}</span>
-                                  <span className="text-slate-400">{s}</span>
-                                </div>
-                              ))}
-                            </motion.div>
-                          ) : (
-                            <div className="h-12 rounded-lg bg-slate-200/70 animate-pulse" />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              {/* Doctor photo — the human the product is for. */}
+              <div className="relative lg:absolute lg:top-0 lg:right-0 lg:h-full lg:w-[64%] rounded-[28px] overflow-hidden shadow-2xl shadow-slate-900/15 ring-1 ring-slate-200/50 aspect-[4/5] sm:aspect-[16/12] lg:aspect-auto">
+                <img
+                  src="/images/doctor-1.jpg"
+                  alt="A doctor using NovaScribe during a consultation"
+                  className="w-full h-full object-cover object-top"
+                  loading="eager"
+                  decoding="async"
+                />
+                {/* Left edge melts into the white page; a soft bottom scrim lifts
+                    the floating card. No hard photo border anywhere it meets copy. */}
+                <div className="absolute inset-0 bg-gradient-to-r from-white via-white/10 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/15 to-transparent" />
               </div>
-              {/* Laptop base */}
-              <div className="h-3 bg-gradient-to-b from-slate-300 to-slate-200 rounded-b-xl mx-8 shadow-lg" />
-              <div className="h-1.5 w-24 bg-slate-300/70 rounded-full mx-auto mt-1" />
 
-              {/* Outcome toasts */}
-              <div className="hidden md:flex flex-col gap-2 absolute -right-4 lg:-right-8 top-10">
+              {/* The app, floating in front of the scene — the live consultation. */}
+              <motion.div
+                animate={reduce ? undefined : { y: [0, -9, 0] }}
+                transition={reduce ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+                className="relative -mt-16 mx-auto w-[92%] sm:w-[80%] lg:mt-0 lg:mx-0 lg:absolute lg:left-0 lg:bottom-10 lg:w-[58%] rounded-2xl bg-white shadow-2xl shadow-slate-900/20 ring-1 ring-slate-200/70 overflow-hidden"
+              >
+                {/* chrome */}
+                <div className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-50 border-b border-slate-100">
+                  <span className="flex gap-1.5">
+                    {['bg-red-400', 'bg-amber-400', 'bg-emerald-400'].map((c) => (
+                      <span key={c} className={`w-2 h-2 rounded-full ${c}`} />
+                    ))}
+                  </span>
+                  <span className="ml-1 text-[10.5px] font-semibold text-slate-400">NovaScribe — Consultation</span>
+                  <span className="ml-auto flex items-center gap-1.5">
+                    <motion.span
+                      animate={reduce ? undefined : { opacity: [1, 0.35, 1] }}
+                      transition={reduce ? undefined : { duration: 1.6, repeat: Infinity }}
+                      className="w-1.5 h-1.5 rounded-full bg-red-500"
+                    />
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                      {STAGES[Math.min(stage, STAGES.length - 1)].label}
+                    </span>
+                  </span>
+                </div>
+
+                <div className="p-3.5 space-y-3">
+                  {/* mic + waveform */}
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center flex-shrink-0">
+                      <Mic className="w-3.5 h-3.5" />
+                    </span>
+                    <Waveform active={at(0)} className="text-sky-500 h-5" bars={20} />
+                    <span className="ml-auto text-[9px] font-mono text-slate-400">02:41</span>
+                  </div>
+
+                  {/* transcript */}
+                  <div className="space-y-2 min-h-[86px]">
+                    {at(1) && (
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-[92%] bg-slate-100 rounded-xl rounded-tl-sm px-2.5 py-1.5">
+                        <span className="text-[8px] font-bold uppercase tracking-widest text-slate-400">Doctor</span>
+                        <p className="text-[11.5px] text-slate-700 leading-snug">Subah ki dizziness ab kaisi hai?</p>
+                      </motion.div>
+                    )}
+                    {at(2) && (
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-[92%] ml-auto bg-emerald-50 rounded-xl rounded-tr-sm px-2.5 py-1.5">
+                        <span className="text-[8px] font-bold uppercase tracking-widest text-emerald-600">Patient</span>
+                        <p className="text-[11.5px] text-slate-700 leading-snug">Pehle se kaafi kam hai, ab sirf uthte waqt.</p>
+                      </motion.div>
+                    )}
+                    {stage === 3 && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 pt-0.5">
+                        <motion.span
+                          animate={reduce ? undefined : { rotate: 360 }}
+                          transition={reduce ? undefined : { duration: 3, repeat: Infinity, ease: 'linear' }}
+                          className="w-5 h-5 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                        </motion.span>
+                        <span className="text-[11px] font-semibold text-slate-500">Understanding the visit…</span>
+                      </motion.div>
+                    )}
+                  </div>
+
+                  {/* the note appearing */}
+                  {at(4) && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5"
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <FileText className="w-3 h-3 text-sky-600" />
+                        <span className="text-[8px] font-bold uppercase tracking-widest text-slate-500">Clinical note</span>
+                        <span className="ml-auto flex items-center gap-1 text-[9px] font-bold text-emerald-600">
+                          <Check className="w-3 h-3" /> SOAP ready
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-slate-700 leading-snug">
+                        Orthostatic hypotension, secondary to the Lisinopril adjustment.
+                      </p>
+                      {at(5) && (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap gap-1 mt-1.5">
+                          {['Lisinopril 5mg — OD', 'BP monitoring'].map((m) => (
+                            <span key={m} className="text-[9px] font-semibold bg-violet-50 text-violet-700 border border-violet-100 rounded px-1.5 py-0.5">
+                              {m}
+                            </span>
+                          ))}
+                        </motion.div>
+                      )}
+                    </motion.div>
+                  )}
+                </div>
+              </motion.div>
+
+              {/* Status rail — floats over the top-right of the scene, filling in
+                  as the work completes, like the reference. */}
+              <div className="hidden lg:flex flex-col gap-2 absolute right-4 top-8 z-10">
                 {TOASTS.map((t, i) => {
                   const Icon = t.icon;
                   const visible = at(t.at);
@@ -247,20 +230,20 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
                     <motion.div
                       key={t.label}
                       initial={{ opacity: 0, x: 20, scale: 0.95 }}
-                      animate={visible ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 20, scale: 0.95 }}
-                      transition={{ duration: 0.45, delay: visible ? i * 0.12 : 0, ease: 'easeOut' }}
+                      animate={visible ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0.4, x: 0, scale: 0.97 }}
+                      transition={{ duration: 0.45, delay: visible ? i * 0.1 : 0, ease: 'easeOut' }}
                       className="flex items-center gap-2 bg-white/95 backdrop-blur border border-white rounded-xl shadow-xl px-3 py-2"
                     >
                       <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${t.tone}`}>
                         <Icon className="w-3.5 h-3.5" />
                       </span>
                       <span className="text-[11px] font-bold text-slate-800 whitespace-nowrap">{t.label}</span>
-                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      {visible && <Check className="w-3.5 h-3.5 text-emerald-500" />}
                     </motion.div>
                   );
                 })}
               </div>
-            </motion.div>
+            </div>
           </Reveal>
         </div>
       </div>
