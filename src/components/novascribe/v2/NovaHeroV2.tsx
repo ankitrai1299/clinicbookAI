@@ -39,26 +39,18 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
   const at = (n: number) => stage >= n;
 
   return (
-    <section ref={ref} className="relative overflow-hidden bg-white">
-      {/* The clinic scene fills the WHOLE hero. The copy side is held on white by
-          the scrim so it stays readable; the doctor shows through on the right. */}
-      <div aria-hidden className="absolute inset-0">
-        <img
-          src="/images/doctor-hero.jpg"
-          alt=""
-          className="w-full h-full object-cover object-[78%_22%]"
-        />
-        {/* Left→right: solid white under the copy, clearing toward the doctor. */}
-        <div className="absolute inset-0 bg-gradient-to-r from-white via-white/95 to-white/45 lg:from-white lg:via-white/88 lg:to-transparent" />
-        {/* Gentle top/bottom lift so the section edges melt into the page. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-transparent to-white/35" />
-      </div>
+    <section ref={ref} className="relative overflow-hidden bg-gradient-to-b from-emerald-50/40 via-white to-white pt-14 pb-20 lg:pt-16 lg:pb-24">
+      {/* A soft wash top-right, so the scene sits in colour, not on flat white.
+          The photo is a framed panel on the right (NOT a full-bleed background) —
+          full-bleed cropped the doctor's face; the panel shows the whole scene. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-[radial-gradient(45%_45%_at_82%_18%,rgba(56,189,248,0.12),transparent_70%)] pointer-events-none"
+      />
 
-      {/* A generous min-height gives the full-bleed scene room to breathe — without
-          it the section collapsed to the content height and the photo felt cramped. */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-20 lg:pt-24 lg:pb-32 lg:min-h-[42rem] grid lg:grid-cols-12 gap-10 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-10 lg:gap-12 items-center">
         {/* Copy */}
-        <div className="lg:col-span-6">
+        <div className="lg:col-span-5">
           <Reveal>
             <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1.5">
               <Stethoscope className="w-3.5 h-3.5" /> AI medical scribe
@@ -112,16 +104,35 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
           </Reveal>
         </div>
 
-        {/* Over the clinic scene: the live app, and the status rail. The doctor is
-            the section background now, so nothing here covers his face. */}
-        <div className="lg:col-span-6 relative lg:min-h-[32rem]">
+        {/* The doctor at work, shown whole in a soft frame, with the live app
+            overlapping the desk and the status rail down the right edge. */}
+        <div className="lg:col-span-7">
           <Reveal delay={0.15} y={40}>
-            <>
-              {/* The app, floating over the desk — the live consultation. */}
+            <div className="relative">
+              {/* soft glow behind the frame */}
+              <div
+                aria-hidden
+                className="absolute -inset-5 bg-gradient-to-tr from-emerald-200/25 via-sky-200/20 to-violet-200/25 blur-3xl rounded-[40px] pointer-events-none"
+              />
+
+              {/* The whole clinic scene — landscape crop, so his face and desk both
+                  show. Rounded, softly shadowed; not a hard-edged cut-out. */}
+              <div className="relative rounded-[26px] overflow-hidden shadow-2xl shadow-slate-900/20 ring-1 ring-white/70 aspect-[16/11]">
+                <img
+                  src="/images/doctor-hero.jpg"
+                  alt="Dr. Arjun Verma using NovaScribe during a consultation"
+                  className="w-full h-full object-cover object-center"
+                  loading="eager"
+                  decoding="async"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/12 to-transparent" />
+              </div>
+
+              {/* The app, overlapping the lower-left of the scene (over the desk). */}
               <motion.div
                 animate={reduce ? undefined : { y: [0, -9, 0] }}
                 transition={reduce ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-                className="relative mx-auto w-[94%] sm:w-[78%] lg:mx-0 lg:absolute lg:left-0 lg:top-1/2 lg:-translate-y-1/2 lg:w-[66%] rounded-2xl bg-white shadow-2xl shadow-slate-900/25 ring-1 ring-slate-200/70 overflow-hidden"
+                className="relative -mt-16 mx-auto w-[92%] sm:w-[74%] lg:mt-0 lg:mx-0 lg:absolute lg:-bottom-6 lg:-left-6 lg:w-[56%] rounded-2xl bg-white shadow-2xl shadow-slate-900/25 ring-1 ring-slate-200/70 overflow-hidden"
               >
                 {/* chrome */}
                 <div className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-50 border-b border-slate-100">
@@ -212,10 +223,9 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
                 </div>
               </motion.div>
 
-              {/* Status rail — pinned to the far-right edge, vertically centred so
-                  it sits beside the doctor (over his side, never his face) and
-                  fills in as the work completes. */}
-              <div className="hidden lg:flex flex-col gap-2 absolute right-0 top-1/2 -translate-y-1/2 z-10">
+              {/* Status rail — down the right edge of the scene, clear of his
+                  face (which sits upper-centre), filling in as work completes. */}
+              <div className="hidden lg:flex flex-col gap-2 absolute -right-4 top-8 z-10">
                 {TOASTS.map((t, i) => {
                   const Icon = t.icon;
                   const visible = at(t.at);
@@ -236,7 +246,7 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
                   );
                 })}
               </div>
-            </>
+            </div>
           </Reveal>
         </div>
       </div>
