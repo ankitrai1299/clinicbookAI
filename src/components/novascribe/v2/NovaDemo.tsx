@@ -67,7 +67,11 @@ export function LiveDemo() {
         <div className="mt-12 grid lg:grid-cols-2 gap-8 lg:gap-10 items-center">
           <Reveal delay={0.05}>
             <div className="flex justify-center">
-              <NovaPhoneDemo autoPlayInView />
+              {/* Scaled down a touch — the phone was reading a little large next to
+                  the output card. */}
+              <div className="scale-90 origin-center">
+                <NovaPhoneDemo autoPlayInView />
+              </div>
             </div>
           </Reveal>
 
