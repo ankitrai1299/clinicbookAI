@@ -54,7 +54,9 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
         <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-transparent to-white/35" />
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-20 lg:pt-20 lg:pb-28 grid lg:grid-cols-12 gap-10 items-center">
+      {/* A generous min-height gives the full-bleed scene room to breathe — without
+          it the section collapsed to the content height and the photo felt cramped. */}
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-20 lg:pt-24 lg:pb-32 lg:min-h-[42rem] grid lg:grid-cols-12 gap-10 items-center">
         {/* Copy */}
         <div className="lg:col-span-6">
           <Reveal>
@@ -112,7 +114,7 @@ export default function NovaHeroV2({ isLoggedIn, onOpen }: { isLoggedIn: boolean
 
         {/* Over the clinic scene: the live app, and the status rail. The doctor is
             the section background now, so nothing here covers his face. */}
-        <div className="lg:col-span-6 relative lg:min-h-[460px]">
+        <div className="lg:col-span-6 relative lg:min-h-[32rem]">
           <Reveal delay={0.15} y={40}>
             <>
               {/* The app, floating over the desk — the live consultation. */}
