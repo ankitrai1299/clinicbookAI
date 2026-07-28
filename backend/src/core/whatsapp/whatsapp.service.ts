@@ -4,6 +4,7 @@ import { prisma } from '../../config/prisma.js';
 import { forClinic } from '../../config/tenantPrisma.js';
 import { isSandboxClinic } from '../apikeys/sandbox.service.js';
 import { resolveSendContext } from './whatsapp.channel.js';
+import { consumeDailySendQuota } from './whatsapp.sendCap.js';
 import { noteSendFailure, noteSendSuccess } from './whatsapp.alerts.js';
 import { isTokenExpiredError, withRetry } from './whatsapp.retry.js';
 import {
@@ -63,6 +64,23 @@ const sandboxIntercept = async (
   return { data: { messages: [{ id: `SANDBOX_${label}` }] } } as AxiosResponse<WhatsAppSendMessageResponse>;
 };
 
+// Per-clinic daily cap — the third and last guard before the Graph call, after
+// the test and sandbox intercepts. When a clinic exhausts its daily budget we
+// SUPPRESS further sends (a synthetic response, like sandbox) and log loudly, so a
+// runaway loop or abuse can never run up an unbounded WhatsApp bill. Runs AFTER
+// sandboxIntercept, so suppressed sandbox sends never consume real quota.
+const dailyCapIntercept = (
+  clinicId: string | null | undefined,
+  label: string
+): AxiosResponse<WhatsAppSendMessageResponse> | null => {
+  const quota = consumeDailySendQuota(clinicId);
+  if (quota.allowed) return null;
+  console.error(
+    `[WhatsApp][cap] daily send cap ${quota.cap} reached for clinic ${clinicId ?? 'env-default'} — suppressing ${label}. Raise WA_DAILY_SEND_CAP or investigate abuse.`
+  );
+  return { data: { messages: [{ id: `CAPPED_${label}` }] } } as AxiosResponse<WhatsAppSendMessageResponse>;
+};
+
 const describeError = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
     return JSON.stringify(error.response?.data ?? { message: error.message });
@@ -106,6 +124,9 @@ export const sendWhatsAppTextMessage = async (
 
   const suppressed = await sandboxIntercept(input.clinicId, 'text');
   if (suppressed) return suppressed;
+
+  const capped = dailyCapIntercept(input.clinicId, 'text');
+  if (capped) return capped;
 
   // Use THIS clinic's WhatsApp number + token (falls back to the env default
   // channel when the clinic has no WhatsAppChannel row).
@@ -216,6 +237,7 @@ export const sendWhatsAppDocument = async (input: {
   if (intercepted) return true;
   const suppressed = await sandboxIntercept(input.clinicId, label);
   if (suppressed) return true;
+  if (dailyCapIntercept(input.clinicId, label)) return true;
 
   const mimeType = input.mimeType ?? 'application/pdf';
   const mediaId = await uploadWhatsAppMedia({
@@ -337,6 +359,9 @@ export const sendWhatsAppInteractive = async (input: {
   const suppressed = await sandboxIntercept(input.clinicId, 'interactive');
   if (suppressed) return suppressed;
 
+  const capped = dailyCapIntercept(input.clinicId, 'interactive');
+  if (capped) return capped;
+
   const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
   const messageType = input.messageType ?? 'interactive';
   const bodyForLog = botReplyText(input.reply);
@@ -407,6 +432,9 @@ export const sendWhatsAppTemplateMessage = async (params: {
   // T-1h reminder to whatever phone number the partner typed into their test.
   const suppressed = await sandboxIntercept(params.clinicId, 'template');
   if (suppressed) return suppressed;
+
+  const capped = dailyCapIntercept(params.clinicId, 'template');
+  if (capped) return capped;
 
   const { client, phoneNumberId } = await resolveSendContext(params.clinicId);
   const messageType = `template:${params.templateName}`;
