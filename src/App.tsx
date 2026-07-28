@@ -18,6 +18,7 @@ import WelcomeScreen from './components/WelcomeScreen';
 import PatientRegistration from './components/PatientRegistration';
 import WhatsAppDemo from './components/demo/WhatsAppDemo';
 import NovaScribeDemo from './components/demo/NovaScribeDemo';
+import LegalPage from './components/LegalPage';
 import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
@@ -372,6 +373,15 @@ export default function App() {
   }
   if (path === '/demo/novascribe' || path === '/demo/nova') {
     return <NovaScribeDemo />;
+  }
+
+  // Public legal pages — no login, no app chrome. Reachable directly (and by
+  // Meta's app review) at /privacy and /terms.
+  if (path === '/privacy') {
+    return <LegalPage kind="privacy" />;
+  }
+  if (path === '/terms') {
+    return <LegalPage kind="terms" />;
   }
 
   return (

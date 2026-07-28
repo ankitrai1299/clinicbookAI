@@ -107,7 +107,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span>GDPR & HIPAA compliant framework</span>
+                  <span>Encrypted, clinic-isolated · DPDP-aligned</span>
                 </div>
               </div>
             </div>
@@ -611,8 +611,8 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
             <p>© 2026 ClinicBook AI Inc. All rights reserved. Built for clinics, dentists, therapists and pediatricians globally.</p>
           </div>
           <div className="flex gap-4">
-            <a href="#privacy" className="hover:text-white transition-colors">Privacy Policy</a>
-            <a href="#terms" className="hover:text-white transition-colors">Terms of Service</a>
+            <a href="/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
+            <a href="/terms" className="hover:text-white transition-colors">Terms of Service</a>
           </div>
         </div>
       </footer>
