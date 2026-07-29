@@ -26,7 +26,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...(config as ExpoConfig),
     name: 'ClinicBook AI',
-    slug: 'clinicbook-app',
+    // NOTE: slug is intentionally left as the base ('mediscribe-app') so this
+    // flavor builds under the existing EAS project for now. The app is still a
+    // SEPARATE install/store app via its own bundle id below. For a dedicated
+    // ClinicBook EAS project + Play Store listing, run `eas init` for it and set
+    // EAS_PROJECT_ID_CLINICBOOK; then this can become slug: 'clinicbook-app'.
     scheme: 'clinicbookapp',
     ios: {
       ...config.ios,
