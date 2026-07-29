@@ -136,6 +136,22 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
             Create clinic account
           </button>
         </div>
+
+        {!isNova && (
+          <div className="mt-2 text-center text-xs text-slate-400">
+            Are you a doctor?{' '}
+            <button
+              onClick={() => {
+                const u = new URL(window.location.href);
+                u.searchParams.set('role', 'doctor');
+                window.location.assign(u.toString());
+              }}
+              className="text-emerald-600 font-semibold hover:underline cursor-pointer"
+            >
+              Doctor login
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
