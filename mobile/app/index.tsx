@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   BackHandler,
+  Linking,
   PermissionsAndroid,
   Platform,
   StyleSheet,
@@ -97,6 +98,10 @@ export default function App() {
         void sharePdf(msg.filename, msg.dataUrl);
       } else if (msg?.type === 'print' && typeof msg.html === 'string') {
         void printDoc(msg.html);
+      } else if (msg?.type === 'openExternal' && typeof msg.url === 'string') {
+        // The WhatsApp/Meta sign-in can't run inside a WebView, so the page asks
+        // us to open it in the system browser instead.
+        void Linking.openURL(msg.url).catch((err) => console.error('[webview] openExternal failed', err));
       }
     } catch {
       // non-JSON messages from the page are ignored

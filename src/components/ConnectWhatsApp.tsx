@@ -9,6 +9,7 @@ import {
   type EmbeddedConfig,
 } from '../api/whatsapp';
 import { ApiError } from '../api/client';
+import { isMobileApp } from '../mediscribe/utils/platform';
 
 // Minimal typing for the Facebook JS SDK surface we use.
 interface FBSdk {
@@ -151,6 +152,21 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
     }
   }, [config, status, deriveUi, refresh, onConnected]);
 
+  // Inside the phone app the Meta sign-in popup can't run — Facebook blocks OAuth
+  // in embedded WebViews — so connecting must happen in the system browser. Ask
+  // the native shell to open the dashboard there (it handles `openExternal`); the
+  // clinic signs in and connects from a real browser, then returns to the app.
+  const inMobileApp = isMobileApp();
+  const openInBrowser = useCallback(() => {
+    const url = `${window.location.origin}/?app=clinicbook`;
+    const w = window as unknown as { ReactNativeWebView?: { postMessage: (m: string) => void } };
+    if (w.ReactNativeWebView) {
+      w.ReactNativeWebView.postMessage(JSON.stringify({ type: 'openExternal', url }));
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
+  }, []);
+
   // ---- render ----
   const Card = ({ children }: { children: React.ReactNode }) => (
     <div className={`bg-white border border-slate-200 rounded-2xl ${compact ? 'p-5' : 'p-6'} text-left`}>{children}</div>
@@ -197,7 +213,7 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
           <Row label="Status" value={<span className="text-emerald-600 font-semibold">Ready to Receive Messages</span>} />
         </dl>
         <button
-          onClick={handleConnect}
+          onClick={inMobileApp ? openInBrowser : handleConnect}
           className="mt-4 inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5" /> Reconnect a different number
@@ -229,22 +245,26 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
       )}
 
       <button
-        onClick={handleConnect}
-        disabled={ui === 'connecting'}
+        onClick={inMobileApp ? openInBrowser : handleConnect}
+        disabled={!inMobileApp && ui === 'connecting'}
         className="inline-flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold rounded-xl text-sm shadow-sm cursor-pointer"
       >
-        {ui === 'connecting' ? (
+        {!inMobileApp && ui === 'connecting' ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin" /> Opening WhatsApp…
           </>
         ) : (
           <>
-            <MessageCircle className="w-4 h-4" /> {reconnect ? 'Reconnect WhatsApp' : 'Connect WhatsApp'}
+            <MessageCircle className="w-4 h-4" />{' '}
+            {inMobileApp ? 'Connect in Browser' : reconnect ? 'Reconnect WhatsApp' : 'Connect WhatsApp'}
           </>
         )}
       </button>
       <p className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-3">
-        <ShieldCheck className="w-3.5 h-3.5" /> Secure official Meta sign-in. We never see your password.
+        <ShieldCheck className="w-3.5 h-3.5" />{' '}
+        {inMobileApp
+          ? 'Opens in your browser for secure Meta sign-in.'
+          : 'Secure official Meta sign-in. We never see your password.'}
       </p>
     </Card>
   );
