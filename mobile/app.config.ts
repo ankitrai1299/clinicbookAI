@@ -1,19 +1,11 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
-// Flavor-aware Expo config. The phone app is ClinicBook by DEFAULT now:
-//
-//   (default)                    → ClinicBook AI — own name, id, scheme, no mic
-//   EXPO_PUBLIC_APP=novascribe   → NovaScribe    — returns app.json UNCHANGED
-//
-// NovaScribe is kept only as an opt-in path so a fresh NovaScribe app can be built
-// later; a plain `eas build` now produces ClinicBook.
+// Expo config for the ClinicBook AI phone app. The base app.json still carries the
+// old NovaScribe/mediscribe identity (name, mic plugins) under the shared EAS
+// project, so this overrides it to the ClinicBook app — its own name, bundle id,
+// scheme, and no microphone. (NovaScribe is a separate partner app now.)
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  if (process.env.EXPO_PUBLIC_APP === 'novascribe') {
-    return config as ExpoConfig; // NovaScribe (opt-in) — exactly what app.json defines.
-  }
-
-  // ClinicBook — the default build.
   const bundleId = 'com.nextdot.clinicbookai';
   const splashPlugin = (config.plugins ?? []).find(
     (p) => Array.isArray(p) && p[0] === 'expo-splash-screen'

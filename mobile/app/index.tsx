@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   BackHandler,
   Linking,
-  PermissionsAndroid,
   Platform,
   StyleSheet,
   Text,
@@ -15,7 +14,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
-import { WEB_APP_URL, APP_FLAVOR, APP_LABEL } from '../src/config';
+import { WEB_APP_URL, APP_LABEL } from '../src/config';
 import { colors } from '../src/theme';
 
 // ─────────────────────────────────────────────────────────────
@@ -68,15 +67,6 @@ export default function App() {
   // loads the LATEST deployed web — never a stale WebView-cached page. Hashed JS
   // bundles still cache normally (a new deploy = new hashes = fetched fresh).
   const url = useMemo(() => `${WEB_APP_URL}&_ts=${Date.now()}`, [reloadKey]);
-
-  // Pre-grant the OS microphone permission so the WebView can auto-grant the
-  // site's getUserMedia() request (mediaCapturePermissionGrantType="grant").
-  // NovaScribe only — the ClinicBook booking desk never records audio.
-  useEffect(() => {
-    if (APP_FLAVOR === 'novascribe' && Platform.OS === 'android') {
-      PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO).catch(() => {});
-    }
-  }, []);
 
   // Android hardware back navigates the WebView history instead of closing the app.
   useEffect(() => {
@@ -143,7 +133,7 @@ export default function App() {
             // and auto-grant mic capture (OS permission is requested above).
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={false}
-            mediaCapturePermissionGrantType={APP_FLAVOR === 'novascribe' ? 'grant' : 'prompt'}
+            mediaCapturePermissionGrantType="prompt"
             // Keep target=_blank navigations inside this WebView (no orphan popups).
             setSupportMultipleWindows={false}
             allowFileAccess
