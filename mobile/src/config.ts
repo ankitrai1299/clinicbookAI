@@ -41,6 +41,18 @@ export const isApiConfigured = (): boolean => API_ROOT.length > 0;
 const WEB_URL_FALLBACK = 'https://clinicbook-ai-yj2d.vercel.app';
 export const WEB_ROOT = (process.env.EXPO_PUBLIC_WEB_URL || WEB_URL_FALLBACK || '').replace(/\/+$/, '');
 
-// Open straight into MediScribe (the web app reads `?app=novascribe` and skips the
-// product hub → same login → the full scribe).
-export const WEB_APP_URL = `${WEB_ROOT}/?app=novascribe`;
+// ── App flavor ───────────────────────────────────────────────
+// ONE shell, TWO apps. The build flavor is set per EAS profile via EXPO_PUBLIC_APP
+// (see eas.json). Default is NovaScribe so existing builds are unchanged.
+//   novascribe → the doctor's AI scribe   (web reads ?app=novascribe)
+//   clinicbook → the clinic booking desk  (web reads ?app=clinicbook → dashboard)
+// Both talk to the SAME backend and load the SAME deployed web, so they stay in
+// sync; only the entry point and branding differ.
+export const APP_FLAVOR: 'novascribe' | 'clinicbook' =
+  process.env.EXPO_PUBLIC_APP === 'clinicbook' ? 'clinicbook' : 'novascribe';
+
+export const APP_LABEL = APP_FLAVOR === 'clinicbook' ? 'ClinicBook AI' : 'NovaScribe';
+
+// Open straight into the product (the web app reads `?app=…`, skips the product
+// hub → same login → the full product).
+export const WEB_APP_URL = `${WEB_ROOT}/?app=${APP_FLAVOR}`;

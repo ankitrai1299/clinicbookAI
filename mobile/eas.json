@@ -31,6 +31,23 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app"
       }
+    },
+
+    "clinicbook-preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_APP": "clinicbook",
+        "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app"
+      }
+    },
+    "clinicbook-production": {
+      "autoIncrement": true,
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_APP": "clinicbook",
+        "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app"
+      }
     }
   },
   "submit": {

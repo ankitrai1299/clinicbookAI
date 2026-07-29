@@ -14,7 +14,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
-import { WEB_APP_URL } from '../src/config';
+import { WEB_APP_URL, APP_FLAVOR, APP_LABEL } from '../src/config';
 import { colors } from '../src/theme';
 
 // ─────────────────────────────────────────────────────────────
@@ -70,8 +70,9 @@ export default function App() {
 
   // Pre-grant the OS microphone permission so the WebView can auto-grant the
   // site's getUserMedia() request (mediaCapturePermissionGrantType="grant").
+  // NovaScribe only — the ClinicBook booking desk never records audio.
   useEffect(() => {
-    if (Platform.OS === 'android') {
+    if (APP_FLAVOR === 'novascribe' && Platform.OS === 'android') {
       PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO).catch(() => {});
     }
   }, []);
@@ -112,7 +113,7 @@ export default function App() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       {failed ? (
         <View style={styles.center}>
-          <Text style={styles.title}>Can’t reach NovaScribe</Text>
+          <Text style={styles.title}>Can’t reach {APP_LABEL}</Text>
           <Text style={styles.subtitle}>
             Check your internet connection and try again.
           </Text>
@@ -137,7 +138,7 @@ export default function App() {
             // and auto-grant mic capture (OS permission is requested above).
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={false}
-            mediaCapturePermissionGrantType="grant"
+            mediaCapturePermissionGrantType={APP_FLAVOR === 'novascribe' ? 'grant' : 'prompt'}
             // Keep target=_blank navigations inside this WebView (no orphan popups).
             setSupportMultipleWindows={false}
             allowFileAccess
