@@ -8,8 +8,6 @@ import LandingPage from './components/LandingPage';
 import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
 import MobileDashboard from './components/MobileDashboard';
-import DoctorApp from './components/DoctorApp';
-import { getDoctorToken } from './api/doctorPortal';
 import MediscribeApp from './mediscribe/MediscribeApp';
 import ProductHub from './components/ProductHub';
 import MediScribeLanding from './components/MediScribeLanding';
@@ -397,14 +395,6 @@ export default function App() {
   }
   if (path === '/demo/novascribe' || path === '/demo/nova') {
     return <NovaScribeDemo />;
-  }
-
-  // Doctor portal — a SEPARATE login from the clinic admin (its own doctor_token).
-  // A doctor reaches it via ?role=doctor (the "Doctor login" link) or by already
-  // having a doctor session. Rendered outside the admin AuthProvider shell.
-  const search = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  if (getDoctorToken() || search?.get('role') === 'doctor') {
-    return <DoctorApp />;
   }
 
   // Public legal pages — no login, no app chrome. Reachable directly (and by

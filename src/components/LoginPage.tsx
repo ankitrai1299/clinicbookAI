@@ -56,24 +56,6 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
 
-        {/* Who is signing in — one clear choice instead of a hidden ?role link. */}
-        {!isNova && (
-          <div className="flex bg-slate-100 rounded-xl p-1 mb-6 text-xs font-bold">
-            <div className="flex-1 text-center py-2 rounded-lg bg-white text-sky-700 shadow-sm">Clinic Admin</div>
-            <button
-              type="button"
-              onClick={() => {
-                const u = new URL(window.location.href);
-                u.searchParams.set('role', 'doctor');
-                window.location.assign(u.toString());
-              }}
-              className="flex-1 text-center py-2 rounded-lg text-slate-500 hover:text-slate-700 cursor-pointer"
-            >
-              Doctor
-            </button>
-          </div>
-        )}
-
         <div className="flex flex-col items-center gap-2 mb-8">
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shadow-sky-100 ${
             isNova ? 'bg-gradient-to-br from-sky-500 to-sky-700' : 'bg-sky-600'
