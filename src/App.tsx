@@ -66,8 +66,15 @@ const ENTRY = readEntry();
 // simply not part of the app. Web and mobile browsers are untouched.
 const APP_ONLY = isMobileApp();
 
-// Pages that only make sense on the full platform.
-const PLATFORM_ONLY_PAGES: PageType[] = ['hub', 'landing', 'novascribe-landing', 'dashboard', 'developers'];
+// Which product THIS phone build is: the ClinicBook shell loads ?app=clinicbook
+// (its dashboard is home), the NovaScribe shell loads ?app=novascribe. On the web
+// this is irrelevant. Used to keep the single-product app on its OWN product
+// instead of always bouncing to the scribe.
+const MOBILE_HOME: PageType = ENTRY?.app === 'dashboard' ? 'dashboard' : 'novascribe';
+
+// In the phone app, only the app's own product + the auth screens are valid
+// destinations; everything else on the platform is bounced away.
+const APP_ALLOWED_PAGES: PageType[] = [MOBILE_HOME, 'login', 'signup', 'verify-email', 'welcome'];
 
 // Keep the address bar in step with the product being viewed, so whatever a user
 // is looking at is what they copy out of the URL bar.
@@ -117,11 +124,11 @@ function AppShell() {
     }
   }, [currentPage]);
 
-  // In the phone app, a platform page is never a valid destination — bounce back
-  // to the scribe (or its login) if anything ever routes there.
+  // In the phone app, anything outside its own product is not a valid destination —
+  // bounce back to the app's home product (or its login) if routing lands there.
   useEffect(() => {
     if (!APP_ONLY) return;
-    if (PLATFORM_ONLY_PAGES.includes(currentPage)) setCurrentPage(user ? 'novascribe' : 'login');
+    if (!APP_ALLOWED_PAGES.includes(currentPage)) setCurrentPage(user ? MOBILE_HOME : 'login');
   }, [currentPage, user]);
 
   // Gate the authenticated apps; after login land on the product the user chose.
@@ -327,11 +334,11 @@ function AppShell() {
           <WelcomeScreen
             clinicName={clinicConfig.name}
             ownerName={clinicConfig.ownerName || user.name}
-            onContinue={() => handleSetPage(APP_ONLY ? 'novascribe' : 'dashboard')}
+            onContinue={() => handleSetPage(APP_ONLY ? MOBILE_HOME : 'dashboard')}
           />
         )}
 
-        {!APP_ONLY && currentPage === 'dashboard' && user && (
+        {currentPage === 'dashboard' && user && (
           <ClinicDashboard
             appointments={appointments}
             setAppointments={setAppointments}
