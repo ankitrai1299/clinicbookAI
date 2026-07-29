@@ -1,23 +1,19 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
-// Flavor-aware Expo config. ONE codebase → TWO store apps:
+// Flavor-aware Expo config. The phone app is ClinicBook by DEFAULT now:
 //
-//   (default)                    → NovaScribe    — returns app.json UNCHANGED
-//   EXPO_PUBLIC_APP=clinicbook   → ClinicBook AI — own name, id, scheme, no mic
+//   (default)                    → ClinicBook AI — own name, id, scheme, no mic
+//   EXPO_PUBLIC_APP=novascribe   → NovaScribe    — returns app.json UNCHANGED
 //
-// The flavor is set per EAS build profile (see eas.json). Because the default
-// path returns app.json verbatim, every existing NovaScribe build is byte-for-byte
-// unchanged — this file only adds the ClinicBook variant.
-//
-// ClinicBook is its OWN app in the stores (distinct bundle id + EAS project). Run
-// `eas init` once for it and set EAS_PROJECT_ID_CLINICBOOK so its builds never
-// collide with the NovaScribe project.
+// NovaScribe is kept only as an opt-in path so a fresh NovaScribe app can be built
+// later; a plain `eas build` now produces ClinicBook.
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  if (process.env.EXPO_PUBLIC_APP !== 'clinicbook') {
-    return config as ExpoConfig; // NovaScribe — exactly what app.json defines.
+  if (process.env.EXPO_PUBLIC_APP === 'novascribe') {
+    return config as ExpoConfig; // NovaScribe (opt-in) — exactly what app.json defines.
   }
 
+  // ClinicBook — the default build.
   const bundleId = 'com.nextdot.clinicbookai';
   const splashPlugin = (config.plugins ?? []).find(
     (p) => Array.isArray(p) && p[0] === 'expo-splash-screen'

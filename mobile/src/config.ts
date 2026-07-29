@@ -42,16 +42,17 @@ const WEB_URL_FALLBACK = 'https://clinicbook-ai-yj2d.vercel.app';
 export const WEB_ROOT = (process.env.EXPO_PUBLIC_WEB_URL || WEB_URL_FALLBACK || '').replace(/\/+$/, '');
 
 // ── App flavor ───────────────────────────────────────────────
-// ONE shell, TWO apps. The build flavor is set per EAS profile via EXPO_PUBLIC_APP
-// (see eas.json). Default is NovaScribe so existing builds are unchanged.
-//   novascribe → the doctor's AI scribe   (web reads ?app=novascribe)
-//   clinicbook → the clinic booking desk  (web reads ?app=clinicbook → dashboard)
+// The phone app is ClinicBook by DEFAULT (the clinic booking desk). NovaScribe is
+// kept only as an opt-in flavor (EXPO_PUBLIC_APP=novascribe) so a fresh NovaScribe
+// app can be built later; it is no longer the default build.
+//   clinicbook (default) → the clinic booking desk (web reads ?app=clinicbook)
+//   novascribe (opt-in)  → the doctor's AI scribe   (web reads ?app=novascribe)
 // Both talk to the SAME backend and load the SAME deployed web, so they stay in
 // sync; only the entry point and branding differ.
 export const APP_FLAVOR: 'novascribe' | 'clinicbook' =
-  process.env.EXPO_PUBLIC_APP === 'clinicbook' ? 'clinicbook' : 'novascribe';
+  process.env.EXPO_PUBLIC_APP === 'novascribe' ? 'novascribe' : 'clinicbook';
 
-export const APP_LABEL = APP_FLAVOR === 'clinicbook' ? 'ClinicBook AI' : 'NovaScribe';
+export const APP_LABEL = APP_FLAVOR === 'novascribe' ? 'NovaScribe' : 'ClinicBook AI';
 
 // Open straight into the product (the web app reads `?app=…`, skips the product
 // hub → same login → the full product).
