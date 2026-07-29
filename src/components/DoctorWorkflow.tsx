@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Plus, Trash2, Clock, Mail, Phone, Loader2, Save, CalendarOff, CalendarDays, Stethoscope, Pencil } from 'lucide-react';
+import { Plus, Trash2, Clock, Mail, Phone, Loader2, Save, CalendarOff, CalendarDays, Stethoscope, Pencil, KeyRound, CheckCircle2 } from 'lucide-react';
 import { realPhone } from '../utils/phone';
 import {
   ApiDoctor,
@@ -10,6 +10,7 @@ import {
   createDoctor,
   updateDoctor,
   deleteDoctor,
+  setDoctorCredentials,
   getDoctorSchedule,
   setDoctorSchedule,
   getDoctorLeaves,
@@ -381,6 +382,8 @@ export default function DoctorWorkflow() {
                 </div>
               )}
 
+              <DoctorLoginSetter doctor={selected} />
+
               {/* Sub tabs */}
               <div className="flex gap-2 border-b border-slate-150">
                 {([['schedule', 'Schedule', Clock], ['leaves', 'Leaves', CalendarOff], ['appointments', 'Appointments', CalendarDays]] as const).map(([key, label, Icon]) => (
@@ -496,6 +499,77 @@ export default function DoctorWorkflow() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Admin gives a doctor an app login (sets email + password on their row). Shown in
+// the doctor detail panel; the doctor then signs in via the "Doctor login" link on
+// the clinic login page and sees only their own data.
+function DoctorLoginSetter({ doctor }: { doctor: ApiDoctor }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState(doctor.email ?? '');
+  const [password, setPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset when a different doctor is selected.
+  useEffect(() => {
+    setEmail(doctor.email ?? '');
+    setPassword('');
+    setDone(false);
+    setError(null);
+    setOpen(false);
+  }, [doctor.id, doctor.email]);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await setDoctorCredentials(doctor.id, { email: email.trim() || undefined, password });
+      setDone(true);
+      setPassword('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not set login. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-3.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs font-bold text-emerald-800">
+          <KeyRound className="w-4 h-4" /> Doctor app login
+        </div>
+        <button onClick={() => setOpen((o) => !o)} className="text-[11px] font-bold text-emerald-700 hover:underline">
+          {open ? 'Close' : 'Give / reset login'}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input
+            type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Login email"
+            className="text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
+          />
+          <input
+            type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Set a password (min 6)"
+            className="text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
+          />
+          <div className="sm:col-span-2 flex items-center gap-2 flex-wrap">
+            <button onClick={save} disabled={saving || password.length < 6}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold rounded-xl text-xs flex items-center gap-1.5">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />} Save login
+            </button>
+            {done && <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Login set — share it with the doctor.</span>}
+            {error && <span className="text-[11px] text-rose-600">{error}</span>}
+          </div>
+          <p className="sm:col-span-2 text-[10px] text-slate-400">
+            The doctor signs in at the clinic login → “Doctor login” with this email &amp; password, and sees only their own appointments &amp; patients.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

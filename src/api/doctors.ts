@@ -61,6 +61,14 @@ export const updateDoctor = (id: string, body: Partial<DoctorInput>) =>
 export const deleteDoctor = (id: string) =>
   apiFetch<void>(`/api/doctors/${id}`, { method: 'DELETE' });
 
+// Give a doctor an app login (admin action). Sets an email + password on the
+// doctor so they can sign in to the doctor app and see only their own data.
+export const setDoctorCredentials = (id: string, body: { email?: string; password: string }) =>
+  apiFetch<{ id: string; email: string }>(`/api/doctors/${id}/credentials`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
 // --- Schedule ---
 export const getDoctorSchedule = (id: string) =>
   apiFetch<ApiSchedule[]>(`/api/doctors/${id}/schedule`);
