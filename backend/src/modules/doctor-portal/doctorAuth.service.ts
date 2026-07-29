@@ -106,28 +106,29 @@ export const registerDoctor = async (input: DoctorRegisterInput): Promise<Doctor
 
 export const loginDoctor = async (input: DoctorLoginInput): Promise<DoctorAuthResult> => {
   const email = normalizeEmail(input.email);
-  const doctor = await prisma.doctor.findFirst({
+  // Email is NOT unique across doctors (the same address can be reused across
+  // clinics, or set on several doctors while testing), so match the password
+  // against EVERY login-enabled doctor with this email — newest credential first —
+  // instead of an arbitrary first row. This is why an admin-set login could report
+  // "invalid" even with the right password.
+  const candidates = await prisma.doctor.findMany({
     where: { email, passwordHash: { not: null } }
   });
 
-  if (!doctor || !doctor.passwordHash) {
-    throw new AppError('Invalid email or password', 401);
+  for (const doctor of candidates) {
+    if (doctor.passwordHash && (await bcrypt.compare(input.password, doctor.passwordHash))) {
+      return buildAuthResult({
+        id: doctor.id,
+        clinicId: doctor.clinicId,
+        name: doctor.name,
+        speciality: doctor.speciality,
+        email: doctor.email,
+        phone: doctor.phone
+      });
+    }
   }
 
-  const valid = await bcrypt.compare(input.password, doctor.passwordHash);
-  if (!valid) {
-    throw new AppError('Invalid email or password', 401);
-  }
-
-  const { passwordHash: _omit, ...rest } = doctor;
-  return buildAuthResult({
-    id: rest.id,
-    clinicId: rest.clinicId,
-    name: rest.name,
-    speciality: rest.speciality,
-    email: rest.email,
-    phone: rest.phone
-  });
+  throw new AppError('Invalid email or password', 401);
 };
 
 export const getDoctorAccount = async (doctorId: string): Promise<PublicDoctor> => {
