@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { CreateDoctorInput, CreateLeaveInput, SetScheduleInput, UpdateDoctorInput } from './doctor.schemas.js';
+import { CreateDoctorInput, CreateLeaveInput, SetDoctorCredentialsInput, SetScheduleInput, UpdateDoctorInput } from './doctor.schemas.js';
 import {
   addDoctorLeave,
   createDoctor,
@@ -11,6 +11,7 @@ import {
   getDoctorLeaves,
   getDoctorSchedule,
   getDoctors,
+  setDoctorCredentials,
   setDoctorSchedule,
   updateDoctor,
 } from './doctor.service.js';
@@ -35,6 +36,11 @@ export const updateDoctorHandler = asyncHandler(async (req: Request, res: Respon
 export const deleteDoctorHandler = asyncHandler(async (req: Request, res: Response) => {
   await deleteDoctor(getClinicId(req), req.params.id!);
   res.status(204).send();
+});
+
+export const setDoctorCredentialsHandler = asyncHandler(async (req: Request, res: Response) => {
+  const result = await setDoctorCredentials(getClinicId(req), req.params.id!, req.body as SetDoctorCredentialsInput);
+  res.status(200).json({ success: true, data: result });
 });
 
 export const getDoctorScheduleHandler = asyncHandler(async (req: Request, res: Response) => {

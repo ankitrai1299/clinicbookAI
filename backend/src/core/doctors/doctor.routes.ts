@@ -11,6 +11,7 @@ import {
   getDoctorLeavesHandler,
   getDoctorScheduleHandler,
   getDoctorsHandler,
+  setDoctorCredentialsHandler,
   setDoctorScheduleHandler,
   updateDoctorHandler,
 } from './doctor.controller.js';
@@ -18,6 +19,7 @@ import {
   createDoctorSchema,
   createLeaveSchema,
   leaveIdParamsSchema,
+  setDoctorCredentialsSchema,
   setScheduleSchema,
   updateDoctorSchema,
 } from './doctor.schemas.js';
@@ -30,6 +32,9 @@ doctorRouter.get('/', getDoctorsHandler);
 doctorRouter.post('/', validate(createDoctorSchema), createDoctorHandler);
 doctorRouter.patch('/:id', validate(updateDoctorSchema), updateDoctorHandler);
 doctorRouter.delete('/:id', deleteDoctorHandler);
+
+// Admin gives this doctor an app login (sets a password on their row).
+doctorRouter.post('/:id/credentials', validate(setDoctorCredentialsSchema), setDoctorCredentialsHandler);
 
 // Weekly schedule
 doctorRouter.get('/:id/schedule', getDoctorScheduleHandler);

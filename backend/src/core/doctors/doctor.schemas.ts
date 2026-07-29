@@ -24,6 +24,13 @@ export const doctorIdParamsSchema = z.object({
   id: z.string().trim().min(1),
 });
 
+// Admin gives a doctor app-login credentials. Email is optional here (falls back
+// to the doctor's existing email); a login needs an email + this password.
+export const setDoctorCredentialsSchema = z.object({
+  email: z.string().trim().email().max(150).optional(),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(100),
+});
+
 // Weekly schedule: one entry per active weekday.
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const scheduleEntrySchema = z
@@ -55,5 +62,6 @@ export const leaveIdParamsSchema = z.object({
 
 export type CreateDoctorInput = z.infer<typeof createDoctorSchema>;
 export type UpdateDoctorInput = z.infer<typeof updateDoctorSchema>;
+export type SetDoctorCredentialsInput = z.infer<typeof setDoctorCredentialsSchema>;
 export type SetScheduleInput = z.infer<typeof setScheduleSchema>;
 export type CreateLeaveInput = z.infer<typeof createLeaveSchema>;
