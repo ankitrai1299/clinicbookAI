@@ -105,6 +105,9 @@ function AppShell() {
   // Deep-link a specific dashboard tab (e.g. the docs page's "Get an API key"
   // jumps a logged-in clinic straight to Developers & API, not the Overview).
   const [dashboardTab, setDashboardTab] = useState<DashboardTab | undefined>(undefined);
+  // In the phone app, whether the user has opened the full dashboard (all web
+  // features) from the phone-first MobileDashboard's "More" tab.
+  const [mobileFull, setMobileFull] = useState(false);
   // Self-service onboarding hand-off: email pending OTP verification, and the
   // clinic config captured at signup to apply once verified.
   const [pendingEmail, setPendingEmail] = useState('');
@@ -346,11 +349,12 @@ function AppShell() {
         )}
 
         {currentPage === 'dashboard' && user && (
-          MOBILE_DASH ? (
+          MOBILE_DASH && !mobileFull ? (
             <MobileDashboard
               clinicName={clinicConfig.name}
               userName={user.name}
               onLogout={handleLogout}
+              onOpenFull={() => setMobileFull(true)}
             />
           ) : (
             <ClinicDashboard
@@ -365,6 +369,7 @@ function AppShell() {
               doctorsList={doctorsList}
               setDoctorsList={setDoctorsList}
               initialTab={dashboardTab}
+              onMobileBack={MOBILE_DASH ? () => setMobileFull(false) : undefined}
             />
           )
         )}

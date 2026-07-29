@@ -3,7 +3,7 @@ import {
   Users, Calendar, Clock, Bell, Settings, CreditCard, Activity,
   Search, Plus, CheckCircle, CheckCheck, XCircle,
   Mail, Phone, Globe, ExternalLink, ArrowRight, ShieldAlert,
-  QrCode, Copy, Check, Key
+  QrCode, Copy, Check, Key, ArrowLeft
 } from 'lucide-react';
 import AiAssistant from './AiAssistant';
 import { realPhone } from '../utils/phone';
@@ -109,6 +109,9 @@ interface ClinicDashboardProps {
   // Which tab to land on. Lets the public docs page's "Get an API key" deep-link
   // straight into Developers & API instead of the Overview tab.
   initialTab?: DashboardTab;
+  // When set (mobile app "More → Full dashboard"), show a back button that returns
+  // to the phone-first MobileDashboard.
+  onMobileBack?: () => void;
 }
 
 export default function ClinicDashboard({
@@ -121,7 +124,8 @@ export default function ClinicDashboard({
   setClinicConfig,
   doctorsList,
   setDoctorsList,
-  initialTab
+  initialTab,
+  onMobileBack
 }: ClinicDashboardProps) {
 
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab ?? 'overview');
@@ -595,17 +599,26 @@ export default function ClinicDashboard({
           
           {/* Left panel info */}
           <div className="flex items-center gap-3">
-            {/* Sidebar toggle option for mobile */}
-            <div className="md:hidden flex gap-1.5 overflow-x-auto">
-              {['overview', 'appointments', 'waitlist', 'settings'].filter(canSeeTab).map((mTab) => (
+            {/* Mobile: back to the phone app + the FULL tab set (scrolls). */}
+            {onMobileBack && (
+              <button onClick={onMobileBack} className="md:hidden shrink-0 p-1.5 -ml-1 text-slate-500" aria-label="Back to app">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            )}
+            <div className="md:hidden flex gap-1.5 overflow-x-auto max-w-[78vw]">
+              {([
+                ['overview', 'Overview'], ['appointments', 'Appointments'], ['calendar', 'Doctors'],
+                ['waitlist', 'Waitlist'], ['patients', 'Patients'], ['settings', 'Bot'],
+                ['developers', 'API'], ['billing', 'Billing'],
+              ] as const).filter(([id]) => canSeeTab(id)).map(([id, label]) => (
                 <button
-                  key={mTab}
-                  onClick={() => setActiveTab(mTab as DashboardTab)}
-                  className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-sm ${
-                    activeTab === mTab ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'
+                  key={id}
+                  onClick={() => setActiveTab(id as DashboardTab)}
+                  className={`whitespace-nowrap text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md ${
+                    activeTab === id ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'
                   }`}
                 >
-                  {mTab}
+                  {label}
                 </button>
               ))}
             </div>

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Home, Calendar, Users, MessageCircle, MoreHorizontal, Bell, Check, X,
   Clock, Phone, Search, LogOut, Loader2, CheckCircle2, CalendarClock, ChevronRight, Stethoscope,
+  Settings, CreditCard, Key, LayoutGrid,
 } from 'lucide-react';
 
 import { getAppointments, patchAppointment, completeAppointment, type ApiAppointment } from '../api/appointments';
@@ -25,6 +26,9 @@ interface Props {
   clinicName?: string;
   userName?: string;
   onLogout: () => void;
+  // Opens the full dashboard (all web features: Doctors, Waitlist, Bot Settings,
+  // Developers, Billing) — reuses the complete ClinicDashboard.
+  onOpenFull?: () => void;
 }
 
 const todayKey = (): string => {
@@ -48,7 +52,7 @@ const statusChip = (s: string): { label: string; cls: string } => {
 const initials = (name?: string) =>
   (name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
 
-export default function MobileDashboard({ clinicName, userName, onLogout }: Props) {
+export default function MobileDashboard({ clinicName, userName, onLogout, onOpenFull }: Props) {
   const [tab, setTab] = useState<Tab>('home');
   const [appointments, setAppointments] = useState<ApiAppointment[]>([]);
   const [patients, setPatients] = useState<ApiPatient[]>([]);
@@ -159,7 +163,7 @@ export default function MobileDashboard({ clinicName, userName, onLogout }: Prop
               </div>
             )}
             {tab === 'more' && (
-              <MoreTab clinicName={clinicName} userName={userName} onLogout={onLogout} />
+              <MoreTab clinicName={clinicName} userName={userName} onLogout={onLogout} onOpenFull={onOpenFull} />
             )}
           </>
         )}
@@ -426,17 +430,43 @@ function PatientsTab({
   );
 }
 
-function MoreTab({ clinicName, userName, onLogout }: { clinicName?: string; userName?: string; onLogout: () => void }) {
+function MoreTab({ clinicName, userName, onLogout, onOpenFull }: { clinicName?: string; userName?: string; onLogout: () => void; onOpenFull?: () => void }) {
+  const sections = [
+    { Icon: Stethoscope, label: 'Doctors & Schedules' },
+    { Icon: Clock, label: 'Waitlist' },
+    { Icon: Settings, label: 'Bot Settings' },
+    { Icon: Key, label: 'Developers & API' },
+    { Icon: CreditCard, label: 'Subscription Billing' },
+  ];
   return (
     <div className="p-4 space-y-4">
+      <SectionTitle>All features</SectionTitle>
+      {onOpenFull && (
+        <button onClick={onOpenFull} className="w-full text-left bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 p-4">
+            <span className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0">
+              <LayoutGrid className="w-5 h-5" />
+            </span>
+            <div className="flex-1">
+              <div className="font-bold text-slate-900 text-sm">Full dashboard</div>
+              <div className="text-[11px] text-slate-400">Everything from the web — same features</div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-300" />
+          </div>
+          <div className="px-4 pb-3 flex flex-wrap gap-x-4 gap-y-1.5">
+            {sections.map(({ Icon, label }) => (
+              <span key={label} className="inline-flex items-center gap-1.5 text-[11px] text-slate-500">
+                <Icon className="w-3.5 h-3.5 text-slate-400" /> {label}
+              </span>
+            ))}
+          </div>
+        </button>
+      )}
+
       <SectionTitle>Account</SectionTitle>
       <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
         <div className="font-bold text-slate-900">{clinicName || 'ClinicBook AI'}</div>
         {userName && <div className="text-sm text-slate-400">{userName}</div>}
-      </div>
-      <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm text-xs text-slate-500 leading-relaxed">
-        Billing, developer API keys and advanced settings open in your browser at{' '}
-        <span className="font-semibold text-slate-700">clinicbookai.nextdoc.in</span> — richer screens that suit a bigger display.
       </div>
       <button
         onClick={onLogout}
