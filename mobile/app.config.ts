@@ -46,8 +46,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     extra: {
       ...config.extra,
       eas: {
-        // Set after `eas init` for the ClinicBook app (its own project id).
-        projectId: process.env.EAS_PROJECT_ID_CLINICBOOK || undefined,
+        // Works out of the box: ClinicBook builds under the SAME EAS project for
+        // tracking (the apps are still separate — different bundle id + store
+        // listing). To give ClinicBook its OWN EAS project later, run `eas init`
+        // for it and set EAS_PROJECT_ID_CLINICBOOK.
+        projectId: process.env.EAS_PROJECT_ID_CLINICBOOK || config.extra?.eas?.projectId,
       },
     },
     // TODO: add ClinicBook-branded icons under assets/images/clinicbook/ and point
