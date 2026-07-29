@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { requireAuth } from '../../middleware/auth.js';
 import { authLimiter } from '../../middleware/rateLimiters.js';
+import { requirePartnerSecret } from '../../middleware/partnerSso.js';
 import { validate } from '../../middleware/validate.js';
 import { login, me, resendOtp, signup, verifyOtp } from './auth.controller.js';
 import { loginSchema, resendOtpSchema, signupSchema, verifyOtpSchema } from './auth.schemas.js';
@@ -12,6 +13,11 @@ const authRouter = Router();
 // user is bound to that admin's clinic (clinicId comes from the JWT, never the body).
 authRouter.post('/signup', requireAuth, validate(signupSchema), signup);
 authRouter.post('/login', authLimiter, validate(loginSchema), login);
+// Cross-system SSO: a trusted partner backend (e.g. the external NovaScribe)
+// verifies a clinic's ClinicBook email+password here with a shared secret, so the
+// SAME clinic login works on that system. Same {user, accessToken} response as
+// /login; the shared secret (not the per-IP limiter) is the gate.
+authRouter.post('/partner-login', requirePartnerSecret, validate(loginSchema), login);
 // Email verification (signup OTP gate) — rate-limited (brute-force / guessing).
 authRouter.post('/verify-otp', authLimiter, validate(verifyOtpSchema), verifyOtp);
 authRouter.post('/resend-otp', authLimiter, validate(resendOtpSchema), resendOtp);
