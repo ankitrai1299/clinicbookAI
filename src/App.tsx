@@ -7,7 +7,6 @@ import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
 import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
-import MobileDashboard from './components/MobileDashboard';
 import MediscribeApp from './mediscribe/MediscribeApp';
 import ProductHub from './components/ProductHub';
 import MediScribeLanding from './components/MediScribeLanding';
@@ -77,11 +76,6 @@ const MOBILE_HOME: PageType = ENTRY?.app === 'dashboard' ? 'dashboard' : 'novasc
 // destinations; everything else on the platform is bounced away.
 const APP_ALLOWED_PAGES: PageType[] = [MOBILE_HOME, 'login', 'signup', 'verify-email', 'welcome'];
 
-// Use the phone-first ClinicBook dashboard when running inside the app, or when a
-// browser opts in with ?mobile=1 (for previewing the mobile UI on any device).
-const MOBILE_DASH =
-  APP_ONLY ||
-  (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mobile') === '1');
 
 // Keep the address bar in step with the product being viewed, so whatever a user
 // is looking at is what they copy out of the URL bar.
@@ -105,9 +99,6 @@ function AppShell() {
   // Deep-link a specific dashboard tab (e.g. the docs page's "Get an API key"
   // jumps a logged-in clinic straight to Developers & API, not the Overview).
   const [dashboardTab, setDashboardTab] = useState<DashboardTab | undefined>(undefined);
-  // In the phone app, whether the user has opened the full dashboard (all web
-  // features) from the phone-first MobileDashboard's "More" tab.
-  const [mobileFull, setMobileFull] = useState(false);
   // Self-service onboarding hand-off: email pending OTP verification, and the
   // clinic config captured at signup to apply once verified.
   const [pendingEmail, setPendingEmail] = useState('');
@@ -348,30 +339,23 @@ function AppShell() {
           />
         )}
 
+        {/* Same dashboard on web and in the phone app — same component, same
+            features, same behaviour ("same to same"). On a phone it uses its own
+            mobile tab strip; on desktop, the sidebar. */}
         {currentPage === 'dashboard' && user && (
-          MOBILE_DASH && !mobileFull ? (
-            <MobileDashboard
-              clinicName={clinicConfig.name}
-              userName={user.name}
-              onLogout={handleLogout}
-              onOpenFull={() => setMobileFull(true)}
-            />
-          ) : (
-            <ClinicDashboard
-              appointments={appointments}
-              setAppointments={setAppointments}
-              waitlist={waitlist}
-              setWaitlist={setWaitlist}
-              reminderLogs={reminderLogs}
-              setReminderLogs={setReminderLogs}
-              clinicConfig={clinicConfig}
-              setClinicConfig={setClinicConfig}
-              doctorsList={doctorsList}
-              setDoctorsList={setDoctorsList}
-              initialTab={dashboardTab}
-              onMobileBack={MOBILE_DASH ? () => setMobileFull(false) : undefined}
-            />
-          )
+          <ClinicDashboard
+            appointments={appointments}
+            setAppointments={setAppointments}
+            waitlist={waitlist}
+            setWaitlist={setWaitlist}
+            reminderLogs={reminderLogs}
+            setReminderLogs={setReminderLogs}
+            clinicConfig={clinicConfig}
+            setClinicConfig={setClinicConfig}
+            doctorsList={doctorsList}
+            setDoctorsList={setDoctorsList}
+            initialTab={dashboardTab}
+          />
         )}
 
       </div>
