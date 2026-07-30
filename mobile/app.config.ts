@@ -31,6 +31,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       package: bundleId,
       // Drop the mic permissions NovaScribe needs; ClinicBook never records.
       permissions: [],
+      adaptiveIcon: {
+        ...(config.android?.adaptiveIcon ?? {}),
+        backgroundColor: '#047857', // emerald, matches the ClinicBook icon
+      },
     },
     // Keep only the router + splash; drop expo-audio / expo-speech-recognition,
     // which exist purely for the scribe's live recording.
