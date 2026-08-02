@@ -188,16 +188,13 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
       hasPermission(VIEW_PERM.dashboard)
         ? 'dashboard'
         : VIEW_ORDER.find((v) => hasPermission(VIEW_PERM[v])) ?? 'dashboard';
-    // In the PHONE APP everyone (admins included) lands on the native Dashboard —
-    // the Admin console is reachable from the bottom-bar Admin tab. This also
-    // avoids a flash of the dashboard before bouncing to the console. On the WEB,
-    // admins still open straight into the Admin console as before.
-    const home: ViewState = isMobileApp()
-      ? firstAllowed()
-      : user.role === 'superadmin' || user.role === 'hospital_admin'
-        ? 'admin'
-        : firstAllowed();
-    setActiveView(home);
+    // EVERYONE lands on the scribe Dashboard — that's where ClinicBook's booked
+    // upcoming appointments show, ready to scribe in one tap. Admins reach the
+    // Admin console from the sidebar's "Admin" item. (Previously web admins were
+    // dropped straight into the console and never saw the scribe dashboard or the
+    // booked appointments — the bug this fixes; there are no separate doctor logins
+    // anymore, so the clinic admin is who scribes.)
+    setActiveView(firstAllowed());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
