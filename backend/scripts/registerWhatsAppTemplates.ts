@@ -1,14 +1,17 @@
 /**
- * One-off helper: registers the three ClinicBook message templates with the
- * WhatsApp Business Account via the Graph API. Templates must be APPROVED by
- * Meta before they can be sent (test numbers usually auto-approve UTILITY
- * templates within minutes). Re-running is safe — Meta returns an error if a
- * template name already exists, which this script reports and skips.
+ * Registers the ClinicBook message templates on the PLATFORM's WhatsApp Business
+ * Account (the env-configured default channel). Templates must be APPROVED by
+ * Meta before they can be sent; test numbers usually auto-approve UTILITY
+ * templates within minutes. Re-running is safe — Meta rejects a duplicate name,
+ * which this script reports and skips.
  *
  *   Run:  npx tsx scripts/registerWhatsAppTemplates.ts
  *
- * The {{n}} body placeholders here MUST stay in sync with the *Components
- * builders in src/modules/whatsapp/whatsapp.templates.ts.
+ * NOTE: clinics that connect their OWN number via Embedded Signup get their own
+ * WABA, and this script does not touch it. Their templates are submitted
+ * automatically during onboarding by src/core/whatsapp/whatsapp.provisioning.ts,
+ * which reads the same definitions imported below — so the two paths can never
+ * drift.
  */
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -16,106 +19,30 @@ import { fileURLToPath } from 'url';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
+import {
+  TEMPLATE_DEFINITIONS,
+  TEMPLATE_LANGUAGE,
+  TemplateDefinition,
+  templateCreatePayload
+} from '../src/core/whatsapp/whatsapp.templateDefs.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const TOKEN = process.env.WHATSAPP_TOKEN;
 const WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-const GRAPH = 'https://graph.facebook.com/v20.0';
+const GRAPH = `https://graph.facebook.com/${process.env.META_GRAPH_VERSION ?? 'v20.0'}`;
 
 if (!TOKEN || !WABA_ID) {
   console.error('Missing WHATSAPP_TOKEN or WHATSAPP_BUSINESS_ACCOUNT_ID in backend/.env');
   process.exit(1);
 }
 
-interface TemplateDefinition {
-  name: string;
-  category: 'UTILITY' | 'MARKETING' | 'AUTHENTICATION';
-  bodyText: string;
-  example: string[];
-}
-
-const templates: TemplateDefinition[] = [
-  {
-    name: 'appointment_reminder',
-    category: 'UTILITY',
-    bodyText:
-      'Hi {{1}}, this is a reminder for your appointment on {{2}} at {{3}} with Dr. {{4}} at {{5}}. Please arrive 10 minutes early.',
-    example: ['John', 'Monday, June 15, 2026', '10:00', 'Smith', 'City Health Clinic']
-  },
-  {
-    name: 'booking_confirmation',
-    category: 'UTILITY',
-    bodyText:
-      'Hi {{1}}, your appointment on {{2}} at {{3}} with Dr. {{4}} at {{5}} is confirmed. See you soon!',
-    example: ['John', 'Monday, June 15, 2026', '10:00', 'Smith', 'City Health Clinic']
-  },
-  {
-    name: 'appointment_completed',
-    category: 'UTILITY',
-    bodyText:
-      'Thank you for visiting {{1}} today, {{2}}. We hope your consultation with Dr. {{3}} was helpful.\n\nIf you need another appointment or follow-up, simply send a message here anytime.\n\nWishing you good health!',
-    example: ['City Health Clinic', 'John', 'Smith']
-  },
-  {
-    name: 'waitlist_offer',
-    category: 'UTILITY',
-    bodyText:
-      "Hi {{1}}, a slot has just opened up with Dr. {{2}} at {{3}}. Reply YES to claim it before it's gone.",
-    example: ['John', 'Smith', 'City Health Clinic']
-  },
-  {
-    name: 'patient_registration',
-    category: 'UTILITY',
-    bodyText:
-      'Hi {{1}}, thank you for registering with {{2}}. Your details have been received and our team will reach out shortly to confirm your appointment. You can reply to this message anytime to chat with us.',
-    example: ['John', 'City Health Clinic']
-  },
-  {
-    name: 'registration_welcome',
-    category: 'UTILITY',
-    bodyText:
-      'Hi {{1}},\n\nWelcome to {{2}}.\n\nYour registration has been completed successfully.\n\nPatient ID: {{3}}\n\nReply:\n1 - Book Appointment\n2 - My Appointments\n3 - Cancel Appointment\n4 - Reschedule Appointment',
-    example: ['Asha Verma', 'Sunrise Medical Center', 'PT-7K4Q9D']
-  },
-  {
-    // Medicine reminder — {{1}} patient · {{2}} medicine line · {{3}} clinic.
-    // Must stay in sync with medicineReminderComponents in whatsapp.templates.ts.
-    name: 'medicine_reminder',
-    category: 'UTILITY',
-    bodyText:
-      'Hi {{1}}, medicine reminder from {{3}}.\n\nPlease take: {{2}}\n\nStay healthy! Reply here if you have any questions.',
-    example: ['Asha', 'Paracetamol 500mg — 1 tablet after food', 'Sunrise Medical Center']
-  },
-  {
-    // Prescription ready — {{1}} patient · {{2}} doctor (bare) · {{3}} clinic ·
-    // {{4}} medicines (ONE line, no newlines). Sent when a MediScribe note is
-    // finalized and the 24h window is closed. Keep in sync with
-    // prescriptionReadyComponents in whatsapp.templates.ts.
-    name: 'prescription_ready',
-    category: 'UTILITY',
-    bodyText:
-      'Hi {{1}}! Your prescription from Dr. {{2}} at {{3}} is ready:\n\n{{4}}\n\nGet well soon. Reply here if you have any questions.',
-    example: ['Asha', 'Smith', 'Sunrise Medical Center', '1. Paracetamol 500mg — twice daily, 5 days; 2. Azithromycin 250mg — once daily, 3 days']
-  }
-];
-
 const register = async (tpl: TemplateDefinition) => {
   try {
     const { data } = await axios.post(
       `${GRAPH}/${WABA_ID}/message_templates`,
-      {
-        name: tpl.name,
-        language: 'en_US',
-        category: tpl.category,
-        components: [
-          {
-            type: 'BODY',
-            text: tpl.bodyText,
-            example: { body_text: [tpl.example] }
-          }
-        ]
-      },
+      templateCreatePayload(tpl, TEMPLATE_LANGUAGE),
       { headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' } }
     );
     console.log(`✅ ${tpl.name}: created → id=${data.id ?? '?'} status=${data.status ?? '?'}`);
@@ -129,7 +56,7 @@ const register = async (tpl: TemplateDefinition) => {
   }
 };
 
-for (const tpl of templates) {
+for (const tpl of TEMPLATE_DEFINITIONS) {
   await register(tpl);
 }
 

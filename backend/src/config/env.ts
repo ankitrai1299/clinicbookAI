@@ -48,6 +48,17 @@ const envSchema = z.object({
   // (routed by metadata.phone_number_id) and do NOT need this.
   // Trimmed: a trailing newline/space would make the clinic lookup-by-id miss.
   WHATSAPP_CLINIC_ID: z.string().trim().optional(),
+  // Require every clinic to send from its OWN connected number. When ON, the env
+  // "default channel" is lent only to WHATSAPP_CLINIC_ID and any other clinic
+  // without a WhatsAppChannel row gets a hard error instead of silently
+  // borrowing the platform's number.
+  //
+  // OFF by default, deliberately: the fallback is also the SHARED-NUMBER TIER,
+  // where clinics onboard with a join code and no Meta setup at all and are
+  // MEANT to message from the platform number (whatsapp.binding.ts). Turning
+  // this on retires that tier — only do it once every clinic has connected its
+  // own number via Embedded Signup.
+  WA_STRICT_CHANNEL: envBool(false),
   // Optional symmetric key used to encrypt per-clinic WhatsApp tokens at rest in
   // WhatsAppChannel.accessToken (AES-256-GCM; the key is SHA-256-derived from
   // this value). When unset, tokens are stored as plaintext (dev/back-compat).

@@ -2,8 +2,10 @@ import axios, { AxiosResponse } from 'axios';
 
 import { prisma } from '../../config/prisma.js';
 import { forClinic } from '../../config/tenantPrisma.js';
+import { AppError } from '../../utils/AppError.js';
 import { isSandboxClinic } from '../apikeys/sandbox.service.js';
 import { resolveSendContext } from './whatsapp.channel.js';
+import { checkTemplateSendable } from './whatsapp.provisioning.js';
 import { consumeDailySendQuota } from './whatsapp.sendCap.js';
 import { noteSendFailure, noteSendSuccess } from './whatsapp.alerts.js';
 import { isTokenExpiredError, withRetry } from './whatsapp.retry.js';
@@ -128,12 +130,13 @@ export const sendWhatsAppTextMessage = async (
   const capped = dailyCapIntercept(input.clinicId, 'text');
   if (capped) return capped;
 
-  // Use THIS clinic's WhatsApp number + token (falls back to the env default
-  // channel when the clinic has no WhatsAppChannel row).
-  const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
   const messageType = input.messageType ?? 'session_text';
 
   try {
+    // Use THIS clinic's WhatsApp number + token. Inside the try so that a clinic
+    // with no connected number is logged as a failed send rather than throwing
+    // past the audit trail.
+    const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
     const response = await withRetry(
       () =>
         client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
@@ -248,10 +251,10 @@ export const sendWhatsAppDocument = async (input: {
   });
   if (!mediaId) return false;
 
-  const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
   const body = input.caption || input.filename;
 
   try {
+    const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
     const response = await withRetry(
       () =>
         client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
@@ -362,11 +365,11 @@ export const sendWhatsAppInteractive = async (input: {
   const capped = dailyCapIntercept(input.clinicId, 'interactive');
   if (capped) return capped;
 
-  const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
   const messageType = input.messageType ?? 'interactive';
   const bodyForLog = botReplyText(input.reply);
 
   try {
+    const { client, phoneNumberId } = await resolveSendContext(input.clinicId);
     const response = await withRetry(
       () =>
         client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {
@@ -436,10 +439,30 @@ export const sendWhatsAppTemplateMessage = async (params: {
   const capped = dailyCapIntercept(params.clinicId, 'template');
   if (capped) return capped;
 
-  const { client, phoneNumberId } = await resolveSendContext(params.clinicId);
   const messageType = `template:${params.templateName}`;
 
+  // Every clinic that connects its own number gets its own WABA, and templates
+  // are approved PER WABA. Sending one Meta rejected for this clinic returns a
+  // confusing 400 and chips away at the number's quality rating, so refuse early
+  // with a reason the dashboard can explain. Fails OPEN when we don't positively
+  // know the template is bad (see decideTemplateSend).
+  const gate = await checkTemplateSendable(params.clinicId, params.templateName);
+  if (!gate.allowed) {
+    const detail = `${gate.reason} — "${params.templateName}" is not approved on this clinic's WhatsApp Business Account.`;
+    console.error(`[WhatsApp] template send to ${params.to} BLOCKED: ${detail}`);
+    await logOutbound({
+      to: params.to,
+      messageType,
+      body: params.bodyForLog,
+      clinicId: params.clinicId,
+      status: 'failed',
+      error: detail
+    });
+    throw new AppError(detail, 409);
+  }
+
   try {
+    const { client, phoneNumberId } = await resolveSendContext(params.clinicId);
     const response = await withRetry(
       () =>
         client.post<WhatsAppSendMessageResponse>(`/${phoneNumberId}/messages`, {

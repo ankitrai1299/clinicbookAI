@@ -17,20 +17,53 @@ export interface WhatsAppChannel {
   wabaId: string | null;
   businessId: string | null;
   displayPhoneNumber: string | null;
+  verifiedName: string | null;
   status: string;
   tokenEncrypted: boolean;
+  // Cloud API activation. When false, sends fail with Meta error 133010 — the
+  // number is claimed but not yet registered for messaging.
+  registered: boolean;
   updatedAt: string;
+}
+
+export interface TemplateState {
+  name: string;
+  language: string;
+  status: string; // APPROVED | PENDING | REJECTED | PAUSED | DISABLED | ERROR
+  reason: string | null;
+}
+
+// Approval progress for THIS clinic's own WhatsApp Business Account. A freshly
+// connected number starts with zero approved templates, so nothing can be sent
+// outside the 24h reply window until Meta finishes reviewing them.
+export interface TemplateReadiness {
+  total: number;
+  approved: number;
+  pending: number;
+  rejected: number;
+  ready: boolean;
+  syncedAt: string | null;
+  templates: TemplateState[];
 }
 
 export interface ChannelStatus {
   channel: WhatsAppChannel | null;
   healthy: boolean | null; // false → token expired → reconnect
+  templates: TemplateReadiness | null;
+}
+
+export interface RegistrationResult {
+  registered: boolean;
+  alreadyRegistered: boolean;
+  detail: string;
 }
 
 export interface EmbeddedSignupResult {
   channel: WhatsAppChannel;
   verification: { displayPhoneNumber?: string; verifiedName?: string };
   webhook: { subscribed: boolean; detail: string };
+  registration: RegistrationResult;
+  templates: TemplateReadiness;
 }
 
 export const getEmbeddedConfig = () =>
@@ -46,3 +79,20 @@ export const completeEmbeddedSignup = (body: { code: string; phoneNumberId: stri
 
 export const disconnectWhatsApp = () =>
   apiFetch<{ removed: number }>('/api/whatsapp/channel', { method: 'DELETE' });
+
+// --- Per-clinic provisioning ------------------------------------------------
+
+export const getTemplateReadiness = () =>
+  apiFetch<TemplateReadiness>('/api/whatsapp/templates');
+
+/** Re-pull Meta's approval verdicts for this clinic's templates. */
+export const syncTemplates = () =>
+  apiFetch<TemplateReadiness>('/api/whatsapp/templates/sync', { method: 'POST' });
+
+/** Resubmit any template that is missing or was rejected. */
+export const provisionTemplates = () =>
+  apiFetch<TemplateReadiness>('/api/whatsapp/templates/provision', { method: 'POST' });
+
+/** Retry Cloud API activation for the connected number. */
+export const registerNumber = () =>
+  apiFetch<RegistrationResult>('/api/whatsapp/channel/register', { method: 'POST' });
