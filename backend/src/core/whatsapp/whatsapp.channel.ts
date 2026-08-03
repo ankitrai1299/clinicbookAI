@@ -176,25 +176,26 @@ export interface SendContext {
 }
 
 // Resolve the Graph client + sender phoneNumberId for a clinic's outbound send.
-// Per-clinic channel creds win.
+// Per-clinic channel creds win; otherwise the env default channel is used.
 //
-// When a clinicId WAS supplied but resolved to nothing, we refuse rather than
-// quietly falling back to the env default channel. That fallback is the
-// cross-tenant hole: a clinic which never connected a number would message its
-// patients from the PLATFORM's number — wrong sender identity, wrong WABA
-// billed, and any quality penalty lands on the platform. A clear error is the
-// correct outcome; the dashboard tells them to connect WhatsApp.
+// That fallback is NOT dead weight — it is the shared-number tier. A clinic can
+// onboard with zero Meta setup by sharing a join code, and its patients reach it
+// on the PLATFORM's number (see whatsapp.binding.ts). For those clinics, sending
+// from the platform number is the product working as designed, not a leak.
 //
-// The env default is still used when there is no clinic context at all (platform
-// -level sends and the original single-tenant setup).
+// WA_STRICT_CHANNEL is for deployments that have retired that tier and want
+// every clinic on its own number: it turns the fallback into a hard error so a
+// misconfigured clinic is loud instead of silently borrowing the platform's
+// identity. Off by default precisely because it disables the shared tier.
 export const resolveSendContext = async (clinicId?: string | null): Promise<SendContext> => {
   const creds = await getChannelCreds(clinicId);
   if (creds) {
     return { client: buildWhatsAppClient(creds.accessToken), phoneNumberId: creds.phoneNumberId };
   }
-  if (clinicId) {
+  if (clinicId && env.WA_STRICT_CHANNEL) {
     throw new AppError(
-      `Clinic ${clinicId} has no connected WhatsApp number — connect one in Settings before sending.`,
+      `Clinic ${clinicId} has no connected WhatsApp number — connect one in Settings before sending. ` +
+        '(WA_STRICT_CHANNEL is on, so the shared platform number cannot be used.)',
       409
     );
   }

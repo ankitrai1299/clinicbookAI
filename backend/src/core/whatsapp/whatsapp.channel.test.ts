@@ -117,7 +117,24 @@ describe('selectChannelCreds — which number/token a clinic sends with', () => 
   });
 });
 
-describe('selectChannelCreds — strict mode (every clinic has its own number)', () => {
+describe('selectChannelCreds — strict mode (retires the shared-number tier)', () => {
+  it('keeps lending the env channel to an unpinned clinic when NOT strict', () => {
+    // This is the shared-number tier, not a bug: clinics that onboard with a
+    // join code and zero Meta setup are MEANT to message from the platform
+    // number. selectChannelCreds returns null here (the env clinic is pinned to
+    // someone else) and resolveSendContext supplies the env client — strict mode
+    // is the only thing that turns that into an error.
+    expect(
+      selectChannelCreds({
+        clinicId: 'clinic_shared_tier',
+        channel: null,
+        envPhoneNumberId: ENV_PNID,
+        envToken: ENV_TOKEN,
+        envClinicId: ENV_CLINIC
+      })
+    ).toBeNull();
+  });
+
   it('refuses to lend the env channel when no env clinic is pinned', () => {
     // Without strict mode this is the cross-tenant hole: an unpinned env channel
     // is handed to ANY clinic, so a clinic that never connected WhatsApp would

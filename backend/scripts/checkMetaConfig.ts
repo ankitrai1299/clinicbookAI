@@ -113,10 +113,11 @@ const main = async () => {
     );
     for (const c of stranded) console.log(`       · ${c.name} (${c.id})`);
   } else if (!strict && stranded.length) {
-    warn(
-      `WA_STRICT_CHANNEL is OFF — ${stranded.length} clinic(s) with no number of their own would send ` +
-        'from the PLATFORM number. Fine while migrating; turn it on once they have connected.'
+    console.log(
+      `  ℹ️  ${stranded.length} clinic(s) have no number of their own and send from the PLATFORM number ` +
+        '(shared-number / join-code tier). That is the intended behaviour while WA_STRICT_CHANNEL is off.'
     );
+    for (const c of stranded) console.log(`       · ${c.name} (${c.id})`);
   } else {
     ok('No clinic is relying on the platform number.');
   }
