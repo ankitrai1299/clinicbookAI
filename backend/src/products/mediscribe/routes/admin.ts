@@ -81,14 +81,56 @@ router.get('/doctors', requirePermission('doctors.view'), async (req, res) => {
   }
 });
 
+// Give (or reset) a doctor an app login. When the admin types a password in the
+// Doctors form, create a REAL ClinicBook login account for the doctor (email +
+// password + the 'doctor' MediScribe role) so they can sign in — and keep the
+// doctor's email in sync, which is the link that scopes their appointments to
+// their login. Existing login for that email → password reset. No email or no
+// password → nothing to do (doctors stay bookable resources without a login).
+async function giveDoctorLogin(
+  clinicId: string,
+  doctor: { id: string; name: string; email?: string | null },
+  emailInput?: string,
+  passwordInput?: string
+): Promise<void> {
+  const password = passwordInput ? String(passwordInput) : '';
+  const email = String(emailInput ?? doctor.email ?? '').toLowerCase().trim();
+  if (!email || password.length < 6) return;
+
+  const { prisma } = await import('../../../config/prisma.js');
+  const { UserRole } = await import('@prisma/client');
+  const bcrypt = (await import('bcryptjs')).default;
+  const { forClinic } = await import('../../../config/tenantPrisma.js');
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  if (email !== (doctor.email ?? '').toLowerCase()) {
+    await forClinic(clinicId).doctor.update({ where: { id: doctor.id }, data: { email } }).catch(() => undefined);
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  let userId: string;
+  if (existing) {
+    await prisma.user.update({ where: { id: existing.id }, data: { passwordHash, emailVerified: true } });
+    userId = existing.id;
+  } else {
+    const created = await prisma.user.create({
+      data: { clinicId, name: doctor.name, email, passwordHash, role: UserRole.STAFF, emailVerified: true },
+      select: { id: true },
+    });
+    userId = created.id;
+  }
+  await usersRepo.upsert({ id: userId, name: doctor.name, email, role: 'doctor', status: 'active', hospitalId: '' });
+}
+
 // Add a doctor from the scribe → creates a REAL ClinicBook doctor (shows in both
-// apps). ClinicBook doctors are bookable resources with no login, so password/
-// licenseNumber/hospital from the scribe form are ignored (not part of the model).
+// apps). If a password is supplied, the doctor also gets an app login (see
+// giveDoctorLogin); otherwise they're a bookable resource with no login.
 router.post('/doctors', requirePermission('doctors.manage'), async (req, res) => {
   try {
-    const { name, specialization, experience, email, phone } = req.body ?? {};
+    const { name, specialization, experience, email, phone, password } = req.body ?? {};
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Doctor name is required' });
     const doctor = await createClinicDoctor(currentClinicId(), { name, specialization, experience, email, phone });
+    await giveDoctorLogin(currentClinicId(), doctor as { id: string; name: string; email?: string | null }, email, password);
     return res.json(doctor);
   } catch (error: any) {
     console.error('[admin:doctor:create]', error);
@@ -98,8 +140,9 @@ router.post('/doctors', requirePermission('doctors.manage'), async (req, res) =>
 
 router.put('/doctors/:id', requirePermission('doctors.manage'), async (req, res) => {
   try {
-    const { name, specialization, experience, email, phone } = req.body ?? {};
+    const { name, specialization, experience, email, phone, password } = req.body ?? {};
     const doctor = await updateClinicDoctor(currentClinicId(), req.params.id, { name, specialization, experience, email, phone });
+    await giveDoctorLogin(currentClinicId(), doctor as { id: string; name: string; email?: string | null }, email, password);
     return res.json(doctor);
   } catch (error: any) {
     console.error('[admin:doctor:update]', error);

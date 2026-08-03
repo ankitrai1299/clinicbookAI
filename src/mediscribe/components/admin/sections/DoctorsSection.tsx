@@ -8,6 +8,7 @@ import {
   Ban,
   CheckCircle2,
   Eye,
+  EyeOff,
   Stethoscope,
   Mail,
   Phone,
@@ -274,6 +275,7 @@ function DoctorFormModal({
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   const set = (k: keyof typeof form, v: string | number) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -350,16 +352,28 @@ function DoctorFormModal({
           <Field label="Phone">
             <input value={form.phone} onChange={(e) => set('phone', e.target.value)} className={inputClass} />
           </Field>
-          <Field label={doctor ? 'Reset Password (optional)' : 'Password'}>
-            <input
-              type="password"
-              autoComplete="new-password"
-              required={!doctor}
-              value={form.password}
-              onChange={(e) => set('password', e.target.value)}
-              className={inputClass}
-              placeholder={doctor ? 'Leave blank to keep' : ''}
-            />
+          <Field label={doctor ? 'App login password (set / reset)' : 'App login password'}>
+            <div className="relative">
+              <input
+                type={showPw ? 'text' : 'password'}
+                autoComplete="new-password"
+                required={!doctor}
+                value={form.password}
+                onChange={(e) => set('password', e.target.value)}
+                className={`${inputClass} pr-10`}
+                placeholder={doctor ? 'Leave blank to keep' : 'Min 6 characters'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw((s) => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={showPw ? 'Hide password' : 'Show password'}
+                title={showPw ? 'Hide password' : 'Show password'}
+              >
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">The doctor signs in to NovaScribe with their email + this password.</p>
           </Field>
         </div>
         <div className="pt-2 flex gap-3 justify-end">
