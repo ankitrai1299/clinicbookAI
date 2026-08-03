@@ -9,7 +9,7 @@ import { forClinic } from '../../config/tenantPrisma.js';
 import { getPatients, createPatient } from '../../core/patients/patient.service.js';
 import { getDoctors, createDoctor, updateDoctor, deleteDoctor } from '../../core/doctors/doctor.service.js';
 import { getAppointments } from '../../products/clinicbook/appointments/appointment.service.js';
-import { clinicNow, labelToMinutes, slotIsFuture } from '../../services/slotMath.js';
+import { clinicNow, labelToMinutes } from '../../services/slotMath.js';
 import { AppointmentStatus } from '@prisma/client';
 
 // MediScribe frontend patient shape.
@@ -245,12 +245,18 @@ export interface UpcomingAppointment {
 const LIVE = new Set<AppointmentStatus>([AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]);
 const dateStrOf = (d: Date): string => d.toISOString().slice(0, 10);
 
-/** The clinic's still-upcoming appointments (future, not cancelled), soonest first. */
+/** The clinic's scribe queue: today's + future live appointments, soonest first.
+ *
+ * Deliberately NOT `slotIsFuture` (that is the BOOKING filter — it hides anything
+ * within the 30-min buffer AND anything already past). The scribe queue must keep
+ * an appointment visible the WHOLE day — including one happening right now or that
+ * started a few minutes ago — because the doctor documents the visit during or
+ * after it. So the rule is simply "today (clinic-local) or later, not cancelled". */
 export const listUpcomingAppointments = async (clinicId: string): Promise<UpcomingAppointment[]> => {
-  const now = clinicNow();
+  const today = clinicNow().dateStr;
   return (await getAppointments(clinicId))
     .filter((a) => LIVE.has(a.status))
-    .filter((a) => slotIsFuture(labelToMinutes(a.appointmentTime) ?? 0, dateStrOf(a.appointmentDate), now))
+    .filter((a) => dateStrOf(a.appointmentDate) >= today)
     .sort(
       (a, b) =>
         dateStrOf(a.appointmentDate).localeCompare(dateStrOf(b.appointmentDate)) ||
