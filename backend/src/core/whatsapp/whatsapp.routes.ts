@@ -15,7 +15,11 @@ import {
   embeddedConfigHandler,
   embeddedSignupHandler,
   getChannelHandler,
-  onboardChannelHandler
+  getTemplatesHandler,
+  onboardChannelHandler,
+  provisionTemplatesHandler,
+  registerNumberHandler,
+  syncTemplatesHandler
 } from './whatsapp.onboarding.controller.js';
 import { verifyWhatsAppSignature } from './whatsapp.signature.js';
 import {
@@ -44,6 +48,15 @@ whatsappRouter.delete('/channel', requireAuth, disconnectChannelHandler);
 
 // FALLBACK / admin: manual onboarding by pasting Cloud API creds.
 whatsappRouter.post('/channel', requireAuth, validate(onboardWhatsAppChannelSchema), onboardChannelHandler);
+
+// Cloud API number activation — retry when Embedded Signup's attempt was blocked
+// (e.g. the number still needed verification in Meta WhatsApp Manager).
+whatsappRouter.post('/channel/register', requireAuth, registerNumberHandler);
+
+// Per-clinic message templates: approval readiness, refresh from Meta, resubmit.
+whatsappRouter.get('/templates', requireAuth, getTemplatesHandler);
+whatsappRouter.post('/templates/sync', requireAuth, syncTemplatesHandler);
+whatsappRouter.post('/templates/provision', requireAuth, provisionTemplatesHandler);
 
 // Diagnostics — STAFF-only (exposes last inbound phone/message = patient PII).
 whatsappRouter.get('/debug', requireAuth, webhookDebugHandler);

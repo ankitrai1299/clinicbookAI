@@ -21,6 +21,7 @@ import {
   getWhatsAppApiClient,
   getWhatsAppPhoneNumberId
 } from '../../config/whatsapp.js';
+import { AppError } from '../../utils/AppError.js';
 import { decryptSecret, deriveKey } from './whatsapp.crypto.js';
 
 export interface ChannelCreds {
@@ -55,12 +56,18 @@ export const decideInboundClinic = (params: {
 
 // Which credentials a clinic sends with, given its channel row (or null) and the
 // env default channel. Returns null when neither applies.
+// `strict` closes the multi-tenant hole in the back-compat branch below: with no
+// WHATSAPP_CLINIC_ID pinned, the env default channel would otherwise be lent to
+// EVERY clinic, so a clinic that never connected a number would silently message
+// patients from the platform's number. Under strict mode the env channel is
+// usable only by the clinic explicitly pinned to it.
 export const selectChannelCreds = (params: {
   clinicId: string;
   channel: { phoneNumberId: string; accessToken: string } | null;
   envPhoneNumberId?: string;
   envToken?: string;
   envClinicId?: string;
+  strict?: boolean;
 }): ChannelCreds | null => {
   if (params.channel) {
     return {
@@ -69,12 +76,14 @@ export const selectChannelCreds = (params: {
       accessToken: params.channel.accessToken
     };
   }
-  // Env default channel applies to the env clinic (or when the caller is the env
-  // clinic / no clinic distinction is needed).
+  // Env default channel applies to the env clinic (or, outside strict mode, when
+  // no clinic is pinned at all — the original single-tenant behaviour).
   if (
     params.envPhoneNumberId &&
     params.envToken &&
-    (!params.envClinicId || params.envClinicId === params.clinicId)
+    (params.strict
+      ? params.envClinicId === params.clinicId
+      : !params.envClinicId || params.envClinicId === params.clinicId)
   ) {
     return {
       clinicId: params.clinicId,
@@ -154,7 +163,8 @@ export const getChannelCreds = async (
     channel,
     envPhoneNumberId: env.PHONE_NUMBER_ID,
     envToken: env.WHATSAPP_TOKEN,
-    envClinicId: env.WHATSAPP_CLINIC_ID
+    envClinicId: env.WHATSAPP_CLINIC_ID,
+    strict: env.WA_STRICT_CHANNEL
   });
   credsByClinic.set(cid, { value: creds, at: now });
   return creds;
@@ -166,12 +176,27 @@ export interface SendContext {
 }
 
 // Resolve the Graph client + sender phoneNumberId for a clinic's outbound send.
-// Per-clinic channel creds win; otherwise the env default channel client is used
-// (preserving the original single-clinic behaviour).
+// Per-clinic channel creds win.
+//
+// When a clinicId WAS supplied but resolved to nothing, we refuse rather than
+// quietly falling back to the env default channel. That fallback is the
+// cross-tenant hole: a clinic which never connected a number would message its
+// patients from the PLATFORM's number — wrong sender identity, wrong WABA
+// billed, and any quality penalty lands on the platform. A clear error is the
+// correct outcome; the dashboard tells them to connect WhatsApp.
+//
+// The env default is still used when there is no clinic context at all (platform
+// -level sends and the original single-tenant setup).
 export const resolveSendContext = async (clinicId?: string | null): Promise<SendContext> => {
   const creds = await getChannelCreds(clinicId);
   if (creds) {
     return { client: buildWhatsAppClient(creds.accessToken), phoneNumberId: creds.phoneNumberId };
+  }
+  if (clinicId) {
+    throw new AppError(
+      `Clinic ${clinicId} has no connected WhatsApp number — connect one in Settings before sending.`,
+      409
+    );
   }
   return { client: getWhatsAppApiClient(), phoneNumberId: getWhatsAppPhoneNumberId() };
 };

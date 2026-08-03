@@ -11,6 +11,11 @@
 //   4. PERSISTS a WhatsAppChannel row bound to THIS clinic (one number per
 //      clinic; a number already claimed by another clinic is rejected).
 //   5. Clears the channel resolution caches so routing picks it up immediately.
+//   6. PROVISIONS the number for real use (whatsapp.provisioning.ts): registers
+//      it for Cloud API messaging and submits ClinicBook's message templates to
+//      the clinic's OWN WABA. Both are best-effort — a slow Meta review must
+//      never fail a connection that otherwise succeeded — and their outcome is
+//      returned so the dashboard can show what still needs attention.
 //
 // WhatsAppChannel is the routing table (looked up by phoneNumberId BEFORE a
 // clinic is known), so it uses the RAW prisma client — never tenant-scoped. The
@@ -24,6 +29,13 @@ import { buildWhatsAppClient } from '../../config/whatsapp.js';
 import { AppError } from '../../utils/AppError.js';
 import { clearChannelCaches } from './whatsapp.channel.js';
 import { decryptSecret, deriveKey, encryptSecret, isEncrypted } from './whatsapp.crypto.js';
+import {
+  ensurePhoneNumberRegistered,
+  getTemplateReadiness,
+  provisionClinicTemplates,
+  RegistrationResult,
+  TemplateReadiness
+} from './whatsapp.provisioning.js';
 
 export interface OnboardChannelInput {
   phoneNumberId: string;
@@ -58,8 +70,11 @@ export interface PublicChannel {
   wabaId: string | null;
   businessId: string | null;
   displayPhoneNumber: string | null;
+  verifiedName: string | null;
   status: string;
   tokenEncrypted: boolean;
+  // Cloud API activation — false means sends will fail with Meta error 133010.
+  registered: boolean;
   updatedAt: Date;
 }
 
@@ -67,6 +82,8 @@ export interface OnboardResult {
   channel: PublicChannel;
   verification: ChannelVerification;
   webhook: WebhookValidation;
+  registration: RegistrationResult;
+  templates: TemplateReadiness;
 }
 
 const metaError = (err: unknown, fallback: string): string => {
@@ -147,8 +164,10 @@ const toPublic = (row: {
   wabaId: string | null;
   businessId: string | null;
   displayPhoneNumber: string | null;
+  verifiedName?: string | null;
   status: string;
   accessToken: string;
+  registered?: boolean;
   updatedAt: Date;
 }): PublicChannel => ({
   id: row.id,
@@ -157,8 +176,10 @@ const toPublic = (row: {
   wabaId: row.wabaId,
   businessId: row.businessId,
   displayPhoneNumber: row.displayPhoneNumber,
+  verifiedName: row.verifiedName ?? null,
   status: row.status,
   tokenEncrypted: isEncrypted(row.accessToken),
+  registered: row.registered ?? false,
   updatedAt: row.updatedAt
 });
 
@@ -176,7 +197,7 @@ export const onboardWhatsAppChannel = async (
   // so a clinic can never hijack another clinic's WhatsApp number/routing.
   const existing = await prisma.whatsAppChannel.findUnique({
     where: { phoneNumberId: input.phoneNumberId },
-    select: { clinicId: true }
+    select: { clinicId: true, registrationPin: true }
   });
   if (existing && existing.clinicId !== clinicId) {
     throw new AppError('This WhatsApp number is already onboarded to another clinic.', 409);
@@ -195,6 +216,8 @@ export const onboardWhatsAppChannel = async (
       wabaId: input.wabaId,
       businessId: input.businessId ?? null,
       displayPhoneNumber: verification.displayPhoneNumber ?? null,
+      verifiedName: verification.verifiedName ?? null,
+      qualityRating: verification.qualityRating ?? null,
       accessToken,
       appSecret: input.appSecret ?? null,
       verifyToken: input.verifyToken ?? null,
@@ -205,6 +228,8 @@ export const onboardWhatsAppChannel = async (
       wabaId: input.wabaId,
       businessId: input.businessId ?? null,
       displayPhoneNumber: verification.displayPhoneNumber ?? null,
+      verifiedName: verification.verifiedName ?? null,
+      qualityRating: verification.qualityRating ?? null,
       accessToken,
       appSecret: input.appSecret ?? null,
       verifyToken: input.verifyToken ?? null,
@@ -215,7 +240,44 @@ export const onboardWhatsAppChannel = async (
   // 5: drop caches so inbound routing + outbound sends use the new channel now.
   clearChannelCaches();
 
-  return { channel: toPublic(row), verification, webhook };
+  // 6: provision the number for real use. BEST-EFFORT — the channel is already
+  // saved and routing already works; these two steps decide whether the clinic
+  // can actually SEND, and the result is reported back rather than thrown so the
+  // dashboard can guide them through anything Meta still needs.
+  const registration = await ensurePhoneNumberRegistered(client, {
+    clinicId,
+    phoneNumberId: input.phoneNumberId,
+    existingPin: existing?.registrationPin ?? null
+  }).catch((err: unknown) => {
+    console.error('[WhatsApp][onboarding] number registration threw:', err);
+    return {
+      registered: false,
+      alreadyRegistered: false,
+      detail: 'Could not reach Meta to activate the number. Retry from Settings.'
+    };
+  });
+
+  await provisionClinicTemplates(client, { clinicId, wabaId: input.wabaId }).catch((err: unknown) => {
+    console.error('[WhatsApp][onboarding] template provisioning threw:', err);
+  });
+  const templates = await getTemplateReadiness(clinicId);
+
+  // Re-read so the returned channel reflects the registration we just performed.
+  const finalRow = (await prisma.whatsAppChannel.findUnique({
+    where: { phoneNumberId: input.phoneNumberId }
+  })) ?? row;
+
+  return {
+    channel: toPublic(finalRow),
+    verification,
+    webhook,
+    registration: {
+      registered: registration.registered,
+      alreadyRegistered: registration.alreadyRegistered,
+      detail: registration.detail
+    },
+    templates
+  };
 };
 
 // Current clinic's channel (sanitised — never returns the token).
@@ -232,6 +294,8 @@ export interface ChannelStatus {
   // Live token probe: true = token valid, false = expired/invalid (reconnect),
   // null = no channel or probe skipped/unavailable.
   healthy: boolean | null;
+  // Per-clinic template approval state (null when no channel is connected).
+  templates: TemplateReadiness | null;
 }
 
 // Channel status for the dashboard, with a best-effort live token probe so the
@@ -241,7 +305,7 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
     where: { clinicId },
     orderBy: { updatedAt: 'desc' }
   });
-  if (!row) return { channel: null, healthy: null };
+  if (!row) return { channel: null, healthy: null, templates: null };
 
   let healthy: boolean | null = null;
   try {
@@ -252,7 +316,7 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
   } catch {
     healthy = false; // token rejected by Meta → reconnect needed
   }
-  return { channel: toPublic(row), healthy };
+  return { channel: toPublic(row), healthy, templates: await getTemplateReadiness(clinicId) };
 };
 
 // Disconnect the clinic's channel (e.g. before reconnecting, or to stop using

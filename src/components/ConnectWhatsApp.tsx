@@ -5,6 +5,9 @@ import {
   completeEmbeddedSignup,
   getChannelStatus,
   getEmbeddedConfig,
+  provisionTemplates,
+  registerNumber,
+  syncTemplates,
   type ChannelStatus,
   type EmbeddedConfig,
 } from '../api/whatsapp';
@@ -62,6 +65,7 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
   const [status, setStatus] = useState<ChannelStatus | null>(null);
   const [ui, setUi] = useState<UiState>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<'activate' | 'templates' | null>(null);
   // Session info from the Embedded Signup popup (phone_number_id + waba_id).
   const sessionInfo = useRef<{ phoneNumberId?: string; wabaId?: string }>({});
 
@@ -86,6 +90,53 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Meta reviews templates asynchronously (minutes to ~24h) and the clinic can
+  // only message outside the 24h reply window once they are approved. Poll while
+  // anything is still pending so the card turns green on its own instead of
+  // making the clinic guess when to reload.
+  const templatesPending = Boolean(
+    status?.channel && status.templates && !status.templates.ready && status.templates.rejected === 0
+  );
+  useEffect(() => {
+    if (!templatesPending) return;
+    const id = window.setInterval(() => {
+      void syncTemplates()
+        .then((templates) => setStatus((s) => (s ? { ...s, templates } : s)))
+        .catch(() => undefined);
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [templatesPending]);
+
+  // Retry Cloud API activation — needed when the number still had to be verified
+  // in Meta WhatsApp Manager at connect time.
+  const handleActivate = useCallback(async () => {
+    setBusy('activate');
+    setError(null);
+    try {
+      const result = await registerNumber();
+      if (!result.registered) setError(result.detail);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not activate the number.');
+    } finally {
+      setBusy(null);
+    }
+  }, [refresh]);
+
+  // Resubmit templates Meta rejected or that never made it through.
+  const handleRetryTemplates = useCallback(async () => {
+    setBusy('templates');
+    setError(null);
+    try {
+      const templates = await provisionTemplates();
+      setStatus((s) => (s ? { ...s, templates } : s));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not resubmit the message templates.');
+    } finally {
+      setBusy(null);
+    }
+  }, []);
 
   // Capture the Embedded Signup session info posted by the popup.
   useEffect(() => {
@@ -200,18 +251,114 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
 
   if (ui === 'connected' && status?.channel) {
     const ch = status.channel;
+    const tpl = status.templates;
+    // Two things must be true before a clinic can message patients on its own
+    // number: Meta must have ACTIVATED it for Cloud API, and it must have
+    // APPROVED the templates on this clinic's own Business Account. Either can
+    // still be outstanding right after connecting, so both get their own line —
+    // a half-provisioned number that looks "Connected" is how clinics end up
+    // silently sending nothing.
+    const liveReady = ch.registered && Boolean(tpl?.ready);
     return (
       <Card>
         <div className="flex items-center gap-2 mb-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-          <h3 className="font-display font-extrabold text-base text-slate-900">WhatsApp Connected Successfully</h3>
+          {liveReady ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+          ) : (
+            <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
+          )}
+          <h3 className="font-display font-extrabold text-base text-slate-900">
+            {liveReady ? 'WhatsApp Connected Successfully' : 'WhatsApp Connected — finishing setup'}
+          </h3>
         </div>
+
         <dl className="space-y-2 text-sm">
-          <Row label="Business" value={ch.businessId ? 'Verified business account' : 'Connected'} />
+          <Row label="Business" value={ch.verifiedName ?? (ch.businessId ? 'Verified business account' : 'Connected')} />
           <Row label="WhatsApp Number" value={ch.displayPhoneNumber ?? 'Active number'} />
           <Row label="Webhook" value={<span className="text-emerald-600 font-semibold">Active</span>} />
-          <Row label="Status" value={<span className="text-emerald-600 font-semibold">Ready to Receive Messages</span>} />
+          <Row
+            label="Number"
+            value={
+              ch.registered ? (
+                <span className="text-emerald-600 font-semibold">Activated for messaging</span>
+              ) : (
+                <span className="text-amber-600 font-semibold">Not activated yet</span>
+              )
+            }
+          />
+          <Row
+            label="Templates"
+            value={
+              tpl ? (
+                <span
+                  className={
+                    tpl.ready
+                      ? 'text-emerald-600 font-semibold'
+                      : tpl.rejected > 0
+                        ? 'text-rose-600 font-semibold'
+                        : 'text-amber-600 font-semibold'
+                  }
+                >
+                  {tpl.approved}/{tpl.total} approved
+                  {tpl.rejected > 0 ? ` · ${tpl.rejected} need attention` : ''}
+                </span>
+              ) : (
+                <span className="text-slate-400">—</span>
+              )
+            }
+          />
         </dl>
+
+        {!ch.registered && (
+          <div className="mt-3 flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <p>
+                Meta has not activated this number for messaging yet, so replies and reminders will not
+                be delivered. If you just verified it in WhatsApp Manager, activate it here.
+              </p>
+              <button
+                onClick={handleActivate}
+                disabled={busy === 'activate'}
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white font-semibold rounded-lg cursor-pointer"
+              >
+                {busy === 'activate' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                Activate number
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tpl && !tpl.ready && (
+          <div className="mt-3 flex items-start gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+            <div>
+              <p>
+                {tpl.rejected > 0
+                  ? 'Some message templates were not approved. Patients can still chat with you, but reminders and confirmations sent outside a 24-hour conversation need approved templates.'
+                  : 'Meta is reviewing your message templates. This usually takes a few minutes and can take up to 24 hours — patients can already message you in the meantime.'}
+              </p>
+              {tpl.rejected > 0 && (
+                <button
+                  onClick={handleRetryTemplates}
+                  disabled={busy === 'templates'}
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-semibold rounded-lg cursor-pointer"
+                >
+                  {busy === 'templates' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  Resubmit templates
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-3 flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <button
           onClick={inMobileApp ? openInBrowser : handleConnect}
           className="mt-4 inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 cursor-pointer"

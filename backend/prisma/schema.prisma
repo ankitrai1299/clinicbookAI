@@ -79,6 +79,7 @@ model Clinic {
   notifications    Notification[]
   whatsAppChannels WhatsAppChannel[]
   whatsAppBindings WhatsAppPatientBinding[]
+  whatsAppTemplates WhatsAppTemplateStatus[]
 
   @@index([plan])
   @@index([isSandbox])
@@ -105,6 +106,22 @@ model WhatsAppChannel {
   appSecret          String?
   verifyToken        String?
   status             String   @default("ACTIVE") // ACTIVE | DISABLED
+  // Display metadata from Meta, refreshed on every (re)connect.
+  verifiedName       String?
+  qualityRating      String?
+  // Cloud API phone-number REGISTRATION. Embedded Signup hands us a number that
+  // is claimed but NOT yet registered for Cloud API messaging — every send fails
+  // with error 133010 until POST /{phoneNumberId}/register succeeds. We do that
+  // during onboarding and record the outcome here so the dashboard can show
+  // "number not activated" instead of a cryptic Meta error.
+  registered         Boolean  @default(false)
+  registeredAt       DateTime?
+  // The 6-digit two-step-verification PIN we set during registration, encrypted
+  // at rest with WA_CHANNEL_ENC_KEY (same helper as accessToken). Required to
+  // re-register the number later — Meta rejects a different PIN once one is set.
+  registrationPin    String?
+  // Last successful template sync against THIS clinic's WABA.
+  templatesSyncedAt  DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -112,6 +129,40 @@ model WhatsAppChannel {
 
   @@index([clinicId])
   @@index([phoneNumberId])
+}
+
+// Per-clinic message-template approval state.
+//
+// Each clinic that connects its own number gets its own WhatsApp Business
+// Account, and a fresh WABA has ZERO approved templates. Templates are what let
+// us message a patient OUTSIDE the 24h customer-service window (reminders,
+// confirmations, prescription-ready), so onboarding submits the canonical
+// ClinicBook set (whatsapp.templateDefs.ts) to the clinic's own WABA and tracks
+// Meta's review verdict here — approval is asynchronous (minutes to ~24h).
+//
+// This is a per-clinic MIRROR of Meta's state, not the source of truth: it is
+// refreshed from GET /{wabaId}/message_templates. It exists so the dashboard can
+// show readiness without a Graph round-trip, and so the send path can fail fast
+// with a clear reason instead of burning the clinic's quality rating.
+model WhatsAppTemplateStatus {
+  id        String   @id @default(cuid())
+  clinicId  String
+  wabaId    String
+  name      String
+  language  String   @default("en_US")
+  // Meta's template id (returned on create / list).
+  metaId    String?
+  // APPROVED | PENDING | REJECTED | PAUSED | DISABLED | PENDING_DELETION | ERROR
+  status    String   @default("PENDING")
+  // Meta's rejected_reason, or our local submission error.
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, name, language])
+  @@index([clinicId])
 }
 
 // Binds a patient's WhatsApp phone to the clinic they belong to, so that ONE
