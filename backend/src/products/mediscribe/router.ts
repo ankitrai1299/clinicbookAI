@@ -306,9 +306,14 @@ mediscribeRouter.get('/doctors', async (req: Request, res: Response) => {
 });
 
 // ── Upcoming appointments (from ClinicBook) — start a scribe session per visit ─
-mediscribeRouter.get('/appointments/upcoming', async (req: Request, res: Response) => {
-  try { return res.json(await listUpcomingAppointments(currentClinicId())); }
-  catch (error) { console.error('[mediscribe:upcoming]', error); return res.json([]); }
+mediscribeRouter.get('/appointments/upcoming', async (req: AuthedRequest, res: Response) => {
+  try {
+    // A doctor sees only their own appointments (matched to a ClinicBook Doctor by
+    // email); an admin/receptionist sees every doctor's.
+    const me = await resolvePrincipal(req);
+    const opts = me.role === 'doctor' ? { doctorEmail: req.auth?.email } : undefined;
+    return res.json(await listUpcomingAppointments(currentClinicId(), opts));
+  } catch (error) { console.error('[mediscribe:upcoming]', error); return res.json([]); }
 });
 
 mediscribeRouter.get('/patients/:patientId/history', async (req: AuthedRequest, res: Response) => {

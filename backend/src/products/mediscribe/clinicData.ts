@@ -252,11 +252,29 @@ const dateStrOf = (d: Date): string => d.toISOString().slice(0, 10);
  * an appointment visible the WHOLE day — including one happening right now or that
  * started a few minutes ago — because the doctor documents the visit during or
  * after it. So the rule is simply "today (clinic-local) or later, not cancelled". */
-export const listUpcomingAppointments = async (clinicId: string): Promise<UpcomingAppointment[]> => {
+export const listUpcomingAppointments = async (
+  clinicId: string,
+  opts?: { doctorEmail?: string }
+): Promise<UpcomingAppointment[]> => {
   const today = clinicNow().dateStr;
+
+  // Doctor scope: a logged-in doctor sees only the appointments of the ClinicBook
+  // Doctor whose email matches theirs (the doctor-user ↔ Doctor link). No matching
+  // Doctor → no appointments (we can't tell which are "theirs"). Admins pass no
+  // doctorEmail, so they see every doctor's appointments.
+  let onlyDoctorId: string | null = null;
+  if (opts?.doctorEmail) {
+    const doc = await forClinic(clinicId).doctor.findFirst({
+      where: { email: opts.doctorEmail.trim().toLowerCase() },
+      select: { id: true }
+    });
+    onlyDoctorId = doc?.id ?? '__no_match__';
+  }
+
   return (await getAppointments(clinicId))
     .filter((a) => LIVE.has(a.status))
     .filter((a) => dateStrOf(a.appointmentDate) >= today)
+    .filter((a) => onlyDoctorId === null || a.doctorId === onlyDoctorId)
     .sort(
       (a, b) =>
         dateStrOf(a.appointmentDate).localeCompare(dateStrOf(b.appointmentDate)) ||
