@@ -31,8 +31,19 @@ export interface ChatMessage {
   content: string;
 }
 
+// Chat model, overridable with SARVAM_MODEL.
+//
+// Sarvam retires models without warning — 'sarvam-30b' was the default until it
+// was deprecated mid-flight, and every report generation started failing with
+// "Model 'sarvam-30b' has been deprecated" long after the code was written. The
+// env override exists so the next retirement is a config change on the host, not
+// a code change and a redeploy while doctors cannot generate reports.
+export function sarvamModel(): string {
+  return (process.env.SARVAM_MODEL || '').trim() || 'sarvam-105b';
+}
+
 export interface SarvamChatOptions {
-  // Chat model. sarvam-30b is the default; sarvam-105b is also available.
+  // Chat model. Defaults to sarvamModel() — see the note above before pinning one.
   model?: string;
   // Upper bound on generated tokens. Sarvam's starter tier caps this at 4096,
   // and the reasoning trace shares this budget, so we default just under the cap.
@@ -62,7 +73,7 @@ export async function sarvamChat(messages: ChatMessage[], opts: SarvamChatOption
     throw new Error('SARVAM_API_KEY is not configured. Add it to your .env file.');
   }
 
-  const model = opts.model || 'sarvam-30b';
+  const model = opts.model || sarvamModel();
   const maxTokens = Math.min(opts.maxTokens || 4000, MAX_TOKENS_CAP);
   const body: Record<string, unknown> = {
     model,

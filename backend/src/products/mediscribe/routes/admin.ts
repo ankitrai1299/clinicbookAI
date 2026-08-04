@@ -8,6 +8,7 @@ import {
   notificationsRepo,
 } from '../repositories/index.js';
 import { buildOverview, buildAnalytics, buildLanguageDashboard } from '../services/analytics.js';
+import { sarvamModel } from '../services/sarvam.js';
 import { hashPassword, sanitizeUser, newId } from '../services/auth.js';
 import { requirePermission } from '../middleware/auth.js';
 import type { AdminSettings, SearchResult } from '../contracts/index.js';
@@ -402,7 +403,9 @@ function toSettingsDto(doc: any): AdminSettings {
   return {
     aiProvider: d.aiProvider || 'sarvam',
     sttProvider: d.sttProvider || 'sarvam',
-    sarvam: { model: d.sarvamModel || 'sarvam-30b', apiConfigured: !!(process.env.SARVAM_API_KEY || '').trim() },
+    // Same default the chat client actually uses, so the settings screen can
+    // never advertise a model that is not the one being called.
+    sarvam: { model: d.sarvamModel || sarvamModel(), apiConfigured: !!(process.env.SARVAM_API_KEY || '').trim() },
     openai: { model: d.openaiModel || 'gpt-4o', apiConfigured: !!(process.env.OPENAI_API_KEY || '').trim() },
     whisper: { model: d.whisperModel || 'whisper-1', apiConfigured: !!(process.env.WHISPER_API_KEY || '').trim() },
     defaultLanguage: d.defaultLanguage || 'en',
