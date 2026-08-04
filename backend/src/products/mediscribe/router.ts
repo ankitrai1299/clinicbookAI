@@ -37,6 +37,7 @@ import { syncFromScribeConsultation } from '../../services/medicineReminder.serv
 import { sendPrescriptionOnFinalize, deliverPrescription } from './services/prescriptionDelivery.js';
 import { emitEvent, getPatientTimeline } from '../../core/timeline/patientTimeline.service.js';
 import { createAppointment } from '../clinicbook/appointments/appointment.service.js';
+import { completeAppointmentForConsultation } from './appointmentCompletion.js';
 import { askAssistant } from './services/assistant.js';
 
 // 25 MB ceiling — matches the client-side limit for uploaded audio files.
@@ -528,6 +529,13 @@ mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Resp
         refType: 'consultation',
         refId: String(consultation.id)
       });
+
+      // Close the ClinicBook appointment this visit belongs to, so staff never
+      // have to click "Mark Completed" on the roster after the doctor is done.
+      // Fire-and-forget: the roster must never block (or fail) the doctor's save.
+      void completeAppointmentForConsultation(currentClinicId(), consultation)
+        .then((r) => console.info('[mediscribe:auto-complete]', r.reason))
+        .catch((e) => console.error('[mediscribe:auto-complete] failed:', e));
     }
     // Schedule WhatsApp medicine reminders from a finalized prescription
     // (fire-and-forget — a reminder failure must never fail the save).

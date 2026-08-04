@@ -323,12 +323,17 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // Create a fresh Draft session for a patient, add it to local state, make it
   // active, and persist it immediately so a refresh before the first save does
   // not lose it.
-  const startSessionForPatient = (patientId: string, patientName: string) => {
+  // `appointmentId` is passed when the session is started from Today's Queue. It
+  // pins the note to the exact visit, so finalizing it closes THAT appointment
+  // even when the patient has more than one booking today (the server refuses to
+  // guess between them). Sessions started from "New Consultation" have none.
+  const startSessionForPatient = (patientId: string, patientName: string, appointmentId?: string) => {
     const now = new Date().toISOString();
     const newCon: Consultation = {
       id: `con-${Date.now()}`,
       patientId,
       patientName,
+      ...(appointmentId ? { appointmentId } : {}),
       date: new Date().toLocaleDateString(),
       status: 'Draft',
       transcript: [],
@@ -452,7 +457,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             upcomingAppointments={upcomingAppointments}
             onStartNew={handleStartNewConsultation}
             onSelectConsultation={handleSelectExistingConsultation}
-            onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName)}
+            onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}
             onQuickRx={() => setQuickRxOpen(true)}
           />
         );
@@ -615,7 +620,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 upcomingAppointments={upcomingAppointments}
                 onStartNew={handleStartNewConsultation}
                 onSelectConsultation={handleSelectExistingConsultation}
-                onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName)}
+                onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}
                 onViewAllSessions={() => setActiveView('consultations')}
                 onQuickRx={() => setQuickRxOpen(true)}
               />

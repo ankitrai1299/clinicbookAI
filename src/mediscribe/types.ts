@@ -24,6 +24,10 @@ export interface Consultation {
   // Used to keep each doctor's patients/sessions separate + show admin attribution.
   doctorId?: string;
   doctorName?: string;
+  // The ClinicBook appointment this session documents — set when the doctor
+  // started from Today's Queue. Finalizing the session marks THAT appointment
+  // completed, which is what lets the roster close itself.
+  appointmentId?: string;
   date: string;
   status: 'Draft' | 'Recording' | 'Processing' | 'Completed';
   transcript: TranscriptLine[];
