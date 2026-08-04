@@ -25,29 +25,78 @@ interface FBSdk {
 type WinWithFB = Window & { FB?: FBSdk; fbAsyncInit?: () => void };
 
 // Load the Facebook SDK once (shared across mounts).
+//
+// The previous version could hang forever: when the script tag already existed
+// but window.FB had not initialised yet, it returned WITHOUT resolving — and
+// because the promise is cached, every later call awaited that same dead
+// promise. The Connect button then sat on "Opening WhatsApp…" with nothing to
+// click and no error. So this settles on every path: FB already present, init
+// callback, a poll for the script-exists-but-not-ready case, a script load
+// error, and a timeout. On failure the cache is CLEARED so the next click can
+// genuinely retry instead of re-awaiting the same failure.
+const SDK_TIMEOUT_MS = 15000;
 let fbSdkPromise: Promise<void> | null = null;
+
 const loadFbSdk = (appId: string, version: string): Promise<void> => {
   if (fbSdkPromise) return fbSdkPromise;
-  fbSdkPromise = new Promise<void>((resolve) => {
+
+  fbSdkPromise = new Promise<void>((resolve, reject) => {
     const w = window as WinWithFB;
-    w.fbAsyncInit = () => {
-      w.FB?.init({ appId, version, cookie: true, xfbml: false });
+    let settled = false;
+    let poll = 0;
+    let timer = 0;
+
+    const stop = () => {
+      window.clearInterval(poll);
+      window.clearTimeout(timer);
+    };
+    const done = () => {
+      if (settled || !w.FB) return;
+      settled = true;
+      stop();
+      try {
+        w.FB.init({ appId, version, cookie: true, xfbml: false });
+      } catch {
+        /* a repeat init must never break the flow */
+      }
       resolve();
     };
-    const id = 'facebook-jssdk';
-    if (document.getElementById(id)) {
-      // Script present but init may not have run yet; resolve on next tick.
-      if (w.FB) resolve();
+    const fail = (message: string) => {
+      if (settled) return;
+      settled = true;
+      stop();
+      fbSdkPromise = null; // let the next click retry from scratch
+      reject(new Error(message));
+    };
+
+    if (w.FB) {
+      done(); // already loaded by an earlier mount
       return;
     }
-    const js = document.createElement('script');
-    js.id = id;
-    js.src = 'https://connect.facebook.net/en_US/sdk.js';
-    js.async = true;
-    js.defer = true;
-    js.crossOrigin = 'anonymous';
-    document.body.appendChild(js);
+
+    w.fbAsyncInit = done;
+    // The case the old code dropped: the script is already in the DOM (an
+    // earlier mount added it), so fbAsyncInit may have fired for someone else
+    // and will never fire again for us.
+    poll = window.setInterval(done, 200);
+    timer = window.setTimeout(
+      () => fail('WhatsApp connector took too long to load. Please check your connection and retry.'),
+      SDK_TIMEOUT_MS
+    );
+
+    const id = 'facebook-jssdk';
+    if (!document.getElementById(id)) {
+      const js = document.createElement('script');
+      js.id = id;
+      js.src = 'https://connect.facebook.net/en_US/sdk.js';
+      js.async = true;
+      js.defer = true;
+      js.crossOrigin = 'anonymous';
+      js.onerror = () => fail('Could not load the WhatsApp connector (network or an ad blocker).');
+      document.body.appendChild(js);
+    }
   });
+
   return fbSdkPromise;
 };
 
@@ -158,24 +207,46 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  const handleConnect = useCallback(async () => {
-    if (!config?.configured || !config.appId || !config.configId) return;
-    setError(null);
-    setUi('connecting');
-    sessionInfo.current = {};
-    try {
-      await loadFbSdk(config.appId, config.graphVersion);
-      const w = window as WinWithFB;
-      if (!w.FB) throw new Error('WhatsApp connector failed to load. Please retry.');
+  // Start loading the SDK as soon as the config arrives, not on click. Meta's
+  // popup must open inside the click's own user-gesture; awaiting a script load
+  // first hands the gesture back to the browser, which then blocks the window —
+  // and a blocked popup looks exactly like "cancelled or incomplete".
+  useEffect(() => {
+    if (!config?.configured || !config.appId) return;
+    void loadFbSdk(config.appId, config.graphVersion).catch(() => undefined);
+  }, [config]);
 
-      w.FB.login(
+  const launchLogin = useCallback(
+    (fb: FBSdk) => {
+      if (!config?.configId) return;
+      fb.login(
         (resp) => {
           void (async () => {
             const code = resp?.authResponse?.code;
             const { phoneNumberId, wabaId } = sessionInfo.current;
-            if (!code || !phoneNumberId || !wabaId) {
-              setError('Connection was cancelled or incomplete. Please try again.');
+            // Two very different failures used to share one message, which made
+            // them impossible to tell apart from the screen. No code means the
+            // person closed the popup — their move, and retrying works. A code
+            // WITHOUT the number/account ids means Meta completed sign-in but
+            // never posted the session info, which retrying will not fix: the
+            // Embedded Signup configuration is missing its WhatsApp assets.
+            if (!code) {
+              console.warn('[ConnectWhatsApp] no auth code returned', { status: resp?.status });
+              setError('Sign-in was cancelled before it finished. Please try again.');
               setUi(deriveUi(config, status));
+              return;
+            }
+            if (!phoneNumberId || !wabaId) {
+              console.error('[ConnectWhatsApp] auth code received but no session info from Meta', {
+                phoneNumberId,
+                wabaId,
+              });
+              setError(
+                'Meta signed you in but did not return a WhatsApp number. This usually means the ' +
+                  'Embedded Signup configuration is missing its WhatsApp Business Account or phone ' +
+                  'number — your platform administrator needs to add them in the Meta app.'
+              );
+              setUi('error');
               return;
             }
             try {
@@ -197,11 +268,41 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
           extras: { feature: 'whatsapp_embedded_signup', sessionInfoVersion: 3 },
         }
       );
+    },
+    [config, status, deriveUi, refresh, onConnected]
+  );
+
+  const handleConnect = useCallback(async () => {
+    if (!config?.configured || !config.appId || !config.configId) return;
+    setError(null);
+    sessionInfo.current = {};
+
+    const w = window as WinWithFB;
+    // Preloaded (the common case): open the popup synchronously, still inside
+    // the click, so the browser lets it through.
+    if (w.FB) {
+      setUi('connecting');
+      launchLogin(w.FB);
+      return;
+    }
+
+    // Not ready yet — wait for it, then try. The popup may be blocked here, so
+    // the message says what to do about it rather than blaming the connection.
+    setUi('connecting');
+    try {
+      await loadFbSdk(config.appId, config.graphVersion);
+      const fb = (window as WinWithFB).FB;
+      if (!fb) throw new Error('WhatsApp connector failed to load. Please retry.');
+      launchLogin(fb);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not open the WhatsApp connector.');
+      setError(
+        e instanceof Error
+          ? `${e.message} If a popup was blocked, allow popups for this site and try again.`
+          : 'Could not open the WhatsApp connector.'
+      );
       setUi('error');
     }
-  }, [config, status, deriveUi, refresh, onConnected]);
+  }, [config, launchLogin]);
 
   // Inside the phone app the Meta sign-in popup can't run — Facebook blocks OAuth
   // in embedded WebViews — so connecting must happen in the system browser. Ask
