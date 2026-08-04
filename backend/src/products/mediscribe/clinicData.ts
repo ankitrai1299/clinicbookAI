@@ -262,10 +262,17 @@ export const listUpcomingAppointments = async (
   // Doctor whose email matches theirs (the doctor-user ↔ Doctor link). No matching
   // Doctor → no appointments (we can't tell which are "theirs"). Admins pass no
   // doctorEmail, so they see every doctor's appointments.
+  //
+  // The comparison MUST be case-insensitive. Emails are case-insensitive in
+  // practice but Postgres `=` is not, and the two sides are written by different
+  // flows: the login is stored lowercased while a Doctor row keeps whatever the
+  // admin typed ("doctorA.K.DAS@gmail.com"). Lowercasing only the input made a
+  // miss CERTAIN for any doctor whose stored address has a capital in it — their
+  // queue silently rendered empty with a real appointment sitting in the table.
   let onlyDoctorId: string | null = null;
   if (opts?.doctorEmail) {
     const doc = await forClinic(clinicId).doctor.findFirst({
-      where: { email: opts.doctorEmail.trim().toLowerCase() },
+      where: { email: { equals: opts.doctorEmail.trim(), mode: 'insensitive' } },
       select: { id: true }
     });
     onlyDoctorId = doc?.id ?? '__no_match__';
