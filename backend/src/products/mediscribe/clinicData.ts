@@ -252,6 +252,27 @@ const dateStrOf = (d: Date): string => d.toISOString().slice(0, 10);
  * an appointment visible the WHOLE day — including one happening right now or that
  * started a few minutes ago — because the doctor documents the visit during or
  * after it. So the rule is simply "today (clinic-local) or later, not cancelled". */
+/**
+ * Is this login actually linked to a ClinicBook Doctor?
+ *
+ * The link is by email, and nothing keeps the two sides in step: a Doctor row
+ * can carry a different address from the login, or none at all. When it misses,
+ * the queue is empty — indistinguishable from "no appointments booked", which is
+ * how a doctor with a full day sat looking at a blank dashboard. The dashboard
+ * uses this to say WHICH of the two it is.
+ */
+export const findDoctorForLogin = async (
+  clinicId: string,
+  email?: string | null
+): Promise<{ id: string; name: string } | null> => {
+  const e = (email || '').trim();
+  if (!e) return null;
+  return forClinic(clinicId).doctor.findFirst({
+    where: { email: { equals: e, mode: 'insensitive' } },
+    select: { id: true, name: true }
+  });
+};
+
 export const listUpcomingAppointments = async (
   clinicId: string,
   opts?: { doctorEmail?: string }

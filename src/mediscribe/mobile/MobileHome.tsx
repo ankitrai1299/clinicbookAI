@@ -13,6 +13,7 @@ import {
   CalendarClock,
   Stethoscope,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
 
 // Native-style mobile dashboard — shown ONLY inside the phone app (WebView).
@@ -28,6 +29,10 @@ interface MobileHomeProps {
   patients?: Patient[];
   doctorName?: string;
   upcomingAppointments?: UpcomingAppointment[];
+  // False when this login has no matching ClinicBook Doctor — the queue is then
+  // empty for a reason the doctor cannot see or fix themselves.
+  doctorLinked?: boolean;
+  loginEmail?: string;
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
@@ -65,6 +70,8 @@ export default function MobileHome({
   patients,
   doctorName,
   upcomingAppointments = [],
+  doctorLinked = true,
+  loginEmail,
   onStartNew,
   onSelectConsultation,
   onScribeAppointment,
@@ -180,6 +187,21 @@ export default function MobileHome({
         >
           <Zap size={17} className="text-amber-500" /> Quick Prescription
         </button>
+      )}
+
+      {/* Account not linked to a doctor record — without this the queue simply
+          looks empty, which reads as "nobody booked today". */}
+      {!doctorLinked && (
+        <div className="mb-6 flex items-start gap-2.5 p-3.5 rounded-2xl border border-amber-200 bg-amber-50">
+          <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-[13px]">
+            <div className="font-bold text-amber-900">Appointments aren’t linked yet</div>
+            <p className="text-amber-800 mt-0.5 leading-snug">
+              This login{loginEmail ? ` (${loginEmail})` : ''} isn’t matched to a doctor record. Ask your
+              clinic admin to set the same email on your doctor profile.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Today's queue — one tap starts the consultation for that patient */}

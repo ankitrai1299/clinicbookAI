@@ -391,6 +391,20 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
         </div>
       )}
 
+      {/* Shown BEFORE connecting on purpose. Meta hands us a long-lived access
+          token the moment this succeeds; if the server has no encryption key it
+          is stored in plaintext, and adding the key afterwards does not go back
+          and encrypt it — the clinic would have to reconnect. */}
+      {config?.tokenEncryption === false && (
+        <div className="flex items-start gap-2 px-3 py-2 mb-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Secure token storage isn’t switched on for this server yet. Ask your platform administrator to
+            set it up before connecting, so your WhatsApp access is stored encrypted.
+          </span>
+        </div>
+      )}
+
       <button
         onClick={inMobileApp ? openInBrowser : handleConnect}
         disabled={!inMobileApp && ui === 'connecting'}

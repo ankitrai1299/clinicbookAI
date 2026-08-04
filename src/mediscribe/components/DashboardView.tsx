@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Consultation, UpcomingAppointment } from '../types';
-import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill, CalendarClock, Stethoscope, Zap } from 'lucide-react';
+import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill, CalendarClock, Stethoscope, Zap, AlertTriangle } from 'lucide-react';
 
 interface DashboardViewProps {
   consultations: Consultation[];
@@ -9,6 +9,10 @@ interface DashboardViewProps {
   reportsCount?: number;
   prescriptionsCount?: number;
   upcomingAppointments?: UpcomingAppointment[];
+  // False when this login has no matching ClinicBook Doctor — the queue is then
+  // empty for a reason the doctor cannot see or fix themselves.
+  doctorLinked?: boolean;
+  loginEmail?: string;
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
@@ -29,6 +33,8 @@ export default function DashboardView({
   reportsCount,
   prescriptionsCount,
   upcomingAppointments = [],
+  doctorLinked = true,
+  loginEmail,
   onStartNew,
   onSelectConsultation,
   onScribeAppointment,
@@ -118,6 +124,23 @@ export default function DashboardView({
           </button>
         </div>
       </div>
+
+      {/* Account not linked to a doctor record. Without this the queue just looks
+          empty, which reads as "no patients booked" — the doctor has no way to
+          know the lookup failed, and no way to fix it themselves. */}
+      {!doctorLinked && (
+        <div className="mb-8 flex items-start gap-3 p-4 rounded-2xl border border-amber-200 bg-amber-50">
+          <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <div className="font-semibold text-amber-900">Your appointments aren’t linked yet</div>
+            <p className="text-amber-800 mt-1">
+              This login{loginEmail ? ` (${loginEmail})` : ''} isn’t matched to a doctor record, so your
+              queue can’t be shown. Ask your clinic admin to set that same email on your doctor profile in
+              ClinicBook. Everything else here works as usual.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* TODAY'S QUEUE — the doctor's starting point. One tap = consultation. */}
       {todaysQueue.length > 0 && (

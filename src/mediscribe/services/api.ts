@@ -334,6 +334,27 @@ export async function getUpcomingAppointments(): Promise<UpcomingAppointment[]> 
   }
 }
 
+// Is this doctor's login linked to a ClinicBook Doctor record? An empty queue on
+// its own is ambiguous — no bookings today, or the link is broken — so the
+// dashboard asks, and only warns when the answer is "not linked".
+export interface DoctorLinkStatus {
+  linked: boolean;
+  role: string;
+  email?: string;
+  doctorName?: string | null;
+}
+
+export async function getDoctorLinkStatus(): Promise<DoctorLinkStatus> {
+  try {
+    const res = await fetch(`${BASE}/appointments/link-status`, { cache: 'no-store', headers: authHeader() });
+    if (!res.ok) return { linked: true, role: 'doctor' };
+    return await res.json();
+  } catch {
+    // Never accuse a working account because a request failed.
+    return { linked: true, role: 'doctor' };
+  }
+}
+
 export async function getPatients(): Promise<Patient[]> {
   const res = await fetch(`${BASE}/patients`, { cache: 'no-store', headers: authHeader() });
   if (!res.ok) throw new Error('Failed to fetch patients');

@@ -31,6 +31,12 @@ export interface EmbeddedConfig {
   appId?: string;
   configId?: string;
   graphVersion: string;
+  // Whether WA_CHANNEL_ENC_KEY is set, i.e. whether a clinic's access token will
+  // be encrypted at rest. A boolean, never the key. Surfaced because the answer
+  // is otherwise invisible until a clinic has already connected and handed us a
+  // permanent token — by which point storing it in plaintext cannot be undone
+  // without making them reconnect.
+  tokenEncryption: boolean;
 }
 
 const graphUrl = (path: string): string => `https://graph.facebook.com/${env.META_GRAPH_VERSION}${path}`;
@@ -52,7 +58,8 @@ export const getEmbeddedConfig = (): EmbeddedConfig => ({
   configured: isEmbeddedSignupConfigured(),
   appId: env.META_APP_ID,
   configId: env.META_CONFIG_ID,
-  graphVersion: env.META_GRAPH_VERSION
+  graphVersion: env.META_GRAPH_VERSION,
+  tokenEncryption: Boolean(env.WA_CHANNEL_ENC_KEY)
 });
 
 // PURE: pick the owning Business id from a WABA fields response (owner business

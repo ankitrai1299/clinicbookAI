@@ -31,7 +31,8 @@ import {
   createClinicPatient,
   findClinicPatientByPhone,
   listClinicDoctors,
-  listUpcomingAppointments
+  listUpcomingAppointments,
+  findDoctorForLogin
 } from './clinicData.js';
 import { syncFromScribeConsultation } from '../../services/medicineReminder.service.js';
 import { sendPrescriptionOnFinalize, deliverPrescription } from './services/prescriptionDelivery.js';
@@ -315,6 +316,24 @@ mediscribeRouter.get('/appointments/upcoming', async (req: AuthedRequest, res: R
     const opts = me.role === 'doctor' ? { doctorEmail: req.auth?.email } : undefined;
     return res.json(await listUpcomingAppointments(currentClinicId(), opts));
   } catch (error) { console.error('[mediscribe:upcoming]', error); return res.json([]); }
+});
+
+// Whether this doctor's login is linked to a ClinicBook Doctor record. An empty
+// queue is ambiguous — no bookings, or a broken link — and the dashboard cannot
+// tell the difference without asking. Admins are never "unlinked" (they see
+// every doctor's appointments), so they always report linked.
+mediscribeRouter.get('/appointments/link-status', async (req: AuthedRequest, res: Response) => {
+  try {
+    const me = await resolvePrincipal(req);
+    if (me.role !== 'doctor') return res.json({ linked: true, role: me.role });
+    const email = req.auth?.email ?? '';
+    const doctor = await findDoctorForLogin(currentClinicId(), email);
+    return res.json({ linked: !!doctor, role: me.role, email, doctorName: doctor?.name ?? null });
+  } catch (error) {
+    console.error('[mediscribe:link-status]', error);
+    // Fail as "linked" so a lookup blip never accuses a working account.
+    return res.json({ linked: true, role: 'doctor' });
+  }
 });
 
 mediscribeRouter.get('/patients/:patientId/history', async (req: AuthedRequest, res: Response) => {

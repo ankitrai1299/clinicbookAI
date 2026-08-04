@@ -42,8 +42,10 @@ import {
   getPrescriptions,
   getTranscripts,
   getUpcomingAppointments,
+  getDoctorLinkStatus,
   savePatient,
   saveConsultation,
+  type DoctorLinkStatus,
 } from './services/api';
 import { medicationsToText } from './utils/report';
 
@@ -204,6 +206,9 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   const [prescriptions, setPrescriptions] = useState<PrescriptionRecord[]>([]);
   const [transcripts, setTranscripts] = useState<TranscriptRecord[]>([]);
   const [upcomingAppointments, setUpcomingAppointments] = useState<UpcomingAppointment[]>([]);
+  // Whether this doctor's login resolves to a ClinicBook Doctor. Assume linked
+  // until told otherwise so a working account never sees a spurious warning.
+  const [doctorLink, setDoctorLink] = useState<DoctorLinkStatus>({ linked: true, role: 'doctor' });
   const [loading, setLoading] = useState(true);
 
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
@@ -261,15 +266,17 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   const loadData = async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
     try {
-      const [p, c, r, pr, t, ua] = await Promise.all([
+      const [p, c, r, pr, t, ua, link] = await Promise.all([
         getPatients().catch(() => null), // null = fetch failed (vs. [] = no patients)
         getConsultations().catch(() => []),
         getReports().catch(() => []),
         getPrescriptions().catch(() => []),
         getTranscripts().catch(() => []),
         getUpcomingAppointments().catch(() => []),
+        getDoctorLinkStatus().catch(() => ({ linked: true, role: 'doctor' })),
       ]);
       setUpcomingAppointments(Array.isArray(ua) ? ua : []);
+      setDoctorLink(link);
 
       const patientsData = (Array.isArray(p) ? p : []).map(normalizePatient);
       setPatients(patientsData);
@@ -455,6 +462,8 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             reportsCount={reports.length}
             prescriptionsCount={prescriptions.length}
             upcomingAppointments={upcomingAppointments}
+            doctorLinked={doctorLink.linked}
+            loginEmail={doctorLink.email}
             onStartNew={handleStartNewConsultation}
             onSelectConsultation={handleSelectExistingConsultation}
             onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}
@@ -618,6 +627,8 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 patients={patients}
                 doctorName={doctorName}
                 upcomingAppointments={upcomingAppointments}
+                doctorLinked={doctorLink.linked}
+                loginEmail={doctorLink.email}
                 onStartNew={handleStartNewConsultation}
                 onSelectConsultation={handleSelectExistingConsultation}
                 onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}

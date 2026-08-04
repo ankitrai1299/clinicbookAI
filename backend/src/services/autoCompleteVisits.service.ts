@@ -14,7 +14,7 @@
 import { AppointmentStatus } from '@prisma/client';
 
 import { prisma } from '../config/prisma.js';
-import { updateAppointment, type AppointmentRecord } from '../products/clinicbook/appointments/appointment.service.js';
+import { completeAppointment, type AppointmentRecord } from '../products/clinicbook/appointments/appointment.service.js';
 import { registerPostVisitAction } from '../products/clinicbook/appointments/postVisit.service.js';
 import { finalizedScribeForPatient, type ScribeReport } from '../products/novascribe/skills/mediscribeData.js';
 import { sendTemplatedOrSession } from '../core/whatsapp/whatsapp.service.js';
@@ -93,10 +93,16 @@ const dayEndInstant = async (appt: { doctorId: string; clinicId: string; appoint
 };
 
 /**
- * Cron worker: auto-complete recent CONFIRMED visits whose slot has ended AND for
- * which the doctor used the scribe. Marking COMPLETED runs the post-visit workflow
- * (thank-you + the prescription action above). Visits with no scribe note are left
- * untouched for staff to complete manually.
+ * SAFETY NET, not the primary path. Since mediscribe/appointmentCompletion.ts, a
+ * visit closes the instant the doctor finalizes the note. This sweep exists for
+ * the cases that hook cannot cover: notes finalized before it existed, or a save
+ * whose completion never landed (restart mid-request).
+ *
+ * Rules: the slot must have ENDED, the doctor must have used the scribe, and the
+ * patient must have exactly ONE live appointment that day. The last condition
+ * matters because this scan matches per PATIENT, not per visit — with two
+ * bookings the same day it cannot tell which one the note documents, and
+ * completing both would thank the patient for a visit that never happened.
  */
 export const processAutoCompleteVisits = async (): Promise<void> => {
   const now = new Date();
@@ -118,7 +124,32 @@ export const processAutoCompleteVisits = async (): Promise<void> => {
       const scribe = await finalizedScribeForPatient(a.clinicId, a.patientId);
       if (!scribe) continue; // scribe not used → leave manual
 
-      await updateAppointment(a.clinicId, a.id, { status: AppointmentStatus.COMPLETED });
+      // Per-PATIENT matching can't disambiguate two bookings on one day.
+      const day = a.appointmentDate.toISOString().slice(0, 10);
+      const sameDay = await prisma.appointment.count({
+        where: {
+          clinicId: a.clinicId,
+          patientId: a.patientId,
+          status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
+          appointmentDate: {
+            gte: new Date(`${day}T00:00:00.000Z`),
+            lte: new Date(`${day}T23:59:59.999Z`)
+          }
+        }
+      });
+      if (sameDay > 1) {
+        console.info(
+          `[AutoComplete] Visit ${a.id} skipped — patient has ${sameDay} live appointments on ${day}, cannot tell which the note documents.`
+        );
+        continue;
+      }
+
+      // completeAppointment, NOT updateAppointment. updateAppointment writes the
+      // status but does NOT run runPostVisitWorkflow, set completedAt/completedBy,
+      // record the staff notification, or guard the write against a concurrent
+      // completion — so this sweep used to close visits silently, without the
+      // thank-you or the prescription hand-off this module exists to send.
+      await completeAppointment(a.clinicId, a.id, 'auto-complete');
       console.info(`[AutoComplete] Visit ${a.id} auto-completed (scribe used); post-visit workflow fired.`);
     } catch (err) {
       console.error(`[AutoComplete] Failed appointment ${a.id}:`, err);

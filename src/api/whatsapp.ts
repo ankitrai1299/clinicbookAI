@@ -6,6 +6,10 @@ export interface EmbeddedConfig {
   appId?: string;
   configId?: string;
   graphVersion: string;
+  // False when WA_CHANNEL_ENC_KEY is unset on the server — this clinic's access
+  // token would be stored in plaintext. Worth knowing BEFORE connecting, since
+  // a token already stored unencrypted stays that way until they reconnect.
+  tokenEncryption?: boolean;
 }
 
 // Sanitised channel — NEVER includes the access token. The doctor only ever
