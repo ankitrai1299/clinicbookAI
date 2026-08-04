@@ -6,6 +6,7 @@ import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { formatDoctorName, normalizeDoctorName } from '../../utils/doctorName.js';
 import { getAvailableSlots } from '../../services/scheduling.service.js';
 import { sendTemplatedOrSession, sendWhatsAppTextMessage } from './whatsapp.service.js';
+import { bindPatient } from './whatsapp.binding.js';
 import {
   AppointmentTemplateData,
   WaitlistTemplateData,
@@ -179,6 +180,22 @@ const buildRegistrationBody = (p: PatientRegisteredParams): string =>
 // WhatsAppLog carries phone (`to`), wamid (`waMessageId`) and the evolving
 // delivery status (sent → delivered → read), updated by the status webhook.
 export const notifyPatientRegistered = (p: PatientRegisteredParams): void => {
+  // Bind the phone to THIS clinic before anything else. Registration is the
+  // strongest possible signal of which clinic a number belongs to — the clinic
+  // just entered this patient themselves — and the message we are about to send
+  // tells them to "Reply 1 to book". Without a binding, that reply lands on the
+  // shared number with no clinic attached and the patient is asked for a join
+  // code they were never given: a dead end immediately after being welcomed.
+  //
+  // Runs BEFORE the isWhatsAppConfigured() gate so the routing fact is recorded
+  // even in deployments where outbound messaging is not configured yet.
+  void bindPatient(p.to, p.clinicId).catch((err) =>
+    console.error('[WhatsApp] Could not bind registered patient to clinic', {
+      clinicId: p.clinicId,
+      error: err?.message ?? String(err)
+    })
+  );
+
   if (!isWhatsAppConfigured()) {
     return;
   }

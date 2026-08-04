@@ -4,9 +4,26 @@
 // the resolved clinicId — clinics never mix.
 
 import { prisma } from '../../config/prisma.js';
-import { env } from '../../config/env.js';
 
 const digitsOf = (s: string | null | undefined): string => (s || '').replace(/\D/g, '');
+
+// The shared host clinic — the one patient recovery must never guess, because its
+// doctors are not any real clinic's doctors. It is identified by its well-known
+// email, NOT by WHATSAPP_CLINIC_ID: that env var only says which clinic OWNS the
+// env WhatsApp number, and in most deployments that is a REAL clinic with real
+// patients. Conflating the two made recovery skip the very clinic the patient
+// belonged to.
+const PLATFORM_CLINIC_EMAIL = 'platform@clinicbook.ai';
+let platformClinicIdCache: string | null | undefined;
+const platformClinicId = async (): Promise<string | null> => {
+  if (platformClinicIdCache !== undefined) return platformClinicIdCache;
+  const row = await prisma.clinic.findUnique({
+    where: { email: PLATFORM_CLINIC_EMAIL },
+    select: { id: true }
+  });
+  platformClinicIdCache = row?.id ?? null;
+  return platformClinicIdCache;
+};
 
 // Canonical phone key. WhatsApp delivers numbers with a country code (91…) while
 // some records were stored national (10 digits). Key everything by the LAST 10
@@ -94,7 +111,7 @@ export const bindPatient = async (phone: string, clinicId: string): Promise<void
 const recoverClinicByExistingPatient = async (phone: string): Promise<string | null> => {
   const last10 = phoneKey(phone);
   if (last10.length < 10) return null;
-  const platformId = env.WHATSAPP_CLINIC_ID || null;
+  const platformId = await platformClinicId();
   const rows = await prisma.patient.findMany({
     where: {
       phone: { endsWith: last10 },
