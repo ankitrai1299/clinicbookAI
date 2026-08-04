@@ -139,6 +139,12 @@ export default function ClinicDashboard({
     getMe().then((u) => setRole((u.role || '').toUpperCase())).catch(() => undefined);
   }, []);
   const isStaff = role === 'STAFF';
+  // What the header shows. It used to read "Clinic Admin" / "Admin Active" for
+  // EVERYONE, hardcoded — so a doctor account looked like an admin account whose
+  // settings tabs had vanished. The label now follows the session, and stays
+  // blank until /auth/me answers rather than guessing.
+  const roleLabel =
+    role === 'STAFF' ? 'Clinic Staff' : role === 'ADMIN' ? 'Platform Admin' : role ? 'Clinic Admin' : '';
   const STAFF_TABS = ['appointments', 'patients', 'calendar', 'waitlist'];
   const canSeeTab = (id: string): boolean => !isStaff || STAFF_TABS.includes(id);
   // Prevent direct access to a restricted tab (e.g. a deep-linked or stale tab):
@@ -625,9 +631,15 @@ export default function ClinicDashboard({
             <div className="hidden md:block">
               <h1 className="font-display font-extrabold text-slate-950 text-base flex items-center gap-2">
                 <span>Clinic Management Desk</span>
-                <span className="text-[10px] bg-sky-100 text-sky-800 font-mono px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">
-                  Admin Active
-                </span>
+                {roleLabel && (
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full uppercase font-bold tracking-wider ${
+                      isStaff ? 'bg-slate-100 text-slate-600' : 'bg-sky-100 text-sky-800'
+                    }`}
+                  >
+                    {roleLabel}
+                  </span>
+                )}
               </h1>
             </div>
           </div>
@@ -668,7 +680,7 @@ export default function ClinicDashboard({
               </div>
               <div className="hidden lg:block text-left">
                 <span className="block text-[11px] font-bold text-slate-900 leading-tight">{clinicConfig.name}</span>
-                <span className="block text-[9px] text-slate-400 leading-none">Clinic Admin</span>
+                {roleLabel && <span className="block text-[9px] text-slate-400 leading-none">{roleLabel}</span>}
               </div>
             </div>
 
