@@ -13,7 +13,14 @@
 // classifier replaces it so inbound booking touches OpenAI zero times.)
 // ===========================================================================
 
-export type PatientIntent = 'book' | 'cancel' | 'reschedule' | 'check' | 'menu' | 'unknown';
+export type PatientIntent =
+  | 'book'
+  | 'cancel'
+  | 'reschedule'
+  | 'check'
+  | 'prescription'
+  | 'menu'
+  | 'unknown';
 
 export interface PatientMessageClassification {
   intent: PatientIntent;
@@ -35,8 +42,30 @@ export const classifyIntent = (message: string, specialities: string[]): Patient
 
   let intent: PatientIntent = 'unknown';
   if (/\b(cancel|delete|remove)\b/.test(t)) intent = 'cancel';
-  else if (/\b(reschedul|postpone|change.*(time|date|appoint)|move.*(appoint|time))\b/.test(t)) intent = 'reschedule';
-  else if (/\b(book|appointment|schedule|consult|see a|meet|doctor|appt)\b/.test(t) || speciality) intent = 'book';
+  // NOTE the deliberate absence of a trailing \b on the stems. The previous
+  // pattern ended the whole alternation with \b, which required a word boundary
+  // straight after "reschedul" — impossible, since the very next letter is "e".
+  // So "reschedule my appointment" never matched here and fell through to the
+  // rule below, where the word "appointment" starts a BRAND NEW booking. Same
+  // for "change my appointment" and "move my appointment". Stems now match their
+  // whole word family (reschedule/rescheduling/rescheduled, postpone/postponing).
+  else if (
+    /\b(reschedul|postpon|prepon)/.test(t) ||
+    /\b(change|move|shift)\b.*\b(time|date|slot|appoint)/.test(t)
+  ) {
+    intent = 'reschedule';
+  }
+  // BEFORE 'book' on purpose. Asking for a prescription usually names the doctor
+  // ("doctor ne kya likha hai", "doctor ki parchi"), and the booking rule matches
+  // the bare word "doctor" — so ordered after it, a patient asking for their
+  // medicines was dropped into a booking flow instead.
+  else if (
+    /\b(prescription|parchi|parcha|nuskha|medicine|medicines|dawa|dawai|dava|davai|goli|tablet)\b/.test(t) ||
+    /doctor\s*(ne|ni)?\s*(kya|kia|what)\b/.test(t) ||
+    /\bwhat\b.*\bprescrib/.test(t)
+  ) {
+    intent = 'prescription';
+  } else if (/\b(book|appointment|schedule|consult|see a|meet|doctor|appt)\b/.test(t) || speciality) intent = 'book';
   else if (/\b(my appointment|status|when is|upcoming|check|view|show)\b/.test(t)) intent = 'check';
   else if (/^\s*(hi+|hey+|hello+|menu|start|help|options?|namaste|hola)\b/.test(t)) intent = 'menu';
 

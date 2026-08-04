@@ -35,6 +35,7 @@ import { dataSourceFor } from '../datasource/index.js';
 import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
+import { deliverPrescriptionToPatient } from '../../services/patientPrescription.service.js';
 import { createAppointment, cancelAppointment, updateAppointment } from '../../products/clinicbook/appointments/appointment.service.js';
 import { getAvailableSlots, getDateAvailability, clinicNow } from '../../services/scheduling.service.js';
 import {
@@ -201,6 +202,8 @@ const normalizeReplyId = (id: string): { text?: string; special?: 'human' | 'boo
       return { text: '3' };
     case RID.MENU_RESCHED:
       return { text: '4' };
+    case RID.MENU_RX:
+      return { text: '5' };
     case RID.CONF_YES:
       return { text: 'yes' };
     case RID.CONF_NO:
@@ -440,8 +443,9 @@ const menuText = (params: BookingParams): string =>
   `1. Book Appointment\n` +
   `2. My Appointments\n` +
   `3. Cancel Appointment\n` +
-  `4. Reschedule Appointment\n\n` +
-  `Reply with a number (1-4).`;
+  `4. Reschedule Appointment\n` +
+  `5. My Medicines\n\n` +
+  `Reply with a number (1-5).`;
 
 const numbered = (items: string[]): string => items.map((it, i) => `${i + 1}. ${it}`).join('\n');
 
@@ -458,7 +462,7 @@ const buildMenu = async (params: BookingParams): Promise<BotReply> => {
   if (!interactiveOn()) {
     return (
       `${hello}${memory}\n\nHow can I help you today?\n\n` +
-      `1. Book Appointment\n2. My Appointments\n3. Cancel Appointment\n4. Reschedule Appointment\n\n` +
+      `1. Book Appointment\n2. My Appointments\n3. Cancel Appointment\n4. Reschedule Appointment\n5. My Medicines\n\n` +
       `Reply with a number, or just tell me what you need (e.g. "book a cardiologist tomorrow").`
     );
   }
@@ -475,6 +479,7 @@ const buildMenu = async (params: BookingParams): Promise<BotReply> => {
     { id: RID.MENU_APPTS, title: 'My Appointments' },
     { id: RID.MENU_CANCEL, title: 'Cancel Appointment' },
     { id: RID.MENU_RESCHED, title: 'Reschedule' },
+    { id: RID.MENU_RX, title: 'My Medicines', description: 'Prescription from your last visit' },
     { id: RID.TALK_HUMAN, title: 'Talk to clinic staff' }
   );
 
@@ -1098,6 +1103,31 @@ const doCheck = async (params: BookingParams): Promise<BotReply> => {
   return `Your upcoming appointments:\n\n${numbered(lines)}\n\nReply MENU for options.`;
 };
 
+// --- PRESCRIPTION ---------------------------------------------------------
+// "meri dawai batao" / menu 5. Read-only and single-shot: send the medicines
+// from the patient's last visit and return to the menu. The reply itself is
+// built by services/patientPrescription.service, shared with the MCP brain
+// skill so both paths answer identically.
+//
+// The PDF is sent by that service as a separate WhatsApp document; this returns
+// only the text. A failure there must not swallow the menu, so we degrade to a
+// plain message rather than letting the FSM's catch-all reset the session.
+const doPrescription = async (params: BookingParams): Promise<BotReply> => {
+  await resetSession(params, S.MENU);
+  try {
+    const reply = await deliverPrescriptionToPatient({
+      clinicId: params.clinicId,
+      phone: params.phone
+    });
+    why(params, 'menu option 5 → sent last prescription, back to MENU');
+    return `${reply}\n\nReply MENU for options.`;
+  } catch (err) {
+    console.error('[WhatsApp][booking] prescription lookup failed:', err);
+    why(params, 'menu option 5 → prescription lookup failed, back to MENU');
+    return `Sorry, I couldn't fetch your prescription just now. Please try again in a moment, or reply MENU for options.`;
+  }
+};
+
 // --- CANCEL ---------------------------------------------------------------
 const apptOptionsFrom = (
   appts: Awaited<ReturnType<typeof activeAppointments>>
@@ -1378,6 +1408,7 @@ const handleTopLevel = async (params: BookingParams, t: string): Promise<BotRepl
   if (n === 2) return doCheck(params);
   if (n === 3) return startCancel(params);
   if (n === 4) return startReschedule(params);
+  if (n === 5) return doPrescription(params);
 
   // Free text → AI Receptionist understanding (or deterministic fallback). It
   // ONLY classifies + extracts; the branch it routes into is pure FSM.
@@ -1431,6 +1462,8 @@ const handleTopLevel = async (params: BookingParams, t: string): Promise<BotRepl
       return startReschedule(params);
     case 'check':
       return doCheck(params);
+    case 'prescription':
+      return doPrescription(params);
     case 'menu':
       why(params, `input "${t}" is a greeting/menu request → MENU`);
       return showMenu(params);

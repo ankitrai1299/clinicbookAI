@@ -27,6 +27,8 @@ export type ReceptionistIntent =
   | 'cancel'
   | 'reschedule'
   | 'check'
+  // "meri dawai batao" — the medicines from the patient's last visit.
+  | 'prescription'
   | 'availability'
   | 'menu'
   | 'unknown';

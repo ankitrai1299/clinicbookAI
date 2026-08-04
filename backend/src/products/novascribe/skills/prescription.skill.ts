@@ -1,24 +1,15 @@
 // Patient-facing WhatsApp skill: a patient asks for their prescription and we
 // send back the MEDICINES from their latest MediScribe consultation report.
-// Read-only, single-shot, linked to the patient by their WhatsApp phone (see
-// mediscribeData.ts). Delivered as a reply to the patient's own request (inside
-// the WhatsApp 24h window, no template needed).
+// Read-only, single-shot, linked to the patient by their WhatsApp phone.
+//
+// The answer itself lives in services/patientPrescription.service.ts, shared
+// with the deterministic booking FSM — the brain and the FSM must give the same
+// patient the same prescription, so there is only one implementation of it.
 
 import { skillRegistry } from '../../../core/mcp/skillRegistry.js';
 import type { McpContext } from '../../../core/mcp/index.js';
 import type { Skill } from '../../../core/mcp/skill.types.js';
-import { sendWhatsAppDocument } from '../../../core/whatsapp/whatsapp.service.js';
-import { buildPrescriptionPdf, prescriptionFileName } from '../../mediscribe/services/prescriptionPdf.js';
-import { latestScribeConsultation, type MedRow } from './mediscribeData.js';
-
-const formatMeds = (items: MedRow[]): string =>
-  items
-    .map((it, i) => {
-      const parts = [it.dose || it.dosage, it.strength, it.frequency, it.duration].filter(Boolean).join(', ');
-      const notes = it.instructions ? ` (${it.instructions})` : '';
-      return `${i + 1}. ${it.medicine ?? 'Medicine'}${parts ? ` — ${parts}` : ''}${notes}`;
-    })
-    .join('\n');
+import { deliverPrescriptionToPatient } from '../../../services/patientPrescription.service.js';
 
 const phoneOf = (ctx: McpContext): string | undefined =>
   (typeof ctx.meta?.phone === 'string' ? (ctx.meta.phone as string) : undefined) ?? ctx.actor.externalId ?? undefined;
@@ -30,49 +21,10 @@ const prescriptionSkill: Skill = {
   handle: async (ctx: McpContext) => {
     if (!ctx.actor.patientId) return { reply: null, done: true };
 
-    const consult = await latestScribeConsultation(ctx.clinicId, phoneOf(ctx));
-    if (!consult) {
-      return {
-        reply:
-          'Aapke naam pe abhi koi prescription record nahi hai. 🙏 ' +
-          'Doctor ke visit ke baad wo yahan available ho jayegi.',
-        done: true
-      };
-    }
-
-    const meds = Array.isArray(consult.report.prescribedMedications) ? consult.report.prescribedMedications : [];
-    const advice = Array.isArray(consult.report.advice) ? consult.report.advice.filter(Boolean) : [];
-    const doctor = consult.doctorName ? `Dr. ${consult.doctorName.replace(/^dr\.?\s*/i, '')}` : 'your doctor';
-
-    // Send the ACTUAL prescription PDF too — the patient asked us, so the 24h
-    // window is open and a document is allowed. Best-effort: if the render or
-    // upload fails they still get the full text reply below.
     const phone = phoneOf(ctx);
-    if (phone) {
-      try {
-        const pdf = await buildPrescriptionPdf(consult);
-        if (pdf) {
-          await sendWhatsAppDocument({
-            to: phone,
-            data: pdf,
-            filename: prescriptionFileName(consult.patientName, consult.date),
-            caption: `Prescription — ${doctor}`,
-            messageType: 'prescription_pdf',
-            clinicId: ctx.clinicId,
-          });
-        }
-      } catch (err) {
-        console.error('[novascribe.prescription] PDF delivery failed:', err);
-      }
-    }
+    if (!phone) return { reply: null, done: true };
 
-    const lines: string[] = [`📋 *Your prescription* — ${doctor}`];
-    if (meds.length) lines.push('', '*Medicines:*', formatMeds(meds));
-    if (advice.length) lines.push('', `*Advice:* ${advice.join('; ')}`);
-    if (meds.length === 0 && advice.length === 0) lines.push('', 'Is visit ke liye koi dawai record nahi hui.');
-    lines.push('', 'ℹ️ Kisi bhi dawai ko lekar sawaal ho to clinic se poochein. Ye medical advice ka replacement nahi hai.');
-
-    return { reply: lines.join('\n'), done: true };
+    return { reply: await deliverPrescriptionToPatient({ clinicId: ctx.clinicId, phone }), done: true };
   }
 };
 
