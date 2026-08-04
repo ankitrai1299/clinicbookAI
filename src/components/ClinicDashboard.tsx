@@ -24,7 +24,7 @@ import PatientRecordModal from './PatientRecordModal';
 import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
 import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, convertWaitlistEntry as convertWaitlistEntryApi, ApiWaitlistEntry } from '../api/waitlist';
 import { getMyClinic as getMyClinicApi, updateMyClinic as updateMyClinicApi } from '../api/clinic';
-import { getMe } from '../api/auth';
+import { getMe, type AuthUser } from '../api/auth';
 import { getBillingStatus, createCheckoutSession as createCheckoutSessionApi, createPortalSession as createPortalSessionApi } from '../api/billing';
 import { getNotifications as getNotificationsApi, markAllNotificationsRead as markAllNotificationsReadApi, ApiNotification } from '../api/notifications';
 import { API_BASE } from '../api/client';
@@ -134,10 +134,11 @@ export default function ClinicDashboard({
   // are visible. STAFF = front desk (appointments/patients/doctors/waitlist only);
   // CLINIC_ADMIN + ADMIN see everything. Nothing is a hardcoded/demo role — it is
   // always the real role of the authenticated user.
-  const [role, setRole] = useState<string>('');
+  const [me, setMe] = useState<AuthUser | null>(null);
   useEffect(() => {
-    getMe().then((u) => setRole((u.role || '').toUpperCase())).catch(() => undefined);
+    getMe().then(setMe).catch(() => undefined);
   }, []);
+  const role = (me?.role || '').toUpperCase();
   const isStaff = role === 'STAFF';
   // What the header shows. It used to read "Clinic Admin" / "Admin Active" for
   // EVERYONE, hardcoded — so a doctor account looked like an admin account whose
@@ -678,9 +679,18 @@ export default function ClinicDashboard({
               <div className="w-8 h-8 rounded-full bg-sky-200 text-sky-800 font-bold flex items-center justify-center text-xs border border-sky-300">
                 🩺
               </div>
-              <div className="hidden lg:block text-left">
-                <span className="block text-[11px] font-bold text-slate-900 leading-tight">{clinicConfig.name}</span>
-                {roleLabel && <span className="block text-[9px] text-slate-400 leading-none">{roleLabel}</span>}
+              {/* WHO is signed in — not just which clinic. Two browser origins
+                  (the Vercel URL and the custom domain) keep separate sessions,
+                  so the same person can be admin on one and a doctor on the
+                  other. With only the clinic name here, the two looked like the
+                  same account with tabs mysteriously missing. */}
+              <div className="hidden lg:block text-left" title={me?.email || undefined}>
+                <span className="block text-[11px] font-bold text-slate-900 leading-tight">
+                  {me?.name || me?.email || clinicConfig.name}
+                </span>
+                <span className="block text-[9px] text-slate-400 leading-none">
+                  {roleLabel ? `${roleLabel} · ${clinicConfig.name}` : clinicConfig.name}
+                </span>
               </div>
             </div>
 
