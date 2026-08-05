@@ -1,3 +1,4 @@
+import { installProcessErrorHandlers } from './utils/observability.js';
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { ensureSlotUniqueIndex } from './config/ensureIndexes.js';
@@ -13,10 +14,17 @@ import { logEmailStartupInfo } from './services/email.service.js';
 const app = createApp();
 let server: ReturnType<typeof app.listen> | null = null;
 
-const shutdown = async (signal: NodeJS.Signals) => {
+// 'uncaughtException' is a shutdown too, but NOT a clean one: the process is in
+// an unknown state, so it exits non-zero. That distinction matters — Railway
+// restarts either way, but only a non-zero exit is recorded as a crash rather
+// than a routine redeploy, which is what makes a crash-loop visible.
+type ShutdownReason = NodeJS.Signals | 'uncaughtException';
+
+const shutdown = async (signal: ShutdownReason) => {
+  const code = signal === 'uncaughtException' ? 1 : 0;
   if (!server) {
     await disconnectDatabase();
-    process.exit(0);
+    process.exit(code);
   }
 
   await new Promise<void>((resolve) => {
@@ -25,7 +33,7 @@ const shutdown = async (signal: NodeJS.Signals) => {
 
   await disconnectDatabase();
   console.info(`Received ${signal}. Server shut down gracefully.`);
-  process.exit(0);
+  process.exit(code);
 };
 
 const startServer = async () => {
@@ -48,6 +56,14 @@ const startServer = async () => {
   startAutoCompleteVisitsCron();
   startWaitlistCron();
   startWebhookCron();
+
+  // Catch what escapes the fire-and-forget work scattered through the app (every
+  // `void send().catch()`). Without these an unhandled rejection restarts the
+  // whole backend with nothing in the logs to say why — the single hardest
+  // failure to diagnose after the fact.
+  installProcessErrorHandlers(() => {
+    void shutdown('uncaughtException');
+  });
 
   process.on('SIGINT', () => {
     void shutdown('SIGINT');

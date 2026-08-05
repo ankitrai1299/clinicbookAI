@@ -1,6 +1,8 @@
 import { ErrorRequestHandler } from 'express';
 
-export const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
+import { reportError } from '../utils/observability.js';
+
+export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
   if (res.headersSent) {
     return next(error);
   }
@@ -40,8 +42,20 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
   // Never leak internals to the client. Full detail (incl. stack) is logged
   // server-side; 5xx responses return a generic message regardless of env.
   if (statusCode >= 500) {
-    console.error('[error]', error);
+    const user = (req as typeof req & { user?: { clinicId?: string; userId?: string } }).user;
+    reportError(error, {
+      requestId: req.requestId,
+      method: req.method,
+      // req.path only — a query string can carry a phone number or a patient id.
+      path: req.path,
+      statusCode,
+      clinicId: user?.clinicId,
+      userId: user?.userId
+    });
     message = 'Internal server error';
+    // Returned so a clinic reporting a failure can quote the exact request.
+    res.status(statusCode).json({ success: false, message, requestId: req.requestId });
+    return;
   }
 
   res.status(statusCode).json({ success: false, message });

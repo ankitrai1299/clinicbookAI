@@ -7,6 +7,7 @@ import { env } from './config/env.js';
 import apiRouter from './routes/index.js';
 import { stripeWebhookHandler } from './core/billing/billing.controller.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { requestId } from './middleware/requestId.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { registerClinicBookCapabilities } from './products/clinicbook/clinicbook.capabilities.js';
@@ -61,6 +62,9 @@ export const createApp = () => {
   // Behind Railway's proxy: trust the first hop so express-rate-limit keys on the
   // real client IP (X-Forwarded-For) instead of the proxy address.
   app.set('trust proxy', 1);
+  // First, so every request — including ones rejected by helmet/cors below — is
+  // traceable by id.
+  app.use(requestId);
   app.use(helmet());
   app.use(
     cors({
