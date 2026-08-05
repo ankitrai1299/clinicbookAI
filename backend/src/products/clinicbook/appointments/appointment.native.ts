@@ -16,6 +16,7 @@ import type {
   AppointmentState,
   AppointmentCreateData,
   AppointmentUpdateData,
+  AppointmentListFilter,
   ApplyUpdateResult
 } from './appointment.port.js';
 import { LOST_RACE } from './appointment.port.js';
@@ -86,12 +87,34 @@ export const nativeAppointments = (clinicId: string): AppointmentPort => {
     }
   };
 
-  const list = (): Promise<AppointmentRecord[]> =>
-    db.appointment.findMany({
-      where: { clinicId },
+  // A clinic-local YYYY-MM-DD to the UTC instants the column is stored against.
+  // Dates are written at midnight UTC (normalizeDate), so a whole-day bound is an
+  // inclusive range rather than an equality test.
+  const dayStart = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
+  const dayEnd = (ymd: string) => new Date(`${ymd}T23:59:59.999Z`);
+
+  const list = (filter?: AppointmentListFilter): Promise<AppointmentRecord[]> => {
+    const date =
+      filter?.fromDate || filter?.toDate
+        ? {
+            ...(filter.fromDate ? { gte: dayStart(filter.fromDate) } : {}),
+            ...(filter.toDate ? { lte: dayEnd(filter.toDate) } : {})
+          }
+        : undefined;
+
+    return db.appointment.findMany({
+      where: {
+        clinicId,
+        ...(date ? { appointmentDate: date } : {}),
+        ...(filter?.statuses?.length ? { status: { in: filter.statuses } } : {}),
+        ...(filter?.doctorId ? { doctorId: filter.doctorId } : {}),
+        ...(filter?.patientId ? { patientId: filter.patientId } : {})
+      },
       orderBy: [{ appointmentDate: 'asc' }, { appointmentTime: 'asc' }],
-      include: appointmentInclude
+      include: appointmentInclude,
+      ...(filter?.limit ? { take: filter.limit } : {})
     });
+  };
 
   const findFull = (id: string): Promise<AppointmentRecord | null> =>
     db.appointment.findFirst({ where: { id, clinicId }, include: appointmentInclude });

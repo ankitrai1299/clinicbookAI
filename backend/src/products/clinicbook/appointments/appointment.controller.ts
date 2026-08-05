@@ -60,9 +60,31 @@ export const createAppointmentHandler = asyncHandler(async (req: Request, res: R
   });
 });
 
+// How far back the roster reaches when the caller doesn't say. The roster is an
+// audit view, so it must keep showing history — but "every appointment this
+// clinic has ever had, each one hydrated with its patient and doctor" is not a
+// query that stays cheap once clinics have a year of bookings behind them.
+// A year back plus everything ahead covers what staff actually scroll to, and
+// `from` lifts the floor for anyone who needs older records.
+const ROSTER_MONTHS_BACK = 12;
+const ROSTER_MAX_ROWS = 1000;
+
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+const isYmd = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
 export const getAppointmentsHandler = asyncHandler(async (req: Request, res: Response) => {
   const clinicId = getClinicId(req);
-  const appointments = await getAppointments(clinicId);
+  const { from, to, limit } = req.query;
+
+  const defaultFrom = new Date();
+  defaultFrom.setMonth(defaultFrom.getMonth() - ROSTER_MONTHS_BACK);
+
+  const parsedLimit = Number(limit);
+  const appointments = await getAppointments(clinicId, {
+    fromDate: isYmd(from) ? from : ymd(defaultFrom),
+    ...(isYmd(to) ? { toDate: to } : {}),
+    limit: Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, ROSTER_MAX_ROWS) : ROSTER_MAX_ROWS
+  });
 
   res.status(200).json({
     success: true,

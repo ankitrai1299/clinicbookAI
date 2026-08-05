@@ -299,10 +299,20 @@ export const listUpcomingAppointments = async (
     onlyDoctorId = doc?.id ?? '__no_match__';
   }
 
-  return (await getAppointments(clinicId))
-    .filter((a) => LIVE.has(a.status))
-    .filter((a) => dateStrOf(a.appointmentDate) >= today)
-    .filter((a) => onlyDoctorId === null || a.doctorId === onlyDoctorId)
+  // Filtered in the QUERY, not afterwards. This used to pull the clinic's entire
+  // appointment history — every row hydrated with its patient and doctor — and
+  // then throw away everything except today onwards, which is a handful of rows.
+  return (
+    await getAppointments(clinicId, {
+      fromDate: today,
+      statuses: [...LIVE],
+      ...(onlyDoctorId && onlyDoctorId !== '__no_match__' ? { doctorId: onlyDoctorId } : {}),
+      limit: 200
+    })
+  )
+    // A doctor whose login matched no Doctor row must see nothing — the sentinel
+    // can't go into the query, so it is still enforced here.
+    .filter(() => onlyDoctorId !== '__no_match__')
     .sort(
       (a, b) =>
         dateStrOf(a.appointmentDate).localeCompare(dateStrOf(b.appointmentDate)) ||

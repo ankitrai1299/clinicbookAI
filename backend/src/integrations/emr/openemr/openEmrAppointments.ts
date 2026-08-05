@@ -126,7 +126,7 @@ export const openEmrAppointments = (
   return {
     assertRefs: (doctorId, patientId) => mirror.assertRefs(doctorId, patientId),
     create,
-    list: () => mirror.list(),
+    list: (filter) => mirror.list(filter),
     findFull: (id) => mirror.findFull(id),
     findState: (id) => mirror.findState(id),
     applyUpdate

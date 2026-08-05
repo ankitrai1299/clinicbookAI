@@ -13,12 +13,12 @@ import { canonicalizeTime, isPastSlot } from '../../../services/scheduling.servi
 import { runPostVisitWorkflow } from './postVisit.service.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
 import { appointmentSourceFor } from './appointmentSource.js';
-import type { AppointmentRecord } from './appointment.port.js';
+import type { AppointmentRecord, AppointmentListFilter } from './appointment.port.js';
 import { LOST_RACE } from './appointment.port.js';
 
 // Re-exported so existing importers (postVisit.service, etc.) are unaffected by
 // the type's move into appointment.port.
-export type { AppointmentRecord } from './appointment.port.js';
+export type { AppointmentRecord, AppointmentListFilter } from './appointment.port.js';
 
 // This service owns the ORCHESTRATION of appointments — lifecycle guards,
 // WhatsApp + dashboard notifications, cross-product events, waitlist recovery,
@@ -257,8 +257,13 @@ export const createAppointment = async (
   return appointment;
 };
 
-export const getAppointments = (clinicId: string): Promise<AppointmentRecord[]> =>
-  appointmentSourceFor(clinicId).list();
+// Pass a filter whenever you know what you need. Callers that fetch everything
+// and then narrow in JavaScript pull a clinic's whole history — with patient and
+// doctor joined onto every row — to keep a handful of them.
+export const getAppointments = (
+  clinicId: string,
+  filter?: AppointmentListFilter
+): Promise<AppointmentRecord[]> => appointmentSourceFor(clinicId).list(filter);
 
 export const getSingleAppointment = async (clinicId: string, id: string): Promise<AppointmentRecord> => {
   const appointment = await appointmentSourceFor(clinicId).findFull(id);

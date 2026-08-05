@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import type { AppointmentStatus } from '@prisma/client';
 
 import { env } from '../../config/env.js';
 import { prisma } from '../../config/prisma.js';
@@ -271,10 +272,14 @@ const executeTool = async (
       const { date, patientName, doctorName, status } = args as {
         date?: string; patientName?: string; doctorName?: string; status?: string;
       };
-      const all = await getAppointments(clinicId);
+      // Date and status narrow in the query; the name matches are substring
+      // searches the DB filter can't express, so they stay here.
+      const all = await getAppointments(clinicId, {
+        ...(date ? { fromDate: date, toDate: date } : {}),
+        ...(status ? { statuses: [status as AppointmentStatus] } : {}),
+        limit: 500
+      });
       return all.filter(a => {
-        if (date && !a.appointmentDate.toISOString().startsWith(date)) return false;
-        if (status && a.status !== status) return false;
         if (patientName && !a.patient?.name.toLowerCase().includes(patientName.toLowerCase())) return false;
         if (doctorName && !a.doctor?.name.toLowerCase().includes(doctorName.toLowerCase())) return false;
         return true;

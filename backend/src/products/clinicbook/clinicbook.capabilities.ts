@@ -103,12 +103,15 @@ export const registerClinicBookCapabilities = (): void => {
     description: "List appointments — scoped to the acting patient on patient channels.",
     intents: ['check'],
     handler: async (ctx) => {
-      const all = await getAppointments(ctx.clinicId);
-      // Patient channels only ever see their OWN appointments.
+      // Patient channels only ever see their OWN appointments — scope it in the
+      // query rather than fetching the clinic's history and filtering after.
       if (ctx.actor.kind === 'patient' && ctx.actor.patientId) {
-        return all.filter((a) => a.patientId === ctx.actor.patientId);
+        const mine = await getAppointments(ctx.clinicId, { patientId: ctx.actor.patientId, limit: 100 });
+        // Redundant on purpose — see status.skill. A patient seeing someone
+        // else's appointment must not depend on the query filter alone.
+        return mine.filter((a) => a.patientId === ctx.actor.patientId);
       }
-      return all;
+      return getAppointments(ctx.clinicId, { limit: 500 });
     }
   });
 };

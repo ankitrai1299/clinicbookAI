@@ -37,7 +37,20 @@ const statusSkill: Skill = {
     if (!patientId) return { reply: null, done: true };
 
     const now = clinicNow();
-    const upcoming = (await getAppointments(ctx.clinicId))
+    // Patient + status + "today onwards" all go into the query; only the
+    // within-today time check has to stay in JS.
+    const upcoming = (
+      await getAppointments(ctx.clinicId, {
+        patientId,
+        statuses: [...LIVE],
+        fromDate: now.dateStr,
+        limit: 50
+      })
+    )
+      // Deliberately redundant with the query above. Showing one patient another
+      // patient's appointment is a data leak, so that guarantee does not rest on
+      // a filter object being built correctly — or on whichever data source is
+      // wired in behind the port actually honouring it.
       .filter((a) => a.patientId === patientId)
       .filter((a) => LIVE.has(a.status))
       .filter((a) => slotIsFuture(labelToMinutes(a.appointmentTime) ?? 0, dateStrOf(a.appointmentDate), now))

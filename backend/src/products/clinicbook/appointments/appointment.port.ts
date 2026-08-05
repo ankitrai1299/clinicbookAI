@@ -65,6 +65,31 @@ export interface AppointmentUpdateData {
 export const LOST_RACE = 'lost' as const;
 export type ApplyUpdateResult = AppointmentRecord | typeof LOST_RACE;
 
+/**
+ * Narrowing for list(). Every field is optional and omitting all of them keeps
+ * the original "everything for this clinic" behaviour.
+ *
+ * It exists because callers were fetching a clinic's ENTIRE appointment history —
+ * with the patient and doctor joined onto every row — and then discarding all but
+ * a handful in JavaScript. That is invisible on a clinic with four appointments
+ * and ruinous on one with a year of them, which is exactly the shape that only
+ * shows up once there are real clinics on the platform. Pushing the filter into
+ * the query also lets Postgres use the composite
+ * (clinicId, appointmentDate, appointmentTime) index that already exists.
+ */
+export interface AppointmentListFilter {
+  /** Clinic-local YYYY-MM-DD — only appointments on or after this day. */
+  fromDate?: string;
+  /** Clinic-local YYYY-MM-DD — only appointments on or before this day. */
+  toDate?: string;
+  /** Only these statuses (e.g. the live ones). */
+  statuses?: AppointmentStatus[];
+  doctorId?: string;
+  patientId?: string;
+  /** Hard cap on rows returned. */
+  limit?: number;
+}
+
 export interface AppointmentPort {
   /** Throw AppError(404) unless both the doctor and patient exist in this clinic. */
   assertRefs(doctorId: string, patientId: string): Promise<void>;
@@ -77,8 +102,11 @@ export interface AppointmentPort {
    */
   create(input: AppointmentCreateData): Promise<AppointmentRecord>;
 
-  /** All appointments for the clinic, ordered by date then time (hydrated). */
-  list(): Promise<AppointmentRecord[]>;
+  /**
+   * Appointments for the clinic, ordered by date then time (hydrated).
+   * Narrow with `filter` — omitting it returns everything, as before.
+   */
+  list(filter?: AppointmentListFilter): Promise<AppointmentRecord[]>;
 
   /** Fully-hydrated appointment by id, or null if it doesn't exist here. */
   findFull(id: string): Promise<AppointmentRecord | null>;
