@@ -82,15 +82,15 @@ export const registerAutoCompleteActions = (): void => {
   });
 };
 
-const dayEndInstant = async (appt: { doctorId: string; clinicId: string; appointmentDate: Date; appointmentTime: string }): Promise<Date> => {
-  const start = clinicLocalInstant(appt.appointmentDate, appt.appointmentTime);
-  const sched = await prisma.doctorSchedule.findFirst({
-    where: { clinicId: appt.clinicId, doctorId: appt.doctorId, dayOfWeek: appt.appointmentDate.getUTCDay(), isActive: true },
-    select: { slotMinutes: true }
-  });
-  const mins = sched?.slotMinutes ?? DEFAULT_SLOT_MIN;
-  return new Date(start.getTime() + mins * 60_000);
-};
+// PURE: when a booked slot ends, given its doctor's slot length.
+export const slotEndInstant = (
+  appt: { appointmentDate: Date; appointmentTime: string },
+  slotMinutes: number
+): Date => new Date(clinicLocalInstant(appt.appointmentDate, appt.appointmentTime).getTime() + slotMinutes * 60_000);
+
+const scheduleKey = (doctorId: string, dayOfWeek: number) => `${doctorId}|${dayOfWeek}`;
+const patientDayKey = (clinicId: string, patientId: string, date: Date) =>
+  `${clinicId}|${patientId}|${date.toISOString().slice(0, 10)}`;
 
 /**
  * SAFETY NET, not the primary path. Since mediscribe/appointmentCompletion.ts, a
@@ -116,30 +116,77 @@ export const processAutoCompleteVisits = async (): Promise<void> => {
     select: { id: true, clinicId: true, doctorId: true, patientId: true, appointmentDate: true, appointmentTime: true }
   });
 
-  for (const a of appts) {
-    try {
-      const end = await dayEndInstant(a);
-      if (end.getTime() > now.getTime()) continue; // slot hasn't ended yet
+  if (!appts.length) return;
 
-      const scribe = await finalizedScribeForPatient(a.clinicId, a.patientId);
-      if (!scribe) continue; // scribe not used → leave manual
+  // ── Batched lookups ──────────────────────────────────────────────────────
+  // Every lookup below used to sit INSIDE the loop, so a sweep cost roughly
+  // three queries per candidate appointment and ran every five minutes whether
+  // or not anything was due. At a hundred clinics that is thousands of queries
+  // per sweep for, usually, nothing. Same decisions, three queries.
+
+  // 1. Slot lengths. @@unique([doctorId, dayOfWeek]) so doctor+day is the key.
+  const schedules = await prisma.doctorSchedule.findMany({
+    where: { doctorId: { in: [...new Set(appts.map((a) => a.doctorId))] }, isActive: true },
+    select: { doctorId: true, dayOfWeek: true, slotMinutes: true }
+  });
+  const slotMinutes = new Map(schedules.map((s) => [scheduleKey(s.doctorId, s.dayOfWeek), s.slotMinutes]));
+
+  // Only appointments whose slot has ENDED need the remaining lookups, so narrow
+  // before spending them.
+  const ended = appts.filter(
+    (a) =>
+      slotEndInstant(a, slotMinutes.get(scheduleKey(a.doctorId, a.appointmentDate.getUTCDay())) ?? DEFAULT_SLOT_MIN) <=
+      now
+  );
+  if (!ended.length) return;
+
+  // 2. How many live appointments each patient has that day — one groupBy
+  // instead of a count() per appointment. appointmentDate is stored at midnight
+  // UTC, so it groups cleanly per calendar day.
+  const dayCounts = await prisma.appointment.groupBy({
+    by: ['clinicId', 'patientId', 'appointmentDate'],
+    where: {
+      status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
+      patientId: { in: [...new Set(ended.map((a) => a.patientId))] },
+      appointmentDate: { gte: from }
+    },
+    _count: { _all: true }
+  });
+  const liveThatDay = new Map(
+    dayCounts.map((g) => [patientDayKey(g.clinicId, g.patientId, g.appointmentDate), g._count._all])
+  );
+
+  // 3. Finalized scribe notes, one query per clinic in the sweep (NovaDoc is
+  // keyed by clinic, and the (clinicId, collection, patientId) index covers it).
+  const byClinic = new Map<string, string[]>();
+  for (const a of ended) {
+    if (!byClinic.has(a.clinicId)) byClinic.set(a.clinicId, []);
+    byClinic.get(a.clinicId)!.push(a.patientId);
+  }
+  const hasFinalizedScribe = new Set<string>();
+  for (const [clinicId, patientIds] of byClinic) {
+    const rows = await prisma.novaDoc.findMany({
+      where: { clinicId, collection: 'consultations', patientId: { in: [...new Set(patientIds)] } },
+      select: { patientId: true, data: true }
+    });
+    for (const r of rows) {
+      const d = r.data as { status?: string; report?: unknown } | null;
+      if (r.patientId && d?.status === 'Completed' && d?.report) {
+        hasFinalizedScribe.add(`${clinicId}|${r.patientId}`);
+      }
+    }
+  }
+
+  // ── Decide + complete ────────────────────────────────────────────────────
+  for (const a of ended) {
+    try {
+      if (!hasFinalizedScribe.has(`${a.clinicId}|${a.patientId}`)) continue; // scribe not used → leave manual
 
       // Per-PATIENT matching can't disambiguate two bookings on one day.
-      const day = a.appointmentDate.toISOString().slice(0, 10);
-      const sameDay = await prisma.appointment.count({
-        where: {
-          clinicId: a.clinicId,
-          patientId: a.patientId,
-          status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
-          appointmentDate: {
-            gte: new Date(`${day}T00:00:00.000Z`),
-            lte: new Date(`${day}T23:59:59.999Z`)
-          }
-        }
-      });
+      const sameDay = liveThatDay.get(patientDayKey(a.clinicId, a.patientId, a.appointmentDate)) ?? 1;
       if (sameDay > 1) {
         console.info(
-          `[AutoComplete] Visit ${a.id} skipped — patient has ${sameDay} live appointments on ${day}, cannot tell which the note documents.`
+          `[AutoComplete] Visit ${a.id} skipped — patient has ${sameDay} live appointments that day, cannot tell which the note documents.`
         );
         continue;
       }
