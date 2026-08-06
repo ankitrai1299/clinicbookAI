@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mediscribe-app",
+    "name": "MediScribe AI",
     "slug": "mediscribe-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,8 +11,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.nextdot.novascribeai",
       "infoPlist": {
-        "NSSpeechRecognitionUsageDescription": "Allow NovaScribe AI to recognize speech for live transcription.",
-        "NSMicrophoneUsageDescription": "Allow NovaScribe AI to use the microphone for live transcription."
+        "NSSpeechRecognitionUsageDescription": "Allow MediScribe AI to recognize speech for live transcription.",
+        "NSMicrophoneUsageDescription": "Allow MediScribe AI to use the microphone for live transcription."
       }
     },
     "android": {
@@ -50,14 +50,14 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow NovaScribe AI to access your microphone to record consultations."
+          "microphonePermission": "Allow MediScribe AI to access your microphone to record consultations."
         }
       ],
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Allow NovaScribe AI to use the microphone for live transcription.",
-          "speechRecognitionPermission": "Allow NovaScribe AI to recognize speech for live transcription.",
+          "microphonePermission": "Allow MediScribe AI to use the microphone for live transcription.",
+          "speechRecognitionPermission": "Allow MediScribe AI to recognize speech for live transcription.",
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"
           ]
