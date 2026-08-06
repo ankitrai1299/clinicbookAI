@@ -165,6 +165,52 @@ model WhatsAppTemplateStatus {
   @@index([clinicId])
 }
 
+// ─── Shared state that used to live in one process's memory ────────────────
+// These three exist for one reason: the backend could only ever run as a SINGLE
+// instance. Inbound de-duplication, the cron schedule and the daily send cap
+// were all in-process Maps, so a second instance would process every WhatsApp
+// message twice, fire every reminder twice, and grant every clinic double its
+// send budget. Moving them into the database is what makes a second instance —
+// and therefore any redundancy at all — safe.
+
+// Inbound WhatsApp idempotency. Meta retries a webhook until it gets a 200, so
+// the same message id can arrive several times, on any instance. The PRIMARY KEY
+// is the guard: processing is claimed with an insert, and a duplicate insert
+// fails rather than being processed again. Rows are swept after a short
+// retention — Meta's retries are minutes, not days.
+model ProcessedInboundMessage {
+  waMessageId String   @id
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
+}
+
+// Leader election for the in-process crons. Each tick tries to take a short
+// lease; whoever holds it runs, everyone else skips. The lease EXPIRES rather
+// than being released, so an instance that dies mid-tick cannot wedge the job
+// forever — the next tick reclaims it.
+model CronLock {
+  name       String   @id
+  holder     String
+  acquiredAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+}
+
+// Per-clinic daily outbound WhatsApp counter. Not a billing meter — a
+// runaway-cost backstop. Held per (clinic, day) so it resets naturally and can
+// be incremented atomically from any instance.
+model WhatsAppSendCounter {
+  clinicKey String
+  day       String // YYYY-MM-DD (UTC)
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([clinicKey, day])
+  @@index([day])
+}
+
 // Binds a patient's WhatsApp phone to the clinic they belong to, so that ONE
 // shared platform number can serve many clinics: the patient's first message
 // carries a clinic join code (from a QR/link), we record the binding here, and

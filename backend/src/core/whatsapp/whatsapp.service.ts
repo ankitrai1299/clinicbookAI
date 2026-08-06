@@ -71,11 +71,13 @@ const sandboxIntercept = async (
 // SUPPRESS further sends (a synthetic response, like sandbox) and log loudly, so a
 // runaway loop or abuse can never run up an unbounded WhatsApp bill. Runs AFTER
 // sandboxIntercept, so suppressed sandbox sends never consume real quota.
-const dailyCapIntercept = (
+// Async since the counter moved into the database — it is shared across
+// instances now, so it cannot be read synchronously from memory.
+const dailyCapIntercept = async (
   clinicId: string | null | undefined,
   label: string
-): AxiosResponse<WhatsAppSendMessageResponse> | null => {
-  const quota = consumeDailySendQuota(clinicId);
+): Promise<AxiosResponse<WhatsAppSendMessageResponse> | null> => {
+  const quota = await consumeDailySendQuota(clinicId);
   if (quota.allowed) return null;
   console.error(
     `[WhatsApp][cap] daily send cap ${quota.cap} reached for clinic ${clinicId ?? 'env-default'} — suppressing ${label}. Raise WA_DAILY_SEND_CAP or investigate abuse.`
@@ -127,7 +129,7 @@ export const sendWhatsAppTextMessage = async (
   const suppressed = await sandboxIntercept(input.clinicId, 'text');
   if (suppressed) return suppressed;
 
-  const capped = dailyCapIntercept(input.clinicId, 'text');
+  const capped = await dailyCapIntercept(input.clinicId, 'text');
   if (capped) return capped;
 
   const messageType = input.messageType ?? 'session_text';
@@ -240,7 +242,7 @@ export const sendWhatsAppDocument = async (input: {
   if (intercepted) return true;
   const suppressed = await sandboxIntercept(input.clinicId, label);
   if (suppressed) return true;
-  if (dailyCapIntercept(input.clinicId, label)) return true;
+  if (await dailyCapIntercept(input.clinicId, label)) return true;
 
   const mimeType = input.mimeType ?? 'application/pdf';
   const mediaId = await uploadWhatsAppMedia({
@@ -362,7 +364,7 @@ export const sendWhatsAppInteractive = async (input: {
   const suppressed = await sandboxIntercept(input.clinicId, 'interactive');
   if (suppressed) return suppressed;
 
-  const capped = dailyCapIntercept(input.clinicId, 'interactive');
+  const capped = await dailyCapIntercept(input.clinicId, 'interactive');
   if (capped) return capped;
 
   const messageType = input.messageType ?? 'interactive';
@@ -436,7 +438,7 @@ export const sendWhatsAppTemplateMessage = async (params: {
   const suppressed = await sandboxIntercept(params.clinicId, 'template');
   if (suppressed) return suppressed;
 
-  const capped = dailyCapIntercept(params.clinicId, 'template');
+  const capped = await dailyCapIntercept(params.clinicId, 'template');
   if (capped) return capped;
 
   const messageType = `template:${params.templateName}`;

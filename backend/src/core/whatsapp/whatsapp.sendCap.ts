@@ -3,17 +3,22 @@
 // through signup) could trigger unbounded WhatsApp sends, each of which costs
 // money at Meta, and run up the platform's bill.
 //
-// This is NOT a billing meter. It is an in-memory, per-process counter that resets
-// on restart and at each date change. It is enough to stop a runaway loop or an
-// abuser from spending unbounded money within a day. A precise, restart-proof,
-// multi-instance quota would live in the DB or Redis — revisit if we ever run more
-// than one backend instance. Kept in memory on purpose so it adds NO schema (a
-// prod schema push is a separate, careful step) and no hot-path DB query.
+// This is NOT a billing meter, but it IS now shared. It used to be an in-process
+// counter, which meant two things: it reset on every restart, and with a second
+// instance each one kept its own tally — so the effective cap was the configured
+// number multiplied by however many instances happened to be running. The
+// counter now lives in the database, incremented atomically, so the budget is
+// the budget no matter who is serving the request.
+//
+// The increment is a single INSERT … ON CONFLICT DO UPDATE, so concurrent sends
+// from different instances cannot both read "999" and both decide to send.
 //
 // Configuration (env, read live so ops can tune without a redeploy of logic):
 //   WA_DAILY_SEND_CAP            messages per clinic per day (default 1000; <= 0 disables the cap)
 //   WA_SEND_CAP_EXEMPT_CLINICS   comma-separated clinicIds never capped
 //                                (e.g. the established production clinic)
+
+import { prisma } from '../../config/prisma.js';
 
 const DEFAULT_CAP = 1000;
 
@@ -34,10 +39,7 @@ const exemptClinics = (): Set<string> => {
   return new Set(ids);
 };
 
-type Bucket = { day: string; count: number };
-const buckets = new Map<string, Bucket>();
-
-const dayKey = (): string => new Date().toISOString().slice(0, 10);
+const dayKey = (at: Date = new Date()): string => at.toISOString().slice(0, 10);
 
 export interface QuotaResult {
   allowed: boolean;
@@ -45,27 +47,54 @@ export interface QuotaResult {
   cap: number;
 }
 
-// Reserve one send from the clinic's daily budget. Increments the count when
-// allowed; once the cap is reached it returns allowed:false WITHOUT incrementing
-// further, so a clinic sitting at the cap keeps being blocked (not overflowing).
-export const consumeDailySendQuota = (clinicId?: string | null): QuotaResult => {
+// PURE: given the count AFTER incrementing, may this send proceed? Split out so
+// the off-by-one is testable — with a cap of 1000 the thousandth send must be
+// allowed and the thousand-and-first blocked.
+export const decideQuota = (countAfterIncrement: number, cap: number): boolean =>
+  countAfterIncrement <= cap;
+
+/**
+ * Reserve one send from the clinic's daily budget.
+ *
+ * FAILS OPEN. If the counter can't be reached, the send proceeds: this is a
+ * cost backstop, and a database blip must not stop a clinic replying to its
+ * patients. The cap protects against a runaway loop, which a brief outage is not.
+ */
+export const consumeDailySendQuota = async (
+  clinicId?: string | null,
+  at: Date = new Date()
+): Promise<QuotaResult> => {
   const limit = capLimit();
   const key = clinicId ?? 'env-default';
 
   // Cap disabled, or an explicitly trusted clinic → always allow, don't track.
   if (limit <= 0 || exemptClinics().has(key)) return { allowed: true, count: 0, cap: limit };
 
-  const day = dayKey();
-  let bucket = buckets.get(key);
-  if (!bucket || bucket.day !== day) {
-    bucket = { day, count: 0 };
-    buckets.set(key, bucket);
+  const day = dayKey(at);
+  try {
+    // One statement: insert the day's row or bump it, and return the new value.
+    // Two instances racing both get their own distinct count back, so exactly one
+    // of them can be the request that crosses the cap.
+    const rows = await prisma.$queryRaw<Array<{ count: number }>>`
+      INSERT INTO "WhatsAppSendCounter" ("clinicKey", "day", "count", "updatedAt")
+      VALUES (${key}, ${day}, 1, NOW())
+      ON CONFLICT ("clinicKey", "day")
+      DO UPDATE SET "count" = "WhatsAppSendCounter"."count" + 1, "updatedAt" = NOW()
+      RETURNING "count"
+    `;
+    const count = rows[0]?.count ?? 0;
+    return { allowed: decideQuota(count, limit), count, cap: limit };
+  } catch (err) {
+    console.error('[WhatsApp][cap] counter unavailable — allowing the send:', err);
+    return { allowed: true, count: 0, cap: limit };
   }
-
-  if (bucket.count >= limit) return { allowed: false, count: bucket.count, cap: limit };
-  bucket.count += 1;
-  return { allowed: true, count: bucket.count, cap: limit };
 };
 
-// Test/ops helper — drop all counters (e.g. between tests).
-export const resetSendCaps = (): void => buckets.clear();
+// Test/ops helper — clear today's counters (or a specific day).
+export const resetSendCaps = async (day?: string): Promise<void> => {
+  try {
+    await prisma.whatsAppSendCounter.deleteMany(day ? { where: { day } } : undefined);
+  } catch {
+    /* best-effort; only used by tests and ops */
+  }
+};

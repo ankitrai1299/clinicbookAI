@@ -13,11 +13,13 @@
 //     this orchestrator's single reply (the booking tool suppresses its own
 //     confirmation — see createAppointment notify:false).
 //
-// NOTE: dedup + serialization are in-process, which is correct for the current
-// single-instance backend. Horizontal scaling would need a shared store (Redis /
-// DB row lock) keyed on the same ids.
+// NOTE: de-duplication is claimed in the DATABASE (whatsapp.dedupe.ts), so a
+// Meta retry landing on a different instance is still recognised as a duplicate.
+// Per-sender serialization is still in-process — see the comment on `queues`
+// below for why that is deliberate and what protects correctness without it.
 
 import { prisma } from '../../config/prisma.js';
+import { claimInboundMessage } from './whatsapp.dedupe.js';
 import { dataSourceFor } from '../datasource/index.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
@@ -51,19 +53,21 @@ const SAFE_FALLBACK =
 
 const PLATFORM_CLINIC_EMAIL = 'platform@clinicbook.ai';
 
-// --- Idempotency: remember recently-processed inbound message ids. ----------
-const processedMessageIds = new Set<string>();
-const DEDUP_MAX = 1000;
-const markProcessed = (id: string) => {
-  processedMessageIds.add(id);
-  if (processedMessageIds.size > DEDUP_MAX) {
-    // Evict oldest (insertion order) to bound memory.
-    const oldest = processedMessageIds.values().next().value;
-    if (oldest !== undefined) processedMessageIds.delete(oldest);
-  }
-};
-
 // --- Per-sender serialization: a tail-promise chain keyed by phone. ---------
+//
+// This one stays IN-PROCESS on purpose. Serialising across instances would need
+// a distributed lock held for the whole turn — AI call, WhatsApp send and all —
+// and this deployment talks to Postgres through pgbouncer in transaction-pooling
+// mode, where session-level advisory locks do not survive. A fragile lock around
+// the slowest path in the app would trade a real outage risk for an ordering
+// nicety.
+//
+// It is a nicety because nothing correctness-critical rests on it: duplicate
+// deliveries are stopped by the DB claim above, FSM state lives in the
+// WhatsAppSession row rather than in memory, and double-booking is prevented by
+// the partial unique index on (clinicId, doctorId, date, time). Two messages
+// from one patient landing on two instances at the exact same moment can produce
+// an out-of-order reply — not a lost or duplicated booking.
 const queues = new Map<string, Promise<void>>();
 
 // Phone numbers reach us in many shapes: Meta sends digits-only international
@@ -410,15 +414,29 @@ export const handleInboundText = (
   }
 
   // 1. Idempotency — drop duplicate/retried deliveries of the same message.
+  // Claimed in the DB, not in memory, so a retry landing on a DIFFERENT instance
+  // is still recognised as a duplicate.
   if (inboundWamid) {
-    if (processedMessageIds.has(inboundWamid)) {
-      console.info('[WhatsApp] Duplicate inbound ignored (idempotency)', { inboundWamid });
-      return Promise.resolve();
-    }
-    markProcessed(inboundWamid);
+    return claimInboundMessage(inboundWamid).then((claimed) => {
+      if (!claimed) {
+        console.info('[WhatsApp] Duplicate inbound ignored (idempotency)', { inboundWamid });
+        return;
+      }
+      return enqueueTurn(from, text, inboundWamid, interactiveId, options);
+    });
   }
 
-  // 2. Serialize per sender so turns are handled one-at-a-time, in order.
+  return enqueueTurn(from, text, inboundWamid, interactiveId, options);
+};
+
+// 2. Serialize per sender so turns are handled one-at-a-time, in order.
+const enqueueTurn = (
+  from: string,
+  text: string,
+  inboundWamid?: string,
+  interactiveId?: string,
+  options?: { fromVoice?: boolean; phoneNumberId?: string | null }
+): Promise<void> => {
   const key = from.replace(/\D/g, '');
   const prev = queues.get(key) ?? Promise.resolve();
   const next = prev
