@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, MessageCircle, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Loader2, MessageCircle, RefreshCw, AlertCircle, ShieldCheck, ClipboardCheck, ChevronDown } from 'lucide-react';
 
 import {
   completeEmbeddedSignup,
@@ -485,6 +485,15 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
           : 'Connect your WhatsApp Business number so patients can book, reschedule, and get reminders — all inside WhatsApp.'}
       </p>
 
+      {/* The three things that decide whether this works, shown BEFORE the popup.
+          Meta owns everything inside it, so the only place we can prevent a
+          failed attempt is here. In order of how often each one is the cause:
+          an existing WhatsApp account on the number is fatal and invisible until
+          verification fails; the phone-call option is easy to miss because SMS
+          is the default; and a landline is what most clinics should use but few
+          realise they can. */}
+      {!reconnect && <PrepChecklist />}
+
       {error && (
         <div className="flex items-start gap-2 px-3 py-2 mb-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -529,6 +538,62 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
           : 'Secure official Meta sign-in. We never see your password.'}
       </p>
     </Card>
+  );
+}
+
+// Everything a clinic needs to get through Meta's popup first time. Collapsed by
+// default so the card stays a single button for anyone who already knows.
+function PrepChecklist() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left cursor-pointer hover:bg-slate-100/70"
+      >
+        <ClipboardCheck className="w-4 h-4 text-slate-500 shrink-0" />
+        <span className="text-xs font-bold text-slate-700">Before you start — 3 things (2 min read)</span>
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 ml-auto shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="px-3.5 pb-3.5 pt-1 space-y-3 text-xs text-slate-600">
+          <div>
+            <p className="font-bold text-slate-800">1. You can use your reception landline</p>
+            <p className="mt-0.5">
+              It does not have to be a mobile, and it should not be anyone’s personal number. Any number
+              your clinic already gives patients works — the one on your board or visiting card.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-bold text-slate-800">2. Choose “verify by phone call”, not SMS</p>
+            <p className="mt-0.5">
+              A landline cannot receive an SMS, but it can take a call. Meta rings the number and reads out
+              a 6-digit code — so have someone at the phone, ready to write it down. If the line answers
+              with a menu (“press 1 for…”), point it at a desk phone first, or nobody will hear the code.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-bold text-rose-700">3. The number must not already be on WhatsApp</p>
+            <p className="mt-0.5">
+              A number can be on the normal WhatsApp app <em>or</em> on WhatsApp Business API — never both.
+              If it is already on WhatsApp, delete that account first (WhatsApp → Settings → Account →
+              Delete my account). Skipping this is the most common reason verification fails.
+            </p>
+          </div>
+
+          <p className="pt-1 border-t border-slate-200 text-slate-500">
+            Takes about 10 minutes, once. After the code is accepted we set the number up for messaging and
+            submit your message templates automatically — nothing else for you to do.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
