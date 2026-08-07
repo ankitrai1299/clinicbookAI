@@ -778,7 +778,11 @@ export default function ClinicDashboard({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setShowAddWalkIn(true)}
-                        className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition-all duration-200 w-full sm:w-auto whitespace-nowrap"
+                        // Deliberately NOT full-width on mobile: the floating
+                        // assistant button is fixed to the bottom-right, and a
+                        // full-width button runs straight underneath it, leaving
+                        // its right end untappable.
+                        className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-all duration-200 self-start whitespace-nowrap"
                         id="add-walk-in-trigger-btn"
                       >
                         <Plus className="w-3.5 h-3.5" />
