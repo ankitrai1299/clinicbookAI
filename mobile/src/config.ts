@@ -41,12 +41,17 @@ export const isApiConfigured = (): boolean => API_ROOT.length > 0;
 const WEB_URL_FALLBACK = 'https://clinicbook-ai-yj2d.vercel.app';
 export const WEB_ROOT = (process.env.EXPO_PUBLIC_WEB_URL || WEB_URL_FALLBACK || '').replace(/\/+$/, '');
 
-// The phone app is MediScribe — the doctor's scribe. This shell exists for the
-// scribe specifically: it carries the microphone permission for live recording
-// and the PDF share/print bridges, none of which the booking desk needs.
-export const APP_LABEL = 'MediScribe AI';
+// Which of the two apps THIS build is. Must match the flavour app.config.ts
+// used, or the app would carry one product's name and open the other's screens.
+// Both are read from the same EXPO_PUBLIC_APP_FLAVOR so they cannot disagree.
+export const APP_FLAVOR: 'clinicbook' | 'mediscribe' =
+  (process.env.EXPO_PUBLIC_APP_FLAVOR || '').trim().toLowerCase() === 'clinicbook'
+    ? 'clinicbook'
+    : 'mediscribe';
 
-// Open straight into the scribe (the web app reads `?app=novascribe`, skips the
-// product hub → login → the scribe dashboard). The routing key is still the
-// historic `novascribe` even though the product is branded MediScribe.
-export const WEB_APP_URL = `${WEB_ROOT}/?app=novascribe`;
+export const APP_LABEL = APP_FLAVOR === 'clinicbook' ? 'ClinicBook AI' : 'MediScribe AI';
+
+// Open straight into the right product — the web app reads `?app=…` and skips
+// the product hub, going login → that product's dashboard. The scribe's routing
+// key is still the historic `novascribe` even though it is branded MediScribe.
+export const WEB_APP_URL = `${WEB_ROOT}/?app=${APP_FLAVOR === 'clinicbook' ? 'clinicbook' : 'novascribe'}`;
