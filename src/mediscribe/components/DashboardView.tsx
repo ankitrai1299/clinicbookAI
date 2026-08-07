@@ -9,6 +9,9 @@ interface DashboardViewProps {
   reportsCount?: number;
   prescriptionsCount?: number;
   upcomingAppointments?: UpcomingAppointment[];
+  // Who is signed in, so the page can say whose panel this is.
+  signedInName?: string;
+  roleLabel?: string;
   // False when this login has no matching ClinicBook Doctor — the queue is then
   // empty for a reason the doctor cannot see or fix themselves.
   doctorLinked?: boolean;
@@ -33,6 +36,8 @@ export default function DashboardView({
   reportsCount,
   prescriptionsCount,
   upcomingAppointments = [],
+  signedInName,
+  roleLabel,
   doctorLinked = true,
   loginEmail,
   onStartNew,
@@ -102,7 +107,20 @@ export default function DashboardView({
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2 text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 font-medium">Ready for your next patient?</p>
+          {/* Name the account. A clinic machine gets shared, and this page said
+              only "Dashboard" — so whose panel was open, and therefore whose
+              patients and queue these are, could not be answered from the screen. */}
+          <p className="text-slate-500 font-medium">
+            {signedInName ? (
+              <>
+                <span className="text-slate-800 font-semibold">{signedInName}</span>
+                {roleLabel && <span className="text-slate-400"> · {roleLabel}</span>}
+                <span className="hidden sm:inline"> — ready for your next patient?</span>
+              </>
+            ) : (
+              'Ready for your next patient?'
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {onQuickRx && (

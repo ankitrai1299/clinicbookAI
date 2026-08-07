@@ -1,6 +1,7 @@
 import { LayoutDashboard, Users, Clock, Settings, Shield, LayoutGrid, Sparkles } from 'lucide-react';
 import Logo from './Logo';
-import type { Permission } from '../contracts';
+import { ROLE_LABELS, type Permission } from '../contracts';
+import { useAuth } from '../context/Auth';
 
 interface SidebarProps {
   activeView: string;
@@ -28,6 +29,7 @@ export const NAV_ITEMS: { id: string; label: string; icon: typeof LayoutDashboar
 ];
 
 export default function Sidebar({ activeView, onNavigate, onExitToHub, doctorName, canView }: SidebarProps) {
+  const { user } = useAuth();
   const navItems = NAV_ITEMS.filter((i) => !canView || canView(i.permission));
 
   return (
@@ -68,13 +70,20 @@ export default function Sidebar({ activeView, onNavigate, onExitToHub, doctorNam
             All Apps
           </button>
         )}
-        <div className="flex items-center gap-3 px-2 py-2">
-          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white font-semibold">
-            {(doctorName || 'D').trim().charAt(0).toUpperCase()}
+        {/* Whose panel this is. The role used to be the fixed word "Clinician",
+            which is wrong for anyone who isn't one — an admin signed in here saw
+            themselves described as a clinician. It now comes from the session. */}
+        <div className="flex items-center gap-3 px-2 py-2" title={user?.email || undefined}>
+          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white font-semibold shrink-0">
+            {(doctorName || user?.name || 'D').trim().charAt(0).toUpperCase()}
           </div>
           <div className="text-left min-w-0">
-            <div className="text-sm font-semibold text-white truncate">{doctorName || 'Doctor'}</div>
-            <div className="text-xs text-slate-400">Clinician</div>
+            <div className="text-sm font-semibold text-white truncate">
+              {doctorName || user?.name || 'Signed in'}
+            </div>
+            <div className="text-xs text-slate-400 truncate">
+              {user?.role ? ROLE_LABELS[user.role] : ''}
+            </div>
           </div>
         </div>
       </div>

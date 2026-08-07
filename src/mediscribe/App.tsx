@@ -14,7 +14,7 @@ import { Menu, X, ArrowLeft } from 'lucide-react';
 import Logo from './components/Logo';
 import Sidebar from './components/Sidebar';
 import { useAuth } from './context/Auth';
-import type { Permission } from './contracts';
+import { ROLE_LABELS, type Permission } from './contracts';
 import { isMobileApp } from './utils/platform';
 // Native-style phone-app shell (WebView only — never used by the web).
 const MobileShell = lazy(() => import('./mobile/MobileShell'));
@@ -462,6 +462,8 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             reportsCount={reports.length}
             prescriptionsCount={prescriptions.length}
             upcomingAppointments={upcomingAppointments}
+            signedInName={signedInName}
+            roleLabel={user?.role ? ROLE_LABELS[user.role] : undefined}
             doctorLinked={doctorLink.linked}
             loginEmail={doctorLink.email}
             onStartNew={handleStartNewConsultation}
