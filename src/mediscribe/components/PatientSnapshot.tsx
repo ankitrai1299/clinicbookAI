@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { History, Pill, CalendarClock, Stethoscope, ChevronDown, ChevronUp } from 'lucide-react';
 import { ConsultationHistoryItem } from '../types';
 import { getPatientHistory } from '../services/api';
+import { resolveFollowUp } from '../utils/followUpDate';
 
 // Visit-start snapshot: the 5-second catch-up a doctor needs the moment a
 // consultation opens — when they were last seen, what for, what they're currently
@@ -59,7 +60,10 @@ export default function PatientSnapshot({ patientId, patientName }: Props) {
   const diagnosis = last.diagnosis.filter(Boolean);
   const complaints = last.chiefComplaints.filter(Boolean);
   const meds = last.medicines.filter((m) => (m.medicine || '').trim());
-  const followUp = (last.followUp || '').trim();
+  // Resolve rather than print. The stored line is whatever the model wrote — it
+  // can be a real date, an instruction, or a date whose weekday does not match
+  // the calendar, and all three used to render identically after "Follow-up".
+  const followUp = resolveFollowUp(last.followUp, { visitDate: last.visitDateTime });
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
@@ -110,9 +114,22 @@ export default function PatientSnapshot({ patientId, patientName }: Props) {
             <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">
               <CalendarClock size={12} /> Follow-up
             </div>
-            {followUp ? (
-              <p className="text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 leading-snug inline-block">
-                {followUp}
+            {followUp.kind === 'date' ? (
+              <p
+                className={`rounded-lg px-2 py-1 leading-snug inline-block border ${
+                  followUp.overdue
+                    ? 'text-rose-700 bg-rose-50 border-rose-100'
+                    : 'text-amber-700 bg-amber-50 border-amber-100'
+                }`}
+              >
+                {followUp.label}
+                {/* A date that has already passed is not a "next visit" — saying
+                    so is the difference between a reminder and a missed one. */}
+                {followUp.overdue && <span className="font-semibold"> · overdue</span>}
+              </p>
+            ) : followUp.kind === 'note' ? (
+              <p className="text-slate-600 bg-slate-50 border border-slate-150 rounded-lg px-2 py-1 leading-snug inline-block">
+                {followUp.note}
               </p>
             ) : (
               <p className="text-slate-400">None pending</p>

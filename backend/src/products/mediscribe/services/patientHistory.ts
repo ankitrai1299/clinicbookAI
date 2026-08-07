@@ -12,6 +12,7 @@
 // Newer records also carry an explicit `consultationId`. We match on either, so
 // both legacy and new data group correctly.
 
+import { formatFollowUpLine } from './followUpDate.js';
 import {
   consultationsRepo,
   reportsRepo,
@@ -143,13 +144,20 @@ function extractMedicines(report: any, consultation: any): HistoryMedicine[] {
 
 // Follow-up plan is a {date,duration,reports,instructions} object — flatten it
 // into a single readable line. Tolerates legacy string/array shapes too.
-function extractFollowUp(report: any): string {
+function extractFollowUp(report: any, visitAt?: string): string {
   const fu = report?.followUp;
   if (!fu) return '';
   if (typeof fu === 'string') return fu.trim();
   if (Array.isArray(fu)) return cleanStrings(fu).join('; ');
   const parts = [
-    asString(fu.date) && `Next visit: ${asString(fu.date)}`,
+    // Resolved, not repeated. The model writes things like "Monday, June 11th,
+    // 2026" — a real date with an invented weekday — and this line is read by
+    // a doctor and sent to the patient. formatFollowUpLine derives the day from
+    // the date, and leaves anything that is not a date alone.
+    (() => {
+      const line = formatFollowUpLine(asString(fu.date), visitAt ? new Date(visitAt) : undefined);
+      return line && `Next visit: ${line}`;
+    })(),
     asString(fu.duration) && `After: ${asString(fu.duration)}`,
     asString(fu.reports) && `Reports: ${asString(fu.reports)}`,
     asString(fu.instructions),
@@ -227,7 +235,7 @@ export async function buildPatientHistory(
       allergies: extractAllergies(report),
       currentMedications: extractCurrentMedications(report),
       reportStatus: toReportStatus(c?.status),
-      followUp: extractFollowUp(report),
+      followUp: extractFollowUp(report, visitTimeOf(c)),
       reportId: hasReportRecord ? c.id : null,
       transcriptId: transcript ? (transcript.id as string) : null,
       hasReport,

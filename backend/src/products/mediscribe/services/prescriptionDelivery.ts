@@ -10,6 +10,7 @@
 // Medicine REMINDERS are handled separately (medicineReminder.service) — together
 // they give the patient both the prescription and the daily reminders on WhatsApp.
 
+import { formatFollowUpLine } from './followUpDate.js';
 import { prisma } from '../../../config/prisma.js';
 import {
   sendTemplatedOrSession,
@@ -24,11 +25,19 @@ import { consultationsRepo } from '../repositories/index.js';
 
 const bareDoctor = (name: string): string => name.replace(/^dr\.?\s*/i, '').trim();
 
-function followUpLine(report: any): string {
+// This line goes to the PATIENT on WhatsApp. The model's own wording reached
+// them verbatim, weekday and all — production had "Monday, June 11th, 2026",
+// and 11 June 2026 is a Thursday. A patient reads the day, not the number, so
+// the day is now derived from the parsed date; text that isn't a date is left
+// exactly as the doctor said it.
+function followUpLine(report: any, visitAt?: string | Date): string {
   const fu = report?.followUp;
   if (!fu) return '';
   if (typeof fu === 'string') return fu.trim();
-  if (fu.date) return `Next visit: ${String(fu.date).trim()}`;
+  if (fu.date) {
+    const line = formatFollowUpLine(String(fu.date), visitAt ? new Date(visitAt) : undefined);
+    return line ? `Next visit: ${line}` : '';
+  }
   return '';
 }
 
@@ -105,7 +114,9 @@ export const deliverPrescription = async (
     doctorName,
     clinicName,
     meds,
-    followUp: followUpLine(consultation?.report),
+    // Relative phrases ("after 3 days") are counted from the CONSULTATION, not
+    // from whenever this send happens to run.
+    followUp: followUpLine(consultation?.report, consultation?.createdAt ?? consultation?.date),
   });
 
   // Out-of-window fallback uses the approved template, so the FULL prescription
