@@ -113,6 +113,20 @@ interface ClinicDashboardProps {
   onMobileBack?: () => void;
 }
 
+// Shown in the mobile header, where the desktop "Clinic Management Desk" title
+// does not fit. Without it the phone header is just a back arrow and an avatar,
+// with nothing saying which screen you are on.
+const TAB_TITLES: Record<DashboardTab, string> = {
+  overview: 'Overview',
+  appointments: 'Appointments',
+  calendar: 'Doctors & Schedules',
+  waitlist: 'Waitlist',
+  patients: 'Patients',
+  settings: 'Bot Settings',
+  developers: 'Developers & API',
+  billing: 'Billing'
+};
+
 export default function ClinicDashboard({
   appointments,
   setAppointments,
@@ -598,37 +612,31 @@ export default function ClinicDashboard({
       </aside>
 
       {/* Main Dynamic View Area */}
-      <main className="flex-1 overflow-y-auto" id="dashboard-content-area">
+      {/* pb-24 on phones so the floating assistant button (fixed bottom-right)
+          stops sitting on top of the last row of whatever is on screen. */}
+      <main className="flex-1 overflow-y-auto pb-24 md:pb-0" id="dashboard-content-area">
         
-        {/* Top dashboard control bar */}
-        <header className="bg-white border-b border-slate-100 h-16 px-6 flex items-center justify-between sticky top-0 z-20">
-          
+        {/* Top dashboard control bar.
+            On mobile the tab strip gets its OWN row. It used to share this one
+            with the bell and profile, capped at max-w-[78vw] — 78% of a 390px
+            phone is ~304px, and the bell plus avatar plus padding need another
+            ~130px, so the two sat on top of each other and the later tabs
+            disappeared underneath. Its own row gives it the full width. */}
+        <div className="sticky top-0 z-20 bg-white border-b border-slate-100">
+        <header className="h-16 px-4 md:px-6 flex items-center justify-between gap-3">
+
           {/* Left panel info */}
-          <div className="flex items-center gap-3">
-            {/* Mobile: back to the phone app + the FULL tab set (scrolls). */}
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Mobile: back to the phone app. */}
             {onMobileBack && (
               <button onClick={onMobileBack} className="md:hidden shrink-0 p-1.5 -ml-1 text-slate-500" aria-label="Back to app">
                 <ArrowLeft className="w-5 h-5" />
               </button>
             )}
-            <div className="md:hidden flex gap-1.5 overflow-x-auto max-w-[78vw]">
-              {([
-                ['overview', 'Overview'], ['appointments', 'Appointments'], ['calendar', 'Doctors'],
-                ['waitlist', 'Waitlist'], ['patients', 'Patients'], ['settings', 'Bot'],
-                ['developers', 'API'], ['billing', 'Billing'],
-              ] as const).filter(([id]) => canSeeTab(id)).map(([id, label]) => (
-                <button
-                  key={id}
-                  onClick={() => setActiveTab(id as DashboardTab)}
-                  className={`whitespace-nowrap text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md ${
-                    activeTab === id ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            
+            <span className="md:hidden font-display font-extrabold text-slate-900 text-sm truncate">
+              {TAB_TITLES[activeTab] ?? 'Dashboard'}
+            </span>
+
             <div className="hidden md:block">
               <h1 className="font-display font-extrabold text-slate-950 text-base flex items-center gap-2">
                 <span>Clinic Management Desk</span>
@@ -697,6 +705,26 @@ export default function ClinicDashboard({
           </div>
         </header>
 
+        {/* Mobile tab strip — full width, nothing on top of it. */}
+        <div className="md:hidden flex gap-1.5 overflow-x-auto px-4 pb-2.5">
+          {([
+            ['overview', 'Overview'], ['appointments', 'Appointments'], ['calendar', 'Doctors'],
+            ['waitlist', 'Waitlist'], ['patients', 'Patients'], ['settings', 'Bot'],
+            ['developers', 'API'], ['billing', 'Billing'],
+          ] as const).filter(([id]) => canSeeTab(id)).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id as DashboardTab)}
+              className={`whitespace-nowrap shrink-0 text-[10px] uppercase font-bold tracking-wider px-2.5 py-1.5 rounded-md ${
+                activeTab === id ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        </div>
+
         {/* Dynamic Inner Tab Router */}
         <div className="p-6 space-y-6">
           
@@ -738,17 +766,19 @@ export default function ClinicDashboard({
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
                 {/* Roster list table - 8 Columns */}
-                <div className="lg:col-span-8 bg-white border border-slate-100 rounded-3xl p-6 space-y-4">
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-150">
+                <div className="lg:col-span-8 bg-white border border-slate-100 rounded-3xl p-4 sm:p-6 space-y-4">
+                  {/* Stacks on a phone. Side by side, the button crowded the
+                      title and its own label wrapped onto two lines. */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pb-2 border-b border-slate-150">
                     <div className="text-left">
                       <h3 className="font-display font-extrabold text-base text-slate-950">Appointments Feed</h3>
                       <p className="text-slate-400 text-[10px] font-medium mt-0.5">Live roster for clinic staff. Filtered by active status.</p>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button 
+                      <button
                         onClick={() => setShowAddWalkIn(true)}
-                        className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all duration-200"
+                        className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition-all duration-200 w-full sm:w-auto whitespace-nowrap"
                         id="add-walk-in-trigger-btn"
                       >
                         <Plus className="w-3.5 h-3.5" />

@@ -89,9 +89,11 @@ export default function AiAssistant() {
         {open ? <X size={22} /> : <Sparkles size={22} />}
       </button>
 
-      {/* Chat panel */}
+      {/* Chat panel. A fixed 380px panel plus the 24px right offset needs 404px
+          — wider than a 390px phone, so it hung off the screen. Below sm it
+          fills the width minus the margins; above sm the fixed width returns. */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[600px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+        <div className="fixed bottom-24 right-6 left-6 sm:left-auto z-50 sm:w-[380px] max-h-[70vh] sm:max-h-[600px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
 
           {/* Header */}
           <div className="bg-indigo-600 px-4 py-3 flex items-center gap-3">
