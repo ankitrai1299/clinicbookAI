@@ -7,6 +7,7 @@ import Navigation from './components/Navigation';
 import LandingPage from './components/LandingPage';
 import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
+import MobileDashboard from './components/MobileDashboard';
 import MediscribeApp from './mediscribe/MediscribeApp';
 import ProductHub from './components/ProductHub';
 import MediScribeLanding from './components/MediScribeLanding';
@@ -99,6 +100,9 @@ function AppShell() {
   // Deep-link a specific dashboard tab (e.g. the docs page's "Get an API key"
   // jumps a logged-in clinic straight to Developers & API, not the Overview).
   const [dashboardTab, setDashboardTab] = useState<DashboardTab | undefined>(undefined);
+  // Phone app only: "Full dashboard" swaps the phone-first home for the complete
+  // ClinicDashboard, and its back arrow returns here. Meaningless on the web.
+  const [mobileFull, setMobileFull] = useState(false);
   // Self-service onboarding hand-off: email pending OTP verification, and the
   // clinic config captured at signup to apply once verified.
   const [pendingEmail, setPendingEmail] = useState('');
@@ -339,11 +343,29 @@ function AppShell() {
           />
         )}
 
-        {/* Same dashboard on web and in the phone app — same component, same
-            features, same behaviour ("same to same"). On a phone it uses its own
-            mobile tab strip; on desktop, the sidebar. */}
-        {currentPage === 'dashboard' && user && (
+        {/* The PHONE APP opens the phone-first dashboard (the approved green
+            design): Dashboard, Appointments, Patients, Calendar, Reports.
+            Nothing is lost — "Full dashboard" in More opens the very same
+            ClinicDashboard the web renders, with all eight tabs (Doctors,
+            Waitlist, Bot Settings, Developers, Billing).
+
+            This reverses 9cc7088, which made the app show the web dashboard
+            verbatim. The web itself is unchanged. */}
+        {currentPage === 'dashboard' && user && APP_ONLY && !mobileFull && (
+          <MobileDashboard
+            clinicName={clinicConfig.clinicName}
+            userName={clinicConfig.ownerName || user.name}
+            onLogout={handleLogout}
+            onOpenFull={() => setMobileFull(true)}
+          />
+        )}
+
+        {/* Same dashboard on web and — via "Full dashboard" — in the phone app:
+            same component, same features, same behaviour. On a phone it uses its
+            own mobile tab strip; on desktop, the sidebar. */}
+        {currentPage === 'dashboard' && user && (!APP_ONLY || mobileFull) && (
           <ClinicDashboard
+            onMobileBack={APP_ONLY ? () => setMobileFull(false) : undefined}
             appointments={appointments}
             setAppointments={setAppointments}
             waitlist={waitlist}
