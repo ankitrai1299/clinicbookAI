@@ -37,7 +37,7 @@ import {
 import { syncFromScribeConsultation } from '../../services/medicineReminder.service.js';
 import { sendPrescriptionOnFinalize, deliverPrescription } from './services/prescriptionDelivery.js';
 import { emitEvent, getPatientTimeline } from '../../core/timeline/patientTimeline.service.js';
-import { createAppointment } from '../clinicbook/appointments/appointment.service.js';
+import { createAppointment } from '../../core/appointments/appointment.service.js';
 import { completeAppointmentForConsultation } from './appointmentCompletion.js';
 import { askAssistant } from './services/assistant.js';
 

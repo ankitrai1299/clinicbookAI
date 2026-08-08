@@ -8,8 +8,8 @@
 
 import { AppointmentStatus, Prisma } from '@prisma/client';
 
-import { forClinic } from '../../../config/tenantPrisma.js';
-import { AppError } from '../../../utils/AppError.js';
+import { forClinic } from '../../config/tenantPrisma.js';
+import { AppError } from '../../utils/AppError.js';
 import type {
   AppointmentPort,
   AppointmentRecord,

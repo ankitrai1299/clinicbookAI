@@ -18,8 +18,8 @@ import type {
   AppointmentCreateData,
   AppointmentUpdateData,
   ApplyUpdateResult
-} from '../../../products/clinicbook/appointments/appointment.port.js';
-import { LOST_RACE } from '../../../products/clinicbook/appointments/appointment.port.js';
+} from '../../../core/appointments/appointment.port.js';
+import { LOST_RACE } from '../../../core/appointments/appointment.port.js';
 import { AppointmentStatus } from '@prisma/client';
 import type { FhirClient } from '../fhir/fhirClient.js';
 import type { FhirAppointment } from '../fhir/types.js';

@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 
-import type { AppointmentRecord } from '../../products/clinicbook/appointments/appointment.port.js';
+import type { AppointmentRecord } from '../../core/appointments/appointment.port.js';
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
 // Deliberately loose: the service canonicalises "9", "9:30", "2:30pm", "14:30",

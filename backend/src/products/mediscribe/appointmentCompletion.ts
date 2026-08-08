@@ -18,7 +18,7 @@ import { forClinic } from '../../config/tenantPrisma.js';
 import {
   completeAppointment,
   updateAppointment
-} from '../clinicbook/appointments/appointment.service.js';
+} from '../../core/appointments/appointment.service.js';
 import { clinicNow } from '../../services/slotMath.js';
 
 const LIVE: AppointmentStatus[] = [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED];

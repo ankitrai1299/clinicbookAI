@@ -32,6 +32,11 @@ export interface DomainEventPayloads {
     appointmentId: string;
     patientId?: string;
     doctorId?: string;
+    // WHICH slot was freed. Waitlist recovery subscribes to this instead of
+    // being called from the cancel path, so core does not have to know that a
+    // waitlist exists. Also reaches partner webhooks, where it is additive.
+    appointmentDate?: Date;
+    appointmentTime?: string;
   };
 
   // Emitted by ClinicBook when an appointment is moved to a new slot.

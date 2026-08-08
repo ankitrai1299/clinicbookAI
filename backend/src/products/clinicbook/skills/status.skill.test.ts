@@ -4,7 +4,7 @@ import { AppointmentStatus } from '@prisma/client';
 // Mock the one dependency (the appointments read); everything else — slotMath's
 // upcoming logic, the registry, the formatting — runs for real.
 const getAppointments = vi.fn();
-vi.mock('../appointments/appointment.service.js', () => ({
+vi.mock('../../../core/appointments/appointment.service.js', () => ({
   getAppointments: (...args: unknown[]) => getAppointments(...args)
 }));
 

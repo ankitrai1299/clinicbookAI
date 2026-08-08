@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma.js';
 import { AppError } from '../../utils/AppError.js';
-import { createAppointment } from '../../products/clinicbook/appointments/appointment.service.js';
+import { createAppointment } from '../../core/appointments/appointment.service.js';
 import { isSlotAvailable } from '../../services/scheduling.service.js';
 import { dataSourceFor } from '../datasource/index.js';
 import { notifyPatientRegistered } from '../whatsapp/whatsapp.notifications.js';

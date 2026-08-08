@@ -3,7 +3,7 @@ import { Router } from 'express';
 import aiRouter from '../core/ai/ai.routes.js';
 import analyticsRouter from '../core/analytics/analytics.routes.js';
 import apiKeyRouter from '../core/apikeys/apiKey.routes.js';
-import appointmentRouter from '../products/clinicbook/appointments/appointment.routes.js';
+import appointmentRouter from '../core/appointments/appointment.routes.js';
 import authRouter from '../core/auth/auth.routes.js';
 import billingRouter from '../core/billing/billing.routes.js';
 import clinicRouter from '../core/clinics/clinic.routes.js';

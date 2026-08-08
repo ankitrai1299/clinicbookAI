@@ -14,8 +14,8 @@
 import { AppointmentStatus } from '@prisma/client';
 
 import { prisma } from '../config/prisma.js';
-import { completeAppointment, type AppointmentRecord } from '../products/clinicbook/appointments/appointment.service.js';
-import { registerPostVisitAction } from '../products/clinicbook/appointments/postVisit.service.js';
+import { completeAppointment, type AppointmentRecord } from '../core/appointments/appointment.service.js';
+import { registerPostVisitAction } from '../core/appointments/postVisit.service.js';
 import { finalizedScribeForPatient, type ScribeReport } from '../products/novascribe/skills/mediscribeData.js';
 import { sendTemplatedOrSession } from '../core/whatsapp/whatsapp.service.js';
 import { WhatsAppTemplate, medicineReminderComponents } from '../core/whatsapp/whatsapp.templates.js';

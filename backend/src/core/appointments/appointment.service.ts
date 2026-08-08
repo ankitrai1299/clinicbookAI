@@ -1,15 +1,14 @@
 import { AppointmentStatus } from '@prisma/client';
 
-import { AppError } from '../../../utils/AppError.js';
+import { AppError } from '../../utils/AppError.js';
 import {
   notifyBookingConfirmation,
   notifyAppointmentRejectedWithAlternatives
-} from '../../../core/whatsapp/whatsapp.notifications.js';
-import { recordNotification } from '../../../core/notifications/notification.service.js';
-import { eventBus } from '../../../core/events/index.js';
-import { emitEvent, type PatientEventType } from '../../../core/timeline/patientTimeline.service.js';
-import { autoOfferFreedSlot } from '../waitlist/waitlist.service.js';
-import { canonicalizeTime, isPastSlot } from '../../../services/scheduling.service.js';
+} from '../whatsapp/whatsapp.notifications.js';
+import { recordNotification } from '../notifications/notification.service.js';
+import { eventBus } from '../events/index.js';
+import { emitEvent, type PatientEventType } from '../timeline/patientTimeline.service.js';
+import { canonicalizeTime, isPastSlot } from '../../services/scheduling.service.js';
 import { runPostVisitWorkflow } from './postVisit.service.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
 import { appointmentSourceFor } from './appointmentSource.js';
@@ -143,17 +142,18 @@ const onStatusTransition = (prev: AppointmentStatus, appt: AppointmentRecord): v
     // Cross-product domain event (fire-and-forget, isolated, no-op until
     // subscribed). Emitted here so BOTH cancel paths — cancelAppointment and
     // updateAppointment(status=CANCELLED) — publish exactly once.
+    // Carries WHICH SLOT was freed, so waitlist recovery can subscribe rather
+    // than be called from here. ClinicBook's waitlist listens for this and offers
+    // the slot to the next waiting patient; a clinic without ClinicBook simply has
+    // no subscriber, and cancelling still works.
     eventBus.emit('appointment.cancelled', {
       clinicId: appt.clinicId,
       appointmentId: appt.id,
       patientId: appt.patientId,
-      doctorId: appt.doctorId
+      doctorId: appt.doctorId,
+      appointmentDate: appt.appointmentDate,
+      appointmentTime: appt.appointmentTime
     });
-
-    // Automatic waitlist recovery: offer the freed slot to the next waiting patient.
-    void autoOfferFreedSlot(appt.clinicId, appt.doctorId, appt.appointmentDate, appt.appointmentTime).catch(
-      (err: unknown) => console.error('[Waitlist] Auto-offer on cancellation failed:', err)
-    );
   }
 };
 

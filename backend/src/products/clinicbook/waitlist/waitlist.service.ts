@@ -4,7 +4,7 @@ import { prisma } from '../../../config/prisma.js';
 import { forClinic } from '../../../config/tenantPrisma.js';
 import { AppError } from '../../../utils/AppError.js';
 import { notifyWaitlistOffer, notifyWaitlistSlotOffer } from '../../../core/whatsapp/whatsapp.notifications.js';
-import { createAppointment } from '../appointments/appointment.service.js';
+import { createAppointment } from '../../../core/appointments/appointment.service.js';
 import { AddToWaitlistInput, ConvertWaitlistInput, UpdateWaitlistPriorityInput } from './waitlist.schemas.js';
 
 const waitlistInclude = {

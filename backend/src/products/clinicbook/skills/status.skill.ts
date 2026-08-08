@@ -12,7 +12,7 @@ import { AppointmentStatus } from '@prisma/client';
 import { skillRegistry } from '../../../core/mcp/skillRegistry.js';
 import type { McpContext } from '../../../core/mcp/index.js';
 import type { Skill } from '../../../core/mcp/skill.types.js';
-import { getAppointments } from '../appointments/appointment.service.js';
+import { getAppointments } from '../../../core/appointments/appointment.service.js';
 import { clinicNow, labelToMinutes, slotIsFuture } from '../../../services/slotMath.js';
 
 // Statuses a patient still cares about seeing under "upcoming" (a booked visit

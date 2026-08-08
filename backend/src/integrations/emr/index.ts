@@ -15,8 +15,8 @@
 // clinics additionally get an EMR-backed appointment source (FHIR write + mirror).
 
 import { registerExternalDataSource } from '../../core/datasource/index.js';
-import { registerExternalAppointmentSource } from '../../products/clinicbook/appointments/appointmentSource.js';
-import { nativeAppointments } from '../../products/clinicbook/appointments/appointment.native.js';
+import { registerExternalAppointmentSource } from '../../core/appointments/appointmentSource.js';
+import { nativeAppointments } from '../../core/appointments/appointment.native.js';
 import { mockEmrDataSource } from './mock/mockEmrDataSource.js';
 import { FhirClient, HttpFhirTransport, type TokenSource } from './fhir/fhirClient.js';
 import { openEmrDataSource } from './openemr/openEmrDataSource.js';

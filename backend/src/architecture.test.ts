@@ -30,21 +30,16 @@ const SRC = __dirname;
 // Every violation present when this rule was written. Each is an edge
 // FROM a core/ file TO something that reaches a product.
 const KNOWN_VIOLATIONS: ReadonlyArray<[string, string]> = [
-  ['core/ai/ai.service.ts', 'products/clinicbook/appointments/appointment.service.ts'],
-  ['core/ai/ai.service.ts', 'products/clinicbook/waitlist/waitlist.service.ts'],
-  ['core/patients/patient.service.ts', 'products/clinicbook/appointments/appointment.service.ts'],
-  ['core/publicapi/v1.routes.ts', 'products/clinicbook/appointments/appointment.service.ts'],
-  ['core/publicapi/v1.schemas.ts', 'products/clinicbook/appointments/appointment.port.ts'],
-  ['core/whatsapp/whatsapp.booking.ts', 'products/clinicbook/appointments/appointment.service.ts'],
+  // The WhatsApp BOOKING conversation still lives in core/whatsapp. It is a
+  // ClinicBook feature — core owns WhatsApp delivery, not what to say about a
+  // booking — so the fix is to move the file, not to add an indirection.
   ['core/whatsapp/whatsapp.booking.ts', 'products/clinicbook/waitlist/waitlist.service.ts'],
-  // Indirect: core → services/patientPrescription → products/*.
+  // Indirect: core → services/patientPrescription → products/mediscribe. Goes
+  // away with the same move.
   ['core/whatsapp/whatsapp.booking.ts', 'services/patientPrescription.service.ts'],
-  // MediScribe reads ClinicBook's appointments — the doctor's queue, and closing
-  // the appointment when a note is finalized. Both are genuine cross-product
-  // features; they belong in services/ or behind a port, not in a direct import.
-  ['products/mediscribe/clinicData.ts', 'products/clinicbook/appointments/appointment.service.ts'],
-  ['products/mediscribe/appointmentCompletion.ts', 'products/clinicbook/appointments/appointment.service.ts'],
-  ['products/mediscribe/router.ts', 'products/clinicbook/appointments/appointment.service.ts'],
+  // The dashboard AI assistant can put a patient on the waitlist. Waitlist is
+  // genuinely ClinicBook-only, so this one needs the capability registry.
+  ['core/ai/ai.service.ts', 'products/clinicbook/waitlist/waitlist.service.ts'],
 ];
 
 const isKnown = (from: string, to: string): boolean =>

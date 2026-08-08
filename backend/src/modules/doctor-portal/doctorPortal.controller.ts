@@ -12,7 +12,7 @@ import {
   getDoctorSchedule,
   setDoctorSchedule
 } from '../../core/doctors/doctor.service.js';
-import { cancelAppointment, updateAppointment } from '../../products/clinicbook/appointments/appointment.service.js';
+import { cancelAppointment, updateAppointment } from '../../core/appointments/appointment.service.js';
 import { registerDoctor, loginDoctor, getDoctorAccount } from './doctorAuth.service.js';
 import {
   AppointmentDecisionInput,

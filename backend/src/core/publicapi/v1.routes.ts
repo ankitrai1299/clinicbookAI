@@ -28,7 +28,7 @@ import {
   createAppointment,
   getSingleAppointment,
   updateAppointment
-} from '../../products/clinicbook/appointments/appointment.service.js';
+} from '../../core/appointments/appointment.service.js';
 import { claim, complete, release } from './idempotency.js';
 import {
   appointmentIdParamsSchema,

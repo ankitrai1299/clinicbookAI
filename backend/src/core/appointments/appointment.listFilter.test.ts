@@ -8,7 +8,7 @@ import { AppointmentStatus } from '@prisma/client';
 // still dragging a clinic's entire history across the wire.
 
 const findMany = vi.fn().mockResolvedValue([]);
-vi.mock('../../../config/tenantPrisma.js', () => ({
+vi.mock('../../config/tenantPrisma.js', () => ({
   forClinic: () => ({ appointment: { findMany } })
 }));
 

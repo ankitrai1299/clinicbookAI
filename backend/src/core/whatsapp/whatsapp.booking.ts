@@ -36,7 +36,7 @@ import { env } from '../../config/env.js';
 import { formatDoctorName } from '../../utils/doctorName.js';
 import { classifyIntent } from './whatsapp.intent.js';
 import { deliverPrescriptionToPatient } from '../../services/patientPrescription.service.js';
-import { createAppointment, cancelAppointment, updateAppointment } from '../../products/clinicbook/appointments/appointment.service.js';
+import { createAppointment, cancelAppointment, updateAppointment } from '../../core/appointments/appointment.service.js';
 import { getAvailableSlots, getDateAvailability, clinicNow } from '../../services/scheduling.service.js';
 import {
   joinWaitlist,

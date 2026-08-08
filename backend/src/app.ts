@@ -11,6 +11,7 @@ import { requestId } from './middleware/requestId.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
 import { registerClinicBookCapabilities } from './products/clinicbook/clinicbook.capabilities.js';
+import { registerWaitlistRecovery } from './products/clinicbook/waitlist/waitlist.recovery.js';
 import { registerEmrIntegration } from './integrations/emr/index.js';
 import { registerWebhookSubscriptions } from './core/webhooks/webhook.subscriptions.js';
 import { registerClinicBookSkills } from './products/clinicbook/skills/booking.skill.js';
@@ -42,6 +43,7 @@ export const createApp = () => {
   //  - The patient-facing MediScribe skills (prescription/documents) answer
   //    WhatsApp requests for a patient's scribe records.
   registerClinicBookCapabilities();
+  registerWaitlistRecovery();
   registerClinicBookSkills();
   registerClinicBookStatusSkill();
   registerClinicBookRecordSkill();

@@ -8,7 +8,7 @@
 import { forClinic } from '../../config/tenantPrisma.js';
 import { getPatients, createPatient } from '../../core/patients/patient.service.js';
 import { getDoctors, createDoctor, updateDoctor, deleteDoctor } from '../../core/doctors/doctor.service.js';
-import { getAppointments } from '../../products/clinicbook/appointments/appointment.service.js';
+import { getAppointments } from '../../core/appointments/appointment.service.js';
 import { clinicNow, labelToMinutes } from '../../services/slotMath.js';
 import { AppointmentStatus } from '@prisma/client';
 

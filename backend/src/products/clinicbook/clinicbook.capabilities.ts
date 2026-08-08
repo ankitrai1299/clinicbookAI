@@ -15,7 +15,7 @@ import {
   createAppointment,
   getAppointments,
   updateAppointment
-} from './appointments/appointment.service.js';
+} from '../../core/appointments/appointment.service.js';
 
 // Booking on behalf of a patient uses the patient's shared identity from the
 // context when the caller didn't pass one explicitly (patient-facing channels).

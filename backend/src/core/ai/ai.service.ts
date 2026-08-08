@@ -6,7 +6,7 @@ import { prisma } from '../../config/prisma.js';
 import { forClinic } from '../../config/tenantPrisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
-import { cancelAppointment, createAppointment, getAppointments, updateAppointment } from '../../products/clinicbook/appointments/appointment.service.js';
+import { cancelAppointment, createAppointment, getAppointments, updateAppointment } from '../../core/appointments/appointment.service.js';
 import { createDoctor, getDoctors, updateDoctor } from '../doctors/doctor.service.js';
 import { createPatient, getPatients, updatePatient } from '../patients/patient.service.js';
 import { addToWaitlist, claimWaitlistOffer } from '../../products/clinicbook/waitlist/waitlist.service.js';
