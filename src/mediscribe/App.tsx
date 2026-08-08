@@ -19,6 +19,10 @@ import { isMobileApp } from './utils/platform';
 // Native-style phone-app shell (WebView only — never used by the web).
 const MobileShell = lazy(() => import('./mobile/MobileShell'));
 const MobileHome = lazy(() => import('./mobile/MobileHome'));
+const MobileAppointments = lazy(() => import('./mobile/MobileAppointments'));
+const MobileNotes = lazy(() => import('./mobile/MobileNotes'));
+const MobilePrescriptions = lazy(() => import('./mobile/MobilePrescriptions'));
+const MobileMore = lazy(() => import('./mobile/MobileMore'));
 const DoctorOnlyGate = lazy(() => import('./mobile/DoctorOnlyGate'));
 const QuickPrescription = lazy(() => import('./components/QuickPrescription'));
 // Code-split every view so they are not part of the initial bundle. This also
@@ -50,7 +54,10 @@ import {
 import { medicationsToText } from './utils/report';
 
 // Main Views
-type ViewState = 'dashboard' | 'patients' | 'consultations' | 'transcripts' | 'reports' | 'prescriptions' | 'settings' | 'admin';
+// 'appointments' and 'more' are reached only from the phone app's shell; the web
+// sidebar has no entry for them (its dashboard already shows the roster, and
+// 'more' exists because a phone has four tabs and a web page has a sidebar).
+type ViewState = 'dashboard' | 'patients' | 'consultations' | 'transcripts' | 'reports' | 'prescriptions' | 'settings' | 'admin' | 'appointments' | 'more';
 
 const VIEW_TITLES: Record<ViewState, string> = {
   dashboard: 'Dashboard',
@@ -61,6 +68,8 @@ const VIEW_TITLES: Record<ViewState, string> = {
   prescriptions: 'Prescriptions',
   settings: 'Settings',
   admin: 'Admin',
+  appointments: 'Appointments',
+  more: 'More',
 };
 
 // ── Sessions page date search helpers ─────────────────────────
@@ -166,6 +175,8 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
     prescriptions: 'reports.view',
     settings: 'settings.view',
     admin: 'analytics.view',
+    appointments: 'dashboard.view',
+    more: 'settings.view',
   };
   // Permissive until the user is loaded, so the menu doesn't flash empty.
   const canView = (p: Permission): boolean => !user || hasPermission(p);
@@ -622,7 +633,12 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             activeView={activeView}
             onNavigate={(v) => setActiveView(v as ViewState)}
             canView={canView}
+            onRecord={handleStartNewConsultation}
           >
+            {/* Phone-native screens for the tabs a doctor lives in. Anything not
+                listed here (settings, reports, transcripts, admin) falls through
+                to the shared views, so nothing is lost by not having a phone
+                layout yet. */}
             {activeView === 'dashboard' ? (
               <MobileHome
                 consultations={consultations}
@@ -634,8 +650,41 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 onStartNew={handleStartNewConsultation}
                 onSelectConsultation={handleSelectExistingConsultation}
                 onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}
-                onViewAllSessions={() => setActiveView('consultations')}
+                onViewAppointments={() => setActiveView('appointments')}
+                onViewNotes={() => setActiveView('consultations')}
+                onViewPrescriptions={() => setActiveView('prescriptions')}
                 onQuickRx={() => setQuickRxOpen(true)}
+              />
+            ) : activeView === 'appointments' ? (
+              <MobileAppointments
+                appointments={upcomingAppointments}
+                consultations={consultations}
+                onBack={() => setActiveView('dashboard')}
+                onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}
+              />
+            ) : activeView === 'consultations' ? (
+              <MobileNotes
+                consultations={consultations}
+                patients={patients}
+                onSelectConsultation={handleSelectExistingConsultation}
+              />
+            ) : activeView === 'prescriptions' ? (
+              <MobilePrescriptions
+                prescriptions={prescriptions}
+                patients={patients}
+                onBack={() => setActiveView('more')}
+              />
+            ) : activeView === 'more' ? (
+              <MobileMore
+                doctorName={doctorName}
+                email={user?.email}
+                roleLabel={user?.role ? ROLE_LABELS[user.role] : undefined}
+                canViewAdmin={canView('analytics.view')}
+                onNavigate={(v) => setActiveView(v as ViewState)}
+                onLogout={() => {
+                  logout();
+                  window.location.reload();
+                }}
               />
             ) : (
               renderActiveView()

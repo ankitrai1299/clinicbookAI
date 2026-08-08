@@ -62,3 +62,12 @@
   border-radius: 9999px;
   background: transparent;
 }
+/* Horizontal chip/day strips in the phone app scroll by swipe; a visible bar
+   under them looks like a rendering fault on a native screen. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -1,73 +1,37 @@
 import React from 'react';
 import { Consultation, Patient, UpcomingAppointment } from '../types';
-import {
-  Sparkles,
-  Mic,
-  CalendarDays,
-  FileEdit,
-  CheckCircle2,
-  BellRing,
-  Clock,
-  ChevronRight,
-  Search,
-  CalendarClock,
-  Stethoscope,
-  Zap,
-  AlertTriangle,
-} from 'lucide-react';
+import { Bell, Mic, FileText, Pill, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
+import { initials, bareName, greeting, localDay, minutesOfDay, nowMinutes, relativeIn, recordTime } from './ui';
 
-// Native-style mobile dashboard — shown ONLY inside the phone app (WebView).
-// It reuses the exact same data the web dashboard uses (consultations + counts);
-// nothing here changes the web. Layout mirrors the approved mobile mockup:
-// greeting → gradient "Start a New Consultation" hero → 2×2 "Today at a glance"
-// → recent consultations (one row per patient).
+// Home screen of the phone app (WebView only). Same data the web dashboard uses
+// — consultations, today's appointments, patient counts — arranged the way a
+// doctor actually opens the app: what's next, then the three things they do.
+//
+// Every number here is measured, not estimated. The design this follows showed a
+// "6h 24m time saved" figure; there is nothing in the data that knows how long a
+// note would have taken by hand, so that tile counts notes for the week instead.
+// An invented statistic in a medical app is worse than a plain one.
 
 interface MobileHomeProps {
   consultations: Consultation[];
-  // Needed so the recent-visits search can match a phone number, not just a
-  // name — a consultation record carries the patient's name but not their phone.
   patients?: Patient[];
   doctorName?: string;
   upcomingAppointments?: UpcomingAppointment[];
-  // False when this login has no matching ClinicBook Doctor — the queue is then
-  // empty for a reason the doctor cannot see or fix themselves.
+  /** False when this login has no matching ClinicBook Doctor — the queue is then
+   *  empty for a reason the doctor cannot see or fix themselves. */
   doctorLinked?: boolean;
   loginEmail?: string;
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
-  onViewAllSessions: () => void;
+  onViewAppointments: () => void;
+  onViewNotes: () => void;
+  onViewPrescriptions: () => void;
   onQuickRx?: () => void;
 }
 
-const greeting = (): string => {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-};
-
-const sessionTime = (c: Consultation): number => {
-  const raw = c?.updatedAt || c?.createdAt || c?.date;
-  const t = raw ? Date.parse(raw) : NaN;
-  return Number.isNaN(t) ? 0 : t;
-};
-
-const isSameDay = (a: Date, b: Date): boolean =>
-  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-
-const initials = (name?: string): string =>
-  (name || 'P')
-    .replace(/^dr\.?\s*/i, '')
-    .split(/\s+/)
-    .map((w) => w.charAt(0))
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
 export default function MobileHome({
   consultations,
-  patients,
   doctorName,
   upcomingAppointments = [],
   doctorLinked = true,
@@ -75,262 +39,260 @@ export default function MobileHome({
   onStartNew,
   onSelectConsultation,
   onScribeAppointment,
-  onViewAllSessions,
+  onViewAppointments,
+  onViewNotes,
+  onViewPrescriptions,
   onQuickRx,
 }: MobileHomeProps) {
-  const [query, setQuery] = React.useState('');
   const now = new Date();
+  const today = localDay(now);
+  const mins = nowMinutes(now);
 
-  // Today's queue — the doctor's actual starting point on a clinic day.
-  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local
-  const todaysQueue = upcomingAppointments.filter((a) => a.date === todayStr);
+  // Today's roster, in clock order. Slots we can't parse sort last rather than
+  // to the top of the day.
+  const todaysQueue = React.useMemo(
+    () =>
+      upcomingAppointments
+        .filter((a) => a.date === today)
+        .slice()
+        .sort((a, b) => (minutesOfDay(a.time) ?? 1e9) - (minutesOfDay(b.time) ?? 1e9)),
+    [upcomingAppointments, today]
+  );
 
-  const todayCount = consultations.filter((c) => {
-    const raw = c.updatedAt || c.createdAt || c.date;
-    const d = raw ? new Date(raw) : null;
-    return d && !Number.isNaN(d.getTime()) && isSameDay(d, now);
-  }).length;
-  const draftCount = consultations.filter((c) => c.status !== 'Completed').length;
-  const completedCount = consultations.filter((c) => c.status === 'Completed').length;
-  const followUpCount = consultations.filter((c) => {
-    const fu = c.report?.followUp?.date?.trim();
-    if (!fu) return false;
-    const d = new Date(fu);
-    return Number.isNaN(d.getTime()) ? true : d.getTime() >= new Date().setHours(0, 0, 0, 0);
-  }).length;
+  // The next one still ahead — what the doctor is actually waiting for.
+  const next = todaysQueue.find((a) => {
+    const m = minutesOfDay(a.time);
+    return m !== null && m >= mins;
+  });
+  const nextIn = next ? (minutesOfDay(next.time) ?? 0) - mins : null;
 
-  // One row per patient, newest first.
-  const latestByPatient = new Map<string, Consultation>();
-  for (const c of consultations) {
-    const key = c?.patientId || c?.patientName || c?.id;
-    if (!key) continue;
-    const cur = latestByPatient.get(key);
-    if (!cur || sessionTime(c) >= sessionTime(cur)) latestByPatient.set(key, c);
-  }
-  // Match on the patient's name OR their phone number, the same way the desktop
-  // lists do — in a clinic the number is often the only thing to hand.
-  const phoneOf = new Map((patients ?? []).map((p) => [p.id, p.phone || '']));
-  const q = query.trim().toLowerCase();
-  const digits = q.replace(/\D/g, '');
-  const recent = Array.from(latestByPatient.values())
-    .sort((a, b) => sessionTime(b) - sessionTime(a))
-    .filter((c) => {
-      if (!q) return true;
-      if ((c.patientName || '').toLowerCase().includes(q)) return true;
-      if (digits.length < 3) return false;
-      return (phoneOf.get(c.patientId ?? '') || '').replace(/\D/g, '').includes(digits);
-    });
+  const startOfToday = new Date(now).setHours(0, 0, 0, 0);
+  const notesToday = consultations.filter((c) => recordTime(c) >= startOfToday).length;
+  const notesWeek = consultations.filter((c) => recordTime(c) >= startOfToday - 6 * 86_400_000).length;
 
-  // The WHOLE name, minus a leading "Dr." we re-add ourselves.
-  //
-  // This used to take the first word only, which works for "Anita Rao" and fails
-  // for the way Indian doctors are usually recorded: "A.K. Das" became "Dr. A.K.",
-  // dropping the surname — the one part anyone actually calls them by. The
-  // heading is already `truncate`, so a genuinely long name is ellipsised by CSS
-  // rather than by guessing which word matters.
-  const displayName = (doctorName || '').replace(/^dr\.?\s*/i, '').trim() || 'Doctor';
+  const displayName = bareName(doctorName) || 'Doctor';
 
-  const stats = [
-    { icon: CalendarDays, value: todayCount, label: "Today's Consultations", tint: 'text-blue-600', bg: 'bg-blue-50' },
-    { icon: FileEdit, value: draftCount, label: 'Draft Reports', tint: 'text-amber-600', bg: 'bg-amber-50' },
-    { icon: CheckCircle2, value: completedCount, label: 'Completed', tint: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { icon: BellRing, value: followUpCount, label: 'Pending Follow-ups', tint: 'text-violet-600', bg: 'bg-violet-50' },
+  const actions = [
+    { key: 'rec', label: 'New\nConsultation', icon: Mic, tint: 'text-violet-600', bg: 'bg-violet-50', onClick: onStartNew },
+    { key: 'notes', label: 'My Notes', icon: FileText, tint: 'text-sky-600', bg: 'bg-sky-50', onClick: onViewNotes },
+    { key: 'rx', label: 'Prescriptions', icon: Pill, tint: 'text-rose-500', bg: 'bg-rose-50', onClick: onViewPrescriptions },
   ];
 
   return (
     <div className="px-5 pt-4">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <Sparkles size={14} className="text-blue-600" />
-            {/* The product was renamed to MediScribe; this was the last screen
-                still calling itself NovaScribe — and it is the first screen the
-                phone app opens, so it was the one users saw most. */}
-            <span className="text-[13px] font-bold text-blue-600 tracking-tight">MediScribe AI</span>
-          </div>
-          <p className="text-slate-500 mt-2 text-[15px]">{greeting()},</p>
-          <h1 className="text-[26px] font-bold text-slate-900 tracking-tight leading-8 truncate">
-            Dr. {displayName} <span className="align-middle">👋</span>
-          </h1>
-          <p className="text-slate-500 text-[13px] mt-0.5">
-            You have {todayCount} consultation{todayCount === 1 ? '' : 's'} today
-          </p>
+      {/* Brand + greeting */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+            <Mic size={15} className="text-white" strokeWidth={2.6} />
+          </span>
+          <span className="text-[16px] font-bold tracking-tight text-slate-900">MediScribe</span>
         </div>
-        <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
-          {initials(doctorName)}
-        </div>
+        <button aria-label="Notifications" className="relative text-slate-400 p-1">
+          <Bell size={21} />
+          {todaysQueue.length > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-violet-500 ring-2 ring-slate-50" />
+          )}
+        </button>
       </div>
 
-      {/* Hero — Start a New Consultation */}
-      <button
-        onClick={onStartNew}
-        className="w-full text-left rounded-3xl p-5 mb-6 shadow-lg shadow-blue-600/20 bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-600 active:scale-[0.99] transition-transform"
-      >
-        <div className="flex items-center gap-4">
-          <div className="flex-1 min-w-0">
-            <p className="text-white/80 text-[13px] font-medium">Start a New</p>
-            <p className="text-white text-[24px] font-bold tracking-tight leading-7">Consultation</p>
-            <p className="text-white/75 text-[13px] mt-1">AI Scribe is ready to listen</p>
-          </div>
-          <div className="w-16 h-16 rounded-full bg-white/15 border border-white/25 flex items-center justify-center flex-shrink-0">
-            <Mic size={26} className="text-white" />
-          </div>
-        </div>
-        {/* Waveform strip */}
-        <div className="mt-4 flex items-center gap-1 h-6 overflow-hidden">
-          {Array.from({ length: 44 }).map((_, i) => (
-            <span
-              key={i}
-              className="flex-1 rounded-full bg-white/70"
-              style={{ height: `${20 + Math.abs(Math.sin(i * 0.7)) * 80}%` }}
-            />
-          ))}
-        </div>
-      </button>
-
-      {/* Quick Rx — prescribe without recording (refills, two-minute visits) */}
-      {onQuickRx && (
-        <button
-          onClick={onQuickRx}
-          className="w-full flex items-center justify-center gap-2 mb-6 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 font-bold shadow-sm active:bg-slate-50 transition-colors"
-        >
-          <Zap size={17} className="text-amber-500" /> Quick Prescription
-        </button>
-      )}
+      {/* Wraps rather than truncates. Indian names are routinely long enough that
+          "Good afternoon, Dr. Ankit Verma" clipped to "…Dr. Ankit Ve…" — cutting
+          off the surname, the part anyone is actually called by. */}
+      <h1 className="text-[24px] font-bold text-slate-900 tracking-tight leading-8 break-words">
+        {greeting(now)}, Dr. {displayName} <span className="align-middle">👋</span>
+      </h1>
+      <p className="text-slate-500 text-[14px] mt-1 mb-5">Here's your day at a glance</p>
 
       {/* Account not linked to a doctor record — without this the queue simply
           looks empty, which reads as "nobody booked today". */}
       {!doctorLinked && (
-        <div className="mb-6 flex items-start gap-2.5 p-3.5 rounded-2xl border border-amber-200 bg-amber-50">
+        <div className="mb-5 flex items-start gap-2.5 p-3.5 rounded-2xl border border-amber-200 bg-amber-50">
           <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
           <div className="text-[13px]">
             <div className="font-bold text-amber-900">Appointments aren’t linked yet</div>
             <p className="text-amber-800 mt-0.5 leading-snug">
-              This login{loginEmail ? ` (${loginEmail})` : ''} isn’t matched to a doctor record. Ask your
-              clinic admin to set the same email on your doctor profile.
+              This login{loginEmail ? ` (${loginEmail})` : ''} isn’t matched to a doctor record. Ask your clinic
+              admin to set the same email on your doctor profile.
             </p>
           </div>
         </div>
       )}
 
-      {/* Today's queue — one tap starts the consultation for that patient */}
-      {todaysQueue.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-bold text-slate-800 flex items-center gap-2">
-              <CalendarClock size={17} className="text-blue-600" /> Today's Queue
-            </h2>
-            <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">
-              {todaysQueue.length} waiting
-            </span>
-          </div>
-          <div className="space-y-2.5">
-            {todaysQueue.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => onScribeAppointment?.(a)}
-                className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm active:bg-blue-50/60 transition-colors text-left"
-              >
-                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
-                  {initials(a.patientName)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-slate-900 text-[15px] truncate">{a.patientName}</div>
-                  <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2.5">
-                    <span className="flex items-center gap-1 font-semibold text-slate-600">
-                      <Clock size={12} /> {a.time}
-                    </span>
-                    <span className="flex items-center gap-1 truncate">
-                      <Stethoscope size={12} /> Dr. {a.doctorName.replace(/^dr\.?\s*/i, '')}
-                    </span>
-                  </div>
-                </div>
-                <span className="flex-shrink-0 flex items-center gap-1.5 bg-blue-600 text-white px-3.5 py-2 rounded-xl font-semibold text-[13px]">
-                  <Mic size={14} /> Start
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Today's appointments */}
+      <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 mb-4">
+        <button onClick={onViewAppointments} className="w-full flex items-center justify-between mb-4">
+          <span className="font-bold text-slate-900 text-[15px]">Today's Appointments</span>
+          <ChevronRight size={18} className="text-slate-300" />
+        </button>
 
-      {/* Today at a glance */}
-      <p className="text-[13px] font-bold uppercase tracking-wider text-slate-400 mb-3">Today at a glance</p>
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        {stats.map((s) => {
-          const Icon = s.icon;
-          return (
-            <div key={s.label} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${s.bg} ${s.tint}`}>
-                <Icon size={20} />
+        <div className="flex items-stretch gap-5">
+          <div className="text-center flex-shrink-0">
+            <div className="text-[32px] font-bold text-violet-600 leading-9">{todaysQueue.length}</div>
+            <div className="text-[12px] font-medium text-slate-400">Total</div>
+          </div>
+
+          <div className="w-px bg-slate-100 flex-shrink-0" />
+
+          {next ? (
+            <button
+              onClick={() => onScribeAppointment?.(next)}
+              className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
+            >
+              <div className="text-[12px] font-semibold text-violet-600">
+                {nextIn !== null && nextIn <= 0 ? 'Now' : `Next ${relativeIn(nextIn ?? 0)}`}
               </div>
-              <div className="text-[26px] font-bold text-slate-900 leading-7">{s.value}</div>
-              <div className="text-[13px] font-medium text-slate-500 mt-0.5">{s.label}</div>
+              <div className="font-bold text-slate-900 text-[16px] truncate mt-0.5">{next.patientName}</div>
+              <div className="text-[12.5px] text-slate-400 mt-0.5 truncate">
+                {next.time}
+                {next.speciality ? ` · ${next.speciality}` : ''}
+              </div>
+            </button>
+          ) : (
+            <div className="flex-1 min-w-0 flex items-center">
+              <p className="text-[13px] text-slate-400 leading-snug">
+                {todaysQueue.length ? 'All of today’s appointments are done.' : 'Nothing booked for today.'}
+              </p>
             </div>
+          )}
+        </div>
+
+        <button
+          onClick={onViewAppointments}
+          className="w-full mt-4 py-3 rounded-2xl border border-slate-200 text-[14px] font-semibold text-slate-700 active:bg-slate-50 transition-colors"
+        >
+          View all
+        </button>
+      </section>
+
+      {/* The three things a doctor does */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {actions.map((a) => {
+          const Icon = a.icon;
+          return (
+            <button
+              key={a.key}
+              onClick={a.onClick}
+              className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 flex flex-col items-center gap-2.5 active:scale-[0.98] transition-transform"
+            >
+              <span className={`w-11 h-11 rounded-full flex items-center justify-center ${a.bg} ${a.tint}`}>
+                <Icon size={20} />
+              </span>
+              <span className="text-[12px] font-semibold text-slate-700 text-center leading-tight whitespace-pre-line">
+                {a.label}
+              </span>
+            </button>
           );
         })}
       </div>
 
-      {/* Recent consultations */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-bold text-slate-800 flex items-center gap-2">
-          <Clock size={17} className="text-blue-500" /> Recent Consultations
-        </h2>
-        <button onClick={onViewAllSessions} className="text-[13px] font-semibold text-blue-600">
-          View all
+      {/* Quick Rx — prescribe without recording (refills, two-minute visits) */}
+      {onQuickRx && (
+        <button
+          onClick={onQuickRx}
+          className="w-full flex items-center justify-center gap-2 mb-4 py-3.5 rounded-2xl bg-white border border-slate-200 text-slate-700 font-bold shadow-sm active:bg-slate-50 transition-colors"
+        >
+          <Zap size={17} className="text-amber-500" /> Quick Prescription
         </button>
-      </div>
+      )}
 
-      <div className="relative mb-3">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name or phone..."
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-        />
-      </div>
-
-      {recent.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-          <div className="w-14 h-14 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
-            <Mic size={24} />
+      {/* Scribe activity — counted, never estimated. */}
+      <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 mb-5">
+        <p className="font-bold text-slate-900 text-[15px] mb-4">AI Scribe Activity</p>
+        <div className="flex">
+          <div className="flex-1">
+            <div className="text-[28px] font-bold text-violet-600 leading-8">{notesToday}</div>
+            <div className="text-[12.5px] font-medium text-slate-500 mt-0.5">Notes generated</div>
+            <div className="text-[11.5px] text-slate-400">Today</div>
           </div>
-          <p className="font-bold text-slate-700">No consultations yet</p>
-          <p className="text-sm text-slate-400 mt-1">Tap the card above to record your first one.</p>
+          <div className="w-px bg-slate-100" />
+          <div className="flex-1 pl-5">
+            <div className="text-[28px] font-bold text-indigo-500 leading-8">{notesWeek}</div>
+            <div className="text-[12.5px] font-medium text-slate-500 mt-0.5">Notes generated</div>
+            <div className="text-[11.5px] text-slate-400">This week</div>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-2.5">
-          {recent.map((con) => (
-            <button
-              key={con.id}
-              onClick={() => onSelectConsultation(con)}
-              className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm active:bg-slate-50 transition-colors text-left"
-            >
-              <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
-                {initials(con.patientName)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-slate-900 text-[15px] truncate">
-                  {con.patientName || 'Unknown Patient'}
-                </div>
-                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                  <Clock size={12} /> {con.date}
-                </div>
-              </div>
-              <span
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${
-                  con.status === 'Completed'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-amber-50 text-amber-700'
-                }`}
-              >
-                {con.status === 'Completed' ? 'Completed' : 'Draft'}
-              </span>
-              <ChevronRight size={18} className="text-slate-300 flex-shrink-0" />
+      </section>
+
+      {/* The rest of today, one tap to start */}
+      {todaysQueue.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-slate-800 text-[15px]">Today's Queue</h2>
+            <button onClick={onViewAppointments} className="text-[13px] font-semibold text-violet-600">
+              View all
             </button>
-          ))}
+          </div>
+          <div className="space-y-2.5">
+            {todaysQueue.slice(0, 4).map((a) => {
+              const m = minutesOfDay(a.time);
+              const past = m !== null && m < mins;
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => onScribeAppointment?.(a)}
+                  className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm active:bg-violet-50/60 transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-bold text-[13px] flex-shrink-0">
+                    {initials(a.patientName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-900 text-[15px] truncate">{a.patientName}</div>
+                    <div className="text-[12.5px] text-slate-400 mt-0.5">{a.time}</div>
+                  </div>
+                  <span
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-semibold text-[13px] ${
+                      past ? 'bg-slate-100 text-slate-500' : 'bg-violet-600 text-white'
+                    }`}
+                  >
+                    <Mic size={14} /> Start
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Latest notes, so the last session is always one tap away */}
+      {consultations.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-slate-800 text-[15px]">Recent Notes</h2>
+            <button onClick={onViewNotes} className="text-[13px] font-semibold text-violet-600">
+              View all
+            </button>
+          </div>
+          <div className="space-y-2.5">
+            {consultations
+              .slice()
+              .sort((a, b) => recordTime(b) - recordTime(a))
+              .slice(0, 3)
+              .map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => onSelectConsultation(c)}
+                  className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm active:bg-slate-50 transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-[13px] flex-shrink-0">
+                    {initials(c.patientName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-900 text-[15px] truncate">
+                      {c.patientName || 'Unknown Patient'}
+                    </div>
+                    <div className="text-[12.5px] text-slate-400 mt-0.5 truncate">{c.date}</div>
+                  </div>
+                  <span
+                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg ${
+                      c.status === 'Completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {c.status === 'Completed' ? 'Completed' : 'Draft'}
+                  </span>
+                </button>
+              ))}
+          </div>
         </div>
       )}
     </div>
