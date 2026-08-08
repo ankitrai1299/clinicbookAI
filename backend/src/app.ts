@@ -15,7 +15,6 @@ import { registerEmrIntegration } from './integrations/emr/index.js';
 import { registerWebhookSubscriptions } from './core/webhooks/webhook.subscriptions.js';
 import { setIntentClassifier } from './core/mcp/index.js';
 import { mcpIntentClassifier } from './core/ai/mcp.classifier.js';
-import { MEDISCRIBE_UPLOADS_DIR } from './products/mediscribe/router.js';
 
 const parseCorsOrigins = () => {
   if (env.CORS_ORIGIN.trim() === '*') {
@@ -85,22 +84,11 @@ export const createApp = () => {
     })
   );
 
-  // NovaScribe consultation audio — served unprotected (an <audio> element can't
-  // send an auth header). Filenames embed a timestamp so they're unguessable.
-  // helmet() sets Cross-Origin-Resource-Policy: same-origin globally, which blocks
-  // the cross-origin <audio> element (frontend on a different domain than this API)
-  // from loading these files (net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin). Override
-  // CORP to cross-origin for just this static route so playback/download works.
-  // MediScribe's persisted audio (unauthenticated static so <audio> can load it;
-  // filenames are unguessable timestamps).
-  app.use(
-    '/api/mediscribe/uploads',
-    express.static(MEDISCRIBE_UPLOADS_DIR, {
-      maxAge: '1y',
-      immutable: true,
-      setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
-    })
-  );
+  // MediScribe's consultation audio used to be served from an unauthenticated
+  // static mount here, defended only by a filename containing a millisecond
+  // timestamp. It is a recording of a patient's visit, so it now goes through
+  // GET /api/mediscribe/audio/* — authenticated, clinic-checked, and reached
+  // with a short-lived signed URL because <audio> cannot send a header.
 
   app.use(apiRouter);
   app.use(notFoundHandler);

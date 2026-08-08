@@ -179,15 +179,23 @@ export function uploadConsultationAudio(
   });
 }
 
-// Best-effort delete of a persisted upload file from server storage. Takes the
-// stored audioUrl (e.g. "/api/uploads/abc.mp3"). Never throws — if storage
-// deletion fails the caller still clears the session's audio reference.
+// Best-effort delete of a stored recording. Takes the stored audioUrl, which is
+// "/api/mediscribe/audio/clinics/<clinicId>/consultations/<file>?e=…&s=…".
+//
+// The WHOLE key after /audio/ is sent, not the last path segment: the key names
+// the owning clinic, and that is what the server checks before deleting. Sending
+// a bare filename would leave it unable to tell whose recording this is.
+// Never throws — the caller still clears the session's audio reference.
 export async function deleteConsultationAudio(audioUrl: string): Promise<void> {
   try {
     if (!audioUrl) return;
-    const fileName = audioUrl.split('/').pop();
-    if (!fileName) return;
-    await fetch(`${BASE}/uploads/${encodeURIComponent(fileName)}`, { method: 'DELETE', headers: authHeader() });
+    const path = audioUrl.split('?')[0];
+    const marker = '/audio/';
+    const at = path.indexOf(marker);
+    if (at < 0) return; // an older upload; its file is already gone
+    const key = path.slice(at + marker.length);
+    if (!key) return;
+    await fetch(`${BASE}/audio/${key}`, { method: 'DELETE', headers: authHeader() });
   } catch {
     // Storage deletion is best-effort; ignore failures.
   }

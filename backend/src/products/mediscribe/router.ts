@@ -11,10 +11,12 @@ import fs from 'fs';
 
 import express, { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
+import { randomUUID } from 'crypto';
 
 import { bridgeAuth, type AuthedRequest } from './middleware/auth.js';
 import type { Role } from './contracts/index.js';
 import { currentClinicId } from './context.js';
+import { storage, objectKey, clinicOfKey, signedPath, verifySignature } from '../../core/storage/index.js';
 import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
 import {
@@ -151,15 +153,52 @@ mediscribeRouter.get('/config-test', (_req, res) =>
   res.json({ sarvam: !!(process.env.SARVAM_API_KEY || '').trim(), database: 'postgres' })
 );
 
-// Delete a persisted upload audio file (best-effort).
-mediscribeRouter.delete('/uploads/:filename', (req, res) => {
-  const safeName = path.basename(req.params.filename || '');
-  if (!safeName) return res.status(400).json({ error: 'Invalid file name' });
+// Play back a stored consultation recording.
+//
+// Reached by an <audio> element, which cannot send an Authorization header, so
+// the URL carries a short-lived signature instead (see core/storage). TWO checks
+// have to pass: the signature must be ours and unexpired, and the key must
+// belong to the clinic making the request — a valid signature for one clinic's
+// recording is still refused inside another's session.
+mediscribeRouter.get(/^\/audio\/(.+)$/, async (req: Request, res: Response) => {
+  const key = decodeURI(String((req.params as unknown as string[])[0] || ''));
+  const check = verifySignature(key, req.query.e as string, req.query.s as string);
+  if (check !== 'ok') {
+    return res.status(check === 'expired' ? 410 : 403).json({
+      error: check === 'expired' ? 'This audio link has expired. Reopen the consultation.' : 'Invalid audio link.'
+    });
+  }
+  if (clinicOfKey(key) !== currentClinicId()) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
   try {
-    fs.rmSync(path.join(MEDISCRIBE_UPLOADS_DIR, safeName), { force: true });
+    const obj = await storage().get(key);
+    if (!obj) return res.status(404).json({ error: 'Recording not found. It may have been deleted.' });
+    res.setHeader('Content-Type', obj.contentType);
+    res.setHeader('Content-Length', String(obj.body.length));
+    // Private: this is patient audio, so no shared cache may keep a copy.
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    return res.end(obj.body);
+  } catch (error) {
+    console.error('[mediscribe:audio]', error);
+    return res.status(500).json({ error: 'Could not read the recording.' });
+  }
+});
+
+// Delete a stored recording (best-effort). Scoped to the caller's clinic, so a
+// filename alone is not enough to destroy another clinic's audio.
+mediscribeRouter.delete(/^\/audio\/(.+)$/, async (req: Request, res: Response) => {
+  const key = decodeURI(String((req.params as unknown as string[])[0] || ''));
+  if (!key || clinicOfKey(key) !== currentClinicId()) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  try {
+    await storage().delete(key);
     return res.json({ ok: true });
   } catch (error) {
-    console.error('[mediscribe:uploads:delete]', error);
+    console.error('[mediscribe:audio:delete]', error);
     return res.json({ ok: false });
   }
 });
@@ -180,9 +219,13 @@ mediscribeRouter.post('/transcribe', upload.single('audio'), async (req: Request
     if (req.body?.persist === 'true' || req.body?.persist === true) {
       const ext = audioExtension(req.file.originalname, req.file.mimetype);
       const safeId = String(req.body?.consultationId || 'audio').replace(/[^a-zA-Z0-9_-]/g, '');
-      const fileName = `${safeId}-${Date.now()}${ext}`;
-      fs.writeFileSync(path.join(MEDISCRIBE_UPLOADS_DIR, fileName), req.file.buffer);
-      audioUrl = `/api/mediscribe/uploads/${fileName}`;
+      // randomUUID, not Date.now(): two doctors saving in the same millisecond
+      // would otherwise overwrite each other, and a guessable name was the only
+      // thing protecting the old unauthenticated mount.
+      const fileName = `${safeId}-${randomUUID()}${ext}`;
+      const key = objectKey(currentClinicId(), 'consultations', fileName);
+      await storage().put(key, req.file.buffer, req.file.mimetype || 'application/octet-stream');
+      audioUrl = signedPath(key);
     }
 
     logUsage({ type: 'stt', consultationId: req.body?.consultationId || '', language: req.body?.language || '', bytes: req.file.size, success: true });
