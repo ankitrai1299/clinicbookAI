@@ -121,7 +121,14 @@ export default function MobileHome({
       return (phoneOf.get(c.patientId ?? '') || '').replace(/\D/g, '').includes(digits);
     });
 
-  const firstName = (doctorName || 'Doctor').replace(/^dr\.?\s*/i, '').split(' ')[0] || 'Doctor';
+  // The WHOLE name, minus a leading "Dr." we re-add ourselves.
+  //
+  // This used to take the first word only, which works for "Anita Rao" and fails
+  // for the way Indian doctors are usually recorded: "A.K. Das" became "Dr. A.K.",
+  // dropping the surname — the one part anyone actually calls them by. The
+  // heading is already `truncate`, so a genuinely long name is ellipsised by CSS
+  // rather than by guessing which word matters.
+  const displayName = (doctorName || '').replace(/^dr\.?\s*/i, '').trim() || 'Doctor';
 
   const stats = [
     { icon: CalendarDays, value: todayCount, label: "Today's Consultations", tint: 'text-blue-600', bg: 'bg-blue-50' },
@@ -137,11 +144,14 @@ export default function MobileHome({
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <Sparkles size={14} className="text-blue-600" />
-            <span className="text-[13px] font-bold text-blue-600 tracking-tight">NovaScribe AI</span>
+            {/* The product was renamed to MediScribe; this was the last screen
+                still calling itself NovaScribe — and it is the first screen the
+                phone app opens, so it was the one users saw most. */}
+            <span className="text-[13px] font-bold text-blue-600 tracking-tight">MediScribe AI</span>
           </div>
           <p className="text-slate-500 mt-2 text-[15px]">{greeting()},</p>
           <h1 className="text-[26px] font-bold text-slate-900 tracking-tight leading-8 truncate">
-            Dr. {firstName} <span className="align-middle">👋</span>
+            Dr. {displayName} <span className="align-middle">👋</span>
           </h1>
           <p className="text-slate-500 text-[13px] mt-0.5">
             You have {todayCount} consultation{todayCount === 1 ? '' : 's'} today
