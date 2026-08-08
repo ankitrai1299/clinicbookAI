@@ -19,3 +19,7 @@ backend/.novascribe-data/
 
 # Reference source of the MediScribe app (already ported into backend/src/products/mediscribe + src/mediscribe)
 AI_medical_scribe/
+
+# Scratch screenshot helpers (mint a JWT, read prod) — never commit.
+backend/_*.mjs
+backend/scripts/_tmp*.ts
