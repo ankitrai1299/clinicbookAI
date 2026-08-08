@@ -4,6 +4,7 @@
 // MediScribe + reminders lives here (a shared service), never inside a product.
 
 import { prisma } from '../config/prisma.js';
+import { hasProduct } from '../core/entitlements/entitlement.service.js';
 import { runWithClinic } from '../products/mediscribe/context.js';
 import { buildPatientHistory, type ConsultationHistoryItem } from '../products/mediscribe/services/patientHistory.js';
 import { clinicNow, labelToMinutes, slotIsFuture } from './slotMath.js';
@@ -54,8 +55,15 @@ export const getPatientRecord = async (
     include: { doctor: { select: { name: true, speciality: true } } }
   });
 
+  // Consultation notes come from MediScribe. A clinic that bought only ClinicBook
+  // has none, so we skip the read entirely rather than returning an empty list
+  // from a product they do not have — one fewer query, and the summary below
+  // then honestly reports no consultations instead of implying the doctor never
+  // wrote any.
   // NovaDoc repos read the clinic from AsyncLocalStorage — run in that context.
-  const consultations = await runWithClinic(clinicId, () => buildPatientHistory(patient.id, 'desc'));
+  const consultations = (await hasProduct(clinicId, 'mediscribe'))
+    ? await runWithClinic(clinicId, () => buildPatientHistory(patient.id, 'desc'))
+    : [];
 
   const reminders = await prisma.medicineReminder.findMany({
     where: { clinicId, patientId: patient.id, active: true },

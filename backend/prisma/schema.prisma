@@ -51,6 +51,14 @@ model Clinic {
   email            String        @unique
   phone            String        @unique
   plan             ClinicPlan    @default(STARTER)
+  // WHICH products this clinic bought — a different axis from `plan`, which is
+  // the tier (how much they pay). A clinic can be on GROWTH with only the scribe.
+  // Values: "clinicbook", "mediscribe".
+  //
+  // The default grants BOTH, so every existing clinic keeps exactly what it has
+  // today and the column can be added without changing anyone's behaviour.
+  // Selling one product alone means writing a shorter list, never a migration.
+  products         String[]      @default(["clinicbook", "mediscribe"])
   stripeCustomerId String?       @unique
   // Short human-friendly code a patient sends (or a QR pre-fills) to reach THIS
   // clinic on the shared platform WhatsApp number. Lets every clinic onboard with

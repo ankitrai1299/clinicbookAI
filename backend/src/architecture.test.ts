@@ -32,8 +32,12 @@ const SRC = __dirname;
 const KNOWN_VIOLATIONS: ReadonlyArray<[string, string]> = [
   // core → product is now EMPTY. What remains is cross-product: two ClinicBook
   // features that read MediScribe data. Both are real and wanted when a clinic
-  // bought both products — they just have to FADE when it didn't, which is
-  // Phase 3's job, so they stay on the books rather than being waved through.
+  // bought both products, and both now FADE when it didn't — they are gated on
+  // hasProduct(clinicId, 'mediscribe'), so the commercial requirement is met.
+  //
+  // They stay listed because the IMPORT is still there: this build cannot ship
+  // ClinicBook without MediScribe's code on disk, only without its behaviour.
+  // Routing them through the skill registry would finish the job.
   //
   // ClinicBook's WhatsApp FSM can send a patient their MediScribe prescription —
   // reached indirectly through services/.

@@ -36,6 +36,7 @@ import { env } from '../../../config/env.js';
 import { formatDoctorName } from '../../../utils/doctorName.js';
 import { classifyIntent } from '../../../core/whatsapp/whatsapp.intent.js';
 import { registerPatientConversation } from '../../../core/whatsapp/whatsapp.conversation.js';
+import { hasProduct } from '../../../core/entitlements/entitlement.service.js';
 import { deliverPrescriptionToPatient } from '../../../services/patientPrescription.service.js';
 import { createAppointment, cancelAppointment, updateAppointment } from '../../../core/appointments/appointment.service.js';
 import { getAvailableSlots, getDateAvailability, clinicNow } from '../../../services/scheduling.service.js';
@@ -1115,6 +1116,13 @@ const doCheck = async (params: BookingParams): Promise<BotReply> => {
 // plain message rather than letting the FSM's catch-all reset the session.
 const doPrescription = async (params: BookingParams): Promise<BotReply> => {
   await resetSession(params, S.MENU);
+  // Prescriptions come from MediScribe. A clinic that bought only ClinicBook has
+  // none to send, so say so plainly instead of reaching into a product they do
+  // not have — and never imply their doctor forgot to write one.
+  if (!(await hasProduct(params.clinicId, 'mediscribe'))) {
+    why(params, 'menu option 5 → clinic has no scribe product, back to MENU');
+    return `Prescriptions aren't available on WhatsApp for ${params.clinicName}. Please ask the clinic directly.\n\nReply MENU for options.`;
+  }
   try {
     const reply = await deliverPrescriptionToPatient({
       clinicId: params.clinicId,
