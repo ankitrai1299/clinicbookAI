@@ -23,7 +23,7 @@ import { claimInboundMessage } from './whatsapp.dedupe.js';
 import { dataSourceFor } from '../datasource/index.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
-import { handleWhatsAppMessage } from './whatsapp.booking.js';
+import { patientConversation } from './whatsapp.conversation.js';
 import { resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
 import { resolveSharedClinic } from './whatsapp.binding.js';
 import { isBrainEnabledFor, runConversation } from '../mcp/index.js';
@@ -321,17 +321,25 @@ const processOne = async (
       } else {
         // Deterministic booking state machine owns the ENTIRE conversation. No AI
         // controls flow, picks doctors, or books — every reply is FSM-generated.
-        botReply = await handleWhatsAppMessage({
-          clinicId,
-          patientId: patient.id,
-          patientName: patient.name,
-          clinicName: patient.clinic?.name ?? 'our clinic',
-          phone: to,
-          patientCode: patient.patientCode,
-          message: text,
-          replyId: interactiveId,
-          fromVoice
-        });
+        // Reached through the registered handler rather than an import, so the
+        // transport doesn't depend on the booking product; ClinicBook registers
+        // it at startup, and the FSM behind this call is unchanged.
+        const converse = patientConversation();
+        botReply = converse
+          ? await converse({
+              clinicId,
+              patientId: patient.id,
+              patientName: patient.name,
+              clinicName: patient.clinic?.name ?? 'our clinic',
+              phone: to,
+              patientCode: patient.patientCode,
+              message: text,
+              replyId: interactiveId,
+              fromVoice
+            })
+          : // No booking product on this deployment. Answer plainly rather than
+            // leaving the patient staring at an unanswered message.
+            `Hello ${patient.name} — this number can't take bookings. Please contact ${patient.clinic?.name ?? 'your clinic'} directly.`;
       }
       // null = stay silent. A plain string is trimmed (empty → safe fallback);
       // an interactive reply is passed through untouched.

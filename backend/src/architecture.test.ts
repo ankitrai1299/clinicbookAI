@@ -30,16 +30,18 @@ const SRC = __dirname;
 // Every violation present when this rule was written. Each is an edge
 // FROM a core/ file TO something that reaches a product.
 const KNOWN_VIOLATIONS: ReadonlyArray<[string, string]> = [
-  // The WhatsApp BOOKING conversation still lives in core/whatsapp. It is a
-  // ClinicBook feature — core owns WhatsApp delivery, not what to say about a
-  // booking — so the fix is to move the file, not to add an indirection.
-  ['core/whatsapp/whatsapp.booking.ts', 'products/clinicbook/waitlist/waitlist.service.ts'],
-  // Indirect: core → services/patientPrescription → products/mediscribe. Goes
-  // away with the same move.
-  ['core/whatsapp/whatsapp.booking.ts', 'services/patientPrescription.service.ts'],
   // The dashboard AI assistant can put a patient on the waitlist. Waitlist is
   // genuinely ClinicBook-only, so this one needs the capability registry.
   ['core/ai/ai.service.ts', 'products/clinicbook/waitlist/waitlist.service.ts'],
+  // ClinicBook's WhatsApp FSM can send a patient their MediScribe prescription —
+  // a real cross-product feature, reached indirectly through services/. It has to
+  // FADE when the clinic didn't buy the scribe, which is Phase 3's job, so it
+  // stays listed here rather than being quietly waved through.
+  ['products/clinicbook/whatsapp/whatsapp.booking.ts', 'services/patientPrescription.service.ts'],
+  // Same shape: the WhatsApp "my record" skill folds in the scribe's consultation
+  // history. Only the transitive check sees this one — it hid behind services/
+  // for as long as the rule was direct-import-only. Also Phase 3.
+  ['products/clinicbook/skills/record.skill.ts', 'services/patient360.service.ts'],
 ];
 
 const isKnown = (from: string, to: string): boolean =>
@@ -102,7 +104,10 @@ for (const abs of files) {
 
 // ---- layers ---------------------------------------------------------------
 
-const isProduct = (f: string) => f.startsWith('products/');
+// products/<name>/… belongs to a product. A file sitting DIRECTLY in products/
+// is the assembly layer (products/register.ts) — it exists to plug every product
+// in, so reaching all of them is its job, not a violation.
+const isProduct = (f: string) => f.startsWith('products/') && f.split('/').length > 2;
 const productOf = (f: string) => (isProduct(f) ? f.split('/')[1] : null);
 const isCore = (f: string) => f.startsWith('core/');
 
@@ -152,21 +157,40 @@ describe('module boundary: core must not depend on a product', () => {
   });
 });
 
+// novascribe/ holds MediScribe's WhatsApp skills — the same product, split for
+// historical reasons, so the pair counts as one family.
+const familyOf = (product: string) => (product === 'novascribe' ? 'mediscribe' : product);
+
+/**
+ * Does this file reach a product OUTSIDE `family`, directly or through any
+ * number of hops? Transitive on purpose: routing a cross-product call through
+ * services/ hides it from a direct-import check but does not remove it. Without
+ * this, moving ClinicBook's WhatsApp FSM out of core would have silently dropped
+ * its MediScribe prescription dependency off the books.
+ */
+const reachesOtherProduct = (file: string, family: string, seen = new Set<string>()): string | null => {
+  const p = productOf(file);
+  if (p) return familyOf(p) === family ? null : file;
+  if (seen.has(file)) return null;
+  seen.add(file);
+  for (const dep of graph.get(file) ?? []) {
+    const hit = reachesOtherProduct(dep, family, seen);
+    if (hit) return hit;
+  }
+  return null;
+};
+
 describe('module boundary: products must not depend on each other', () => {
   it('has no product → other-product dependency beyond the known list', () => {
     const violations: string[] = [];
     for (const [file, deps] of graph) {
       const mine = productOf(file);
       if (!mine) continue;
+      const family = familyOf(mine);
       for (const dep of deps) {
-        const theirs = productOf(dep);
-        if (!theirs || theirs === mine) continue;
-        // novascribe/ holds MediScribe's WhatsApp skills — same product, split
-        // for historical reasons, so treat the pair as one.
-        const sameFamily = new Set([mine, theirs]).size === 2 &&
-          [mine, theirs].every((p) => p === 'mediscribe' || p === 'novascribe');
-        if (sameFamily || isKnown(file, dep)) continue;
-        violations.push(`${file} → ${dep}`);
+        const hit = reachesOtherProduct(dep, family);
+        if (!hit || isKnown(file, dep)) continue;
+        violations.push(dep === hit ? `${file} → ${dep}` : `${file} → ${dep} → … → ${hit}`);
       }
     }
     expect(violations, `NEW product → product dependencies:\n  ${violations.join('\n  ')}`).toEqual([]);

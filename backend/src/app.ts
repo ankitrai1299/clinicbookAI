@@ -10,18 +10,11 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { requestId } from './middleware/requestId.js';
 import { logger } from './middleware/logger.js';
 import { notFoundHandler } from './middleware/notFound.js';
-import { registerClinicBookCapabilities } from './products/clinicbook/clinicbook.capabilities.js';
-import { registerWaitlistRecovery } from './products/clinicbook/waitlist/waitlist.recovery.js';
+import { registerProducts } from './products/register.js';
 import { registerEmrIntegration } from './integrations/emr/index.js';
 import { registerWebhookSubscriptions } from './core/webhooks/webhook.subscriptions.js';
-import { registerClinicBookSkills } from './products/clinicbook/skills/booking.skill.js';
-import { registerClinicBookStatusSkill } from './products/clinicbook/skills/status.skill.js';
-import { registerClinicBookRecordSkill } from './products/clinicbook/skills/record.skill.js';
-import { registerNovaScribeSkills } from './products/novascribe/skills/prescription.skill.js';
-import { registerNovaScribeDocumentsSkill } from './products/novascribe/skills/documents.skill.js';
 import { setIntentClassifier } from './core/mcp/index.js';
 import { mcpIntentClassifier } from './core/ai/mcp.classifier.js';
-import { registerAutoCompleteActions } from './services/autoCompleteVisits.service.js';
 import { MEDISCRIBE_UPLOADS_DIR } from './products/mediscribe/router.js';
 
 const parseCorsOrigins = () => {
@@ -35,22 +28,12 @@ const parseCorsOrigins = () => {
 export const createApp = () => {
   const app = express();
 
-  // Wire the platform brain + product event subscriptions. Both are idempotent,
-  // so calling on every app build (incl. tests) is safe.
-  //  - Products register their MCP capabilities (ClinicBook: appointment.*).
-  //  - Products register their conversational skills (ClinicBook: booking).
-  //  - The brain's NL understanding is backed by core/ai.
-  //  - The patient-facing MediScribe skills (prescription/documents) answer
-  //    WhatsApp requests for a patient's scribe records.
-  registerClinicBookCapabilities();
-  registerWaitlistRecovery();
-  registerClinicBookSkills();
-  registerClinicBookStatusSkill();
-  registerClinicBookRecordSkill();
-  registerNovaScribeSkills();
-  registerNovaScribeDocumentsSkill();
-  // Post-visit: after ANY completion, send the patient their scribe prescription.
-  registerAutoCompleteActions();
+  // Plug the products into the platform — MCP capabilities, WhatsApp skills, the
+  // booking conversation, waitlist recovery, post-visit actions. See
+  // products/register.ts for what each one contributes. Idempotent, so building
+  // the app more than once (tests do) is safe.
+  registerProducts();
+  // The brain's NL understanding is backed by core/ai.
   setIntentClassifier(mcpIntentClassifier);
   // Bridge domain events to the outbound-webhook outbox. The handler only writes
   // a delivery row; webhook.cron owns the HTTP, retries and giving up.

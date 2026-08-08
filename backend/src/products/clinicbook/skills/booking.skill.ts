@@ -15,7 +15,7 @@
 import { skillRegistry } from '../../../core/mcp/skillRegistry.js';
 import type { McpContext } from '../../../core/mcp/index.js';
 import type { Skill } from '../../../core/mcp/skill.types.js';
-import { handleWhatsAppMessage, isBookingFlowActive } from '../../../core/whatsapp/whatsapp.booking.js';
+import { handleWhatsAppMessage, isBookingFlowActive } from '../whatsapp/whatsapp.booking.js';
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 

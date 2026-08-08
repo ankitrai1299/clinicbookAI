@@ -30,22 +30,23 @@
 // deterministically.
 // ===========================================================================
 
-import { forClinic } from '../../config/tenantPrisma.js';
-import { dataSourceFor } from '../datasource/index.js';
-import { env } from '../../config/env.js';
-import { formatDoctorName } from '../../utils/doctorName.js';
-import { classifyIntent } from './whatsapp.intent.js';
-import { deliverPrescriptionToPatient } from '../../services/patientPrescription.service.js';
-import { createAppointment, cancelAppointment, updateAppointment } from '../../core/appointments/appointment.service.js';
-import { getAvailableSlots, getDateAvailability, clinicNow } from '../../services/scheduling.service.js';
+import { forClinic } from '../../../config/tenantPrisma.js';
+import { dataSourceFor } from '../../../core/datasource/index.js';
+import { env } from '../../../config/env.js';
+import { formatDoctorName } from '../../../utils/doctorName.js';
+import { classifyIntent } from '../../../core/whatsapp/whatsapp.intent.js';
+import { registerPatientConversation } from '../../../core/whatsapp/whatsapp.conversation.js';
+import { deliverPrescriptionToPatient } from '../../../services/patientPrescription.service.js';
+import { createAppointment, cancelAppointment, updateAppointment } from '../../../core/appointments/appointment.service.js';
+import { getAvailableSlots, getDateAvailability, clinicNow } from '../../../services/scheduling.service.js';
 import {
   joinWaitlist,
   pendingOfferFor,
   claimWaitlistOffer,
   declineWaitlistOffer
-} from '../../products/clinicbook/waitlist/waitlist.service.js';
-import { recordWhatsAppAudit } from './whatsapp.service.js';
-import { understand, confidenceMin, type Understanding } from './whatsapp.receptionist.js';
+} from '../waitlist/waitlist.service.js';
+import { recordWhatsAppAudit } from '../../../core/whatsapp/whatsapp.service.js';
+import { understand, confidenceMin, type Understanding } from '../../../core/whatsapp/whatsapp.receptionist.js';
 import {
   type BotReply,
   type ReplyRow,
@@ -55,7 +56,7 @@ import {
   OPT_PREFIX,
   prefixReply,
   RID
-} from './whatsapp.reply.js';
+} from '../../../core/whatsapp/whatsapp.reply.js';
 
 // --- States ---------------------------------------------------------------
 const S = {
@@ -1472,4 +1473,13 @@ const handleTopLevel = async (params: BookingParams, t: string): Promise<BotRepl
       why(params, `input "${t}" is not an actionable command in a settled state → STAY SILENT (no reply)`);
       return null;
   }
+};
+
+/**
+ * Plug the booking conversation into core's WhatsApp transport. Registered at
+ * startup by app.ts; core calls whatever is registered and knows nothing about
+ * the FSM behind it.
+ */
+export const registerBookingConversation = (): void => {
+  registerPatientConversation(handleWhatsAppMessage);
 };
