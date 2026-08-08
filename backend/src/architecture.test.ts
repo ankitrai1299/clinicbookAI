@@ -30,13 +30,13 @@ const SRC = __dirname;
 // Every violation present when this rule was written. Each is an edge
 // FROM a core/ file TO something that reaches a product.
 const KNOWN_VIOLATIONS: ReadonlyArray<[string, string]> = [
-  // The dashboard AI assistant can put a patient on the waitlist. Waitlist is
-  // genuinely ClinicBook-only, so this one needs the capability registry.
-  ['core/ai/ai.service.ts', 'products/clinicbook/waitlist/waitlist.service.ts'],
+  // core → product is now EMPTY. What remains is cross-product: two ClinicBook
+  // features that read MediScribe data. Both are real and wanted when a clinic
+  // bought both products — they just have to FADE when it didn't, which is
+  // Phase 3's job, so they stay on the books rather than being waved through.
+  //
   // ClinicBook's WhatsApp FSM can send a patient their MediScribe prescription —
-  // a real cross-product feature, reached indirectly through services/. It has to
-  // FADE when the clinic didn't buy the scribe, which is Phase 3's job, so it
-  // stays listed here rather than being quietly waved through.
+  // reached indirectly through services/.
   ['products/clinicbook/whatsapp/whatsapp.booking.ts', 'services/patientPrescription.service.ts'],
   // Same shape: the WhatsApp "my record" skill folds in the scribe's consultation
   // history. Only the transitive check sees this one — it hid behind services/
@@ -148,6 +148,19 @@ describe('module boundary: core must not depend on a product', () => {
       }
     }
     expect(violations, `NEW core → product dependencies:\n  ${violations.join('\n  ')}`).toEqual([]);
+  });
+
+  it('has no core exemptions left at all', () => {
+    // Phase 2 emptied the core side of the ratchet. Keeping it empty is the
+    // point: the moment a core exemption is added back, core stops being
+    // shippable without the product it names.
+    const coreExemptions = KNOWN_VIOLATIONS.filter(([from]) => from.startsWith('core/'));
+    expect(
+      coreExemptions,
+      `core/ must not depend on any product — invert it instead of listing it:\n  ${coreExemptions
+        .map((e) => e.join(' → '))
+        .join('\n  ')}`
+    ).toEqual([]);
   });
 
   it('every entry in the known list is still real, so the ratchet cannot rust', () => {

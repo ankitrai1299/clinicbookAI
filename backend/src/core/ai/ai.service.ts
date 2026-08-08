@@ -9,7 +9,8 @@ import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { cancelAppointment, createAppointment, getAppointments, updateAppointment } from '../../core/appointments/appointment.service.js';
 import { createDoctor, getDoctors, updateDoctor } from '../doctors/doctor.service.js';
 import { createPatient, getPatients, updatePatient } from '../patients/patient.service.js';
-import { addToWaitlist, claimWaitlistOffer } from '../../products/clinicbook/waitlist/waitlist.service.js';
+import { capabilityRegistry, invoke } from '../mcp/index.js';
+import type { McpContext } from '../mcp/index.js';
 import { sendWhatsAppTextMessage } from '../whatsapp/whatsapp.service.js';
 import { getAvailableSlots, isSlotAvailable } from '../../services/scheduling.service.js';
 
@@ -321,10 +322,11 @@ const executeTool = async (
       return cancelAppointment(clinicId, args.id as string);
 
     case 'add_to_waitlist':
-      return addToWaitlist(clinicId, {
-        patientId: args.patientId as string,
-        priority: (args.priority as number) ?? 0
-      });
+      return waitlistCapability(
+        { clinicId, channel: 'dashboard', actor: { kind: 'staff' } },
+        'waitlist.add',
+        { patientId: args.patientId as string, priority: (args.priority as number) ?? 0 }
+      );
 
     case 'send_whatsapp_message': {
       if (!isWhatsAppConfigured()) {
@@ -931,6 +933,23 @@ interface PatientToolContext {
   patientId: string;
 }
 
+/**
+ * The waitlist is ClinicBook's, so the assistant reaches it through the
+ * capability registry rather than importing the product. A deployment without
+ * ClinicBook registers no waitlist capability; the assistant then says so in
+ * words the model can relay, instead of failing on a module that isn't there.
+ */
+const waitlistCapability = async (
+  ctx: McpContext,
+  name: 'waitlist.add' | 'waitlist.claim',
+  input: unknown = {}
+): Promise<unknown> => {
+  if (!capabilityRegistry.has(name)) {
+    return { success: false, error: 'The waitlist is not available on this plan.' };
+  }
+  return invoke(ctx, name, input);
+};
+
 const listAvailableSlots = async (clinicId: string, dateStr: string, filter?: string) => {
   const db = forClinic(clinicId);
   const doctors = await db.doctor.findMany({ where: { clinicId } });
@@ -1070,7 +1089,14 @@ const executePatientTool = async (
     }
 
     case 'claim_waitlist_offer':
-      return claimWaitlistOffer(ctx.clinicId, ctx.patientId);
+      return waitlistCapability(
+        {
+          clinicId: ctx.clinicId,
+          channel: 'whatsapp',
+          actor: { kind: 'patient', patientId: ctx.patientId }
+        },
+        'waitlist.claim'
+      );
 
     case 'cancel_appointment': {
       const id = String(args.appointmentId ?? '');

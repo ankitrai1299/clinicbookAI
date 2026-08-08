@@ -11,7 +11,7 @@
 //
 // Every call is idempotent, so building the app twice (tests do) is safe.
 
-import { registerClinicBookCapabilities } from './clinicbook/clinicbook.capabilities.js';
+import { registerClinicBookCapabilities, registerWaitlistCapabilities } from './clinicbook/clinicbook.capabilities.js';
 import { registerBookingConversation } from './clinicbook/whatsapp/whatsapp.booking.js';
 import { registerWaitlistRecovery } from './clinicbook/waitlist/waitlist.recovery.js';
 import { registerClinicBookSkills } from './clinicbook/skills/booking.skill.js';
@@ -24,6 +24,7 @@ import { registerAutoCompleteActions } from '../services/autoCompleteVisits.serv
 /** ClinicBook AI — booking, waitlist, reminders, patient communication. */
 export const registerClinicBook = (): void => {
   registerClinicBookCapabilities();
+  registerWaitlistCapabilities();
   registerBookingConversation();
   registerWaitlistRecovery();
   registerClinicBookSkills();

@@ -7,6 +7,7 @@
 // ctx.actor.patientId (the single shared identity), never re-derived here.
 
 import { forClinic } from '../../config/tenantPrisma.js';
+import { addToWaitlist, claimWaitlistOffer } from './waitlist/waitlist.service.js';
 import { AppError } from '../../utils/AppError.js';
 import { capabilityRegistry } from '../../core/mcp/index.js';
 import type { McpContext } from '../../core/mcp/index.js';
@@ -113,5 +114,31 @@ export const registerClinicBookCapabilities = (): void => {
       }
       return getAppointments(ctx.clinicId, { limit: 500 });
     }
+  });
+};
+
+/**
+ * Waitlist, exposed as capabilities so the dashboard assistant can reach it
+ * without core/ai importing a product. Waitlist is genuinely ClinicBook-only:
+ * a clinic that bought just the scribe has nothing to wait for, and the
+ * assistant tells them so rather than crashing on a missing module.
+ */
+export const registerWaitlistCapabilities = (): void => {
+  capabilityRegistry.register({
+    name: 'waitlist.add',
+    product: 'clinicbook',
+    description: 'Put a patient on the waitlist for an earlier slot.',
+    handler: (ctx, input: { patientId?: string; priority?: number }) =>
+      addToWaitlist(ctx.clinicId, {
+        patientId: resolvePatientId(ctx, input),
+        priority: input.priority ?? 0
+      })
+  });
+
+  capabilityRegistry.register({
+    name: 'waitlist.claim',
+    product: 'clinicbook',
+    description: 'Claim a slot that was offered to a waitlisted patient.',
+    handler: (ctx) => claimWaitlistOffer(ctx.clinicId, resolvePatientId(ctx, {}))
   });
 };
