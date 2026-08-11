@@ -96,7 +96,7 @@ export default function MobileSessions({
   }, [consultations, query, phoneOf]);
 
   return (
-    <div className="px-5 pt-4">
+    <div className="p-5 pb-8">
       <h1 className="text-[28px] font-bold tracking-tight text-slate-900">Sessions</h1>
       <p className="text-[13.5px] text-slate-500 mt-0.5 mb-4">
         {consultations.length} recorded consultation{consultations.length === 1 ? '' : 's'}

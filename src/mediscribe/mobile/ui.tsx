@@ -131,7 +131,7 @@ export const Card: React.FC<{
   className?: string;
   onClick?: () => void;
 }> = ({ children, className = '', onClick }) => {
-  const cls = `bg-white rounded-2xl border border-[#E8ECF2] shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${className}`;
+  const cls = `bg-white rounded-2xl border border-[#E8ECF2] shadow-[0_1px_6px_rgba(17,24,39,0.04)] ${className}`;
   return onClick ? (
     <button onClick={onClick} className={`${cls} text-left w-full active:scale-[0.995] transition-transform`}>
       {children}
@@ -160,7 +160,13 @@ export const StatusBadge = ({ status }: { status?: string }) => {
         ? 'bg-[#EEEFFE] text-[#4A4BD4]'
         : 'bg-[#FEF8EB] text-[#D97706]';
   const label = s === 'completed' ? 'Completed' : s === 'recording' ? 'Recording' : s === 'processing' ? 'Processing' : 'Draft';
-  return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md whitespace-nowrap ${style}`}>{label}</span>;
+  const dot = s === 'completed' ? '#16A34A' : s === 'recording' || s === 'processing' ? '#4A4BD4' : '#D97706';
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${style}`}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dot }} />
+      {label}
+    </span>
+  );
 };
 
 export const TrendChip = ({ trend }: { trend: Trend }) => {
@@ -196,24 +202,44 @@ export const StatCard: React.FC<{
     </div>
     <div className="text-[28px] font-bold text-slate-900 mt-3 tracking-tight leading-9">{value}</div>
     <div className="text-[12.5px] font-medium text-slate-500 mt-0.5 truncate">{label}</div>
-    {onClick && <div className="text-[11.5px] font-semibold text-[#5B5CEB] mt-2">View details →</div>}
+    {onClick && (
+      <>
+        <div className="h-px bg-slate-100 mt-3.5 mb-2.5" />
+        <div className="flex items-center gap-1 text-[11.5px] font-semibold text-[#4A4BD4]">
+          View Details
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      </>
+    )}
   </Card>
 );
 
 export const SectionHeader = ({
   title,
+  icon,
   action,
   onAction
 }: {
   title: string;
+  icon?: React.ReactNode;
   action?: string;
   onAction?: () => void;
 }) => (
   <div className="flex items-center justify-between mb-3">
-    <h2 className="text-[17px] font-bold text-slate-900 tracking-tight">{title}</h2>
+    <div className="flex items-center gap-2">
+      {icon && (
+        <span className="w-7 h-7 rounded-lg bg-[#EEEFFE] text-[#5B5CEB] flex items-center justify-center">{icon}</span>
+      )}
+      <h2 className="text-[17px] font-bold text-slate-900 tracking-tight">{title}</h2>
+    </div>
     {action && onAction && (
-      <button onClick={onAction} className="text-[13px] font-semibold text-[#5B5CEB]">
+      <button onClick={onAction} className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-[#5B5CEB]">
         {action}
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
     )}
   </div>
@@ -267,8 +293,19 @@ export const SearchBar = ({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full pl-10 pr-4 py-3 bg-white border border-[#E8ECF2] rounded-2xl text-[14px] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5B5CEB]/15 focus:border-[#5B5CEB]"
+      className="w-full pl-10 pr-9 py-3 bg-white border border-[#E8ECF2] rounded-2xl text-[15px] text-slate-900 placeholder:text-slate-400 shadow-[0_1px_6px_rgba(17,24,39,0.04)] focus:outline-none focus:ring-2 focus:ring-[#5B5CEB]/15 focus:border-[#5B5CEB]"
     />
+    {value.length > 0 && (
+      <button
+        onClick={() => onChange('')}
+        aria-label="Clear search"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 active:text-slate-500"
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm3.5 12.1-1.4 1.4L12 13.4l-2.1 2.1-1.4-1.4L10.6 12 8.5 9.9l1.4-1.4L12 10.6l2.1-2.1 1.4 1.4L13.4 12l2.1 2.1z" />
+        </svg>
+      </button>
+    )}
   </div>
 );
 

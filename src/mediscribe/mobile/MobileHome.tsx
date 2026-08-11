@@ -157,7 +157,7 @@ export default function MobileHome({
   const displayName = bareName(doctorName) || 'Doctor';
 
   return (
-    <div className="px-5 pt-4 pb-2">
+    <div className="p-5 pb-8">
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex-1 pr-3 min-w-0">
@@ -239,7 +239,7 @@ export default function MobileHome({
       {/* Today's queue — one tap starts that patient's consultation */}
       {todaysQueue.length > 0 && (
         <div className="mt-7">
-          <SectionHeader title="Today's queue" action="View all" onAction={onViewAppointments} />
+          <SectionHeader title="Today's Queue" icon={<Clock size={15} />} action="View all" onAction={onViewAppointments} />
           {next && (
             <p className="text-[12.5px] text-slate-500 -mt-1 mb-3">
               Next: <span className="font-semibold text-slate-700">{next.patientName}</span> {relativeIn((minutesOfDay(next.time) ?? 0) - mins)}
@@ -266,7 +266,7 @@ export default function MobileHome({
 
       {/* Recent consultations */}
       <div className="mt-7">
-        <SectionHeader title="Recent consultations" action="View all" onAction={onViewNotes} />
+        <SectionHeader title="Recent Consultations" icon={<Clock size={15} />} action="View all" onAction={onViewNotes} />
         <div className="mb-3">
           <SearchBar value={query} onChange={setQuery} placeholder="Search patients…" />
         </div>

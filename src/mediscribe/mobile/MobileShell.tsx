@@ -40,14 +40,23 @@ export default function MobileShell({ activeView, onNavigate, canView, onAsk, ch
   const tabs = TABS.filter((t) => canView(t.permission));
 
   return (
-    <div className="min-h-screen bg-[#FAFBFC] font-sans text-slate-900 flex flex-col">
-      <div className="flex-1 overflow-y-auto pb-24">{children}</div>
+    <div className="ms-phone min-h-screen bg-[#FAFBFC] text-slate-900 flex flex-col">
+      {/* Padding-bottom is exactly the bar: 60px plus whatever the device
+          reserves for its gesture pill. The old pb-24/pb-28 was a guess that
+          left a visible band of empty canvas under every screen. */}
+      <div
+        className="flex-1 overflow-y-auto"
+        style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom))' }}
+      >
+        {children}
+      </div>
 
       {onAsk && (
         <button
           onClick={onAsk}
           aria-label="Ask the assistant"
-          className="fixed right-5 bottom-[92px] z-50 flex flex-col items-center gap-0.5 active:scale-95 transition-transform"
+          style={{ bottom: 'calc(76px + env(safe-area-inset-bottom))' }}
+          className="fixed right-5 z-50 flex flex-col items-center gap-0.5 active:scale-95 transition-transform"
         >
           <span className="w-14 h-14 rounded-full bg-[#5B5CEB] text-white flex items-center justify-center shadow-lg shadow-[#5B5CEB]/35">
             <Sparkles size={24} />
@@ -56,8 +65,12 @@ export default function MobileShell({ activeView, onNavigate, canView, onAsk, ch
         </button>
       )}
 
-      <nav className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[#E8ECF2]">
-        <div className="flex items-stretch px-2 pt-2 pb-[max(env(safe-area-inset-bottom),10px)]">
+      {/* 60px bar + the device inset, pt-2 — the native app's own measurements. */}
+      <nav
+        className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-100 shadow-[0_-10px_24px_rgba(17,24,39,0.08)]"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="flex items-stretch px-2 pt-2" style={{ height: 60 }}>
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = activeView === t.id;
@@ -66,12 +79,12 @@ export default function MobileShell({ activeView, onNavigate, canView, onAsk, ch
                 key={t.id}
                 onClick={() => onNavigate(t.id)}
                 aria-current={active ? 'page' : undefined}
-                className={`flex-1 flex flex-col items-center gap-1 py-1 transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-start pt-0.5 transition-colors ${
                   active ? 'text-[#5B5CEB]' : 'text-slate-400'
                 }`}
               >
-                <Icon size={22} strokeWidth={active ? 2.4 : 2} />
-                <span className="text-[11px] font-semibold tracking-tight">{t.label}</span>
+                <Icon size={23} strokeWidth={active ? 2.4 : 2} />
+                <span className="text-[11px] font-semibold mt-0.5">{t.label}</span>
               </button>
             );
           })}

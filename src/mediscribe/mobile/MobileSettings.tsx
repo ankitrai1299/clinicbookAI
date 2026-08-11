@@ -89,7 +89,7 @@ export default function MobileSettings({
   ];
 
   return (
-    <div className="px-5 pt-4">
+    <div className="p-5 pb-8">
       <h1 className="text-[28px] font-bold tracking-tight text-slate-900 mb-4">Settings</h1>
 
       {/* Who is signed in — the question this screen answers first. */}

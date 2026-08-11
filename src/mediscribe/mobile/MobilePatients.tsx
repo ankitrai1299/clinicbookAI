@@ -61,7 +61,7 @@ export default function MobilePatients({ patients, consultations, onSelectPatien
   }, [patients, query, byPatient]);
 
   return (
-    <div className="px-5 pt-4">
+    <div className="p-5 pb-8">
       <div className="flex items-start justify-between mb-1">
         <h1 className="text-[28px] font-bold tracking-tight text-slate-900">Patients</h1>
         {onAddPatient && (
