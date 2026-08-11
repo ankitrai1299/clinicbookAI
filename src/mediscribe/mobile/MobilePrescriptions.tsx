@@ -1,30 +1,36 @@
 import React from 'react';
-import { Pill } from 'lucide-react';
+import { Pill, Clock } from 'lucide-react';
 import { PrescriptionRecord, Patient } from '../types';
 import {
-  initials,
-  recordTime,
-  inRange,
-  RangeKey,
+  Avatar,
+  Card,
+  Chips,
   ScreenHeader,
   SearchBar,
-  RangeChips,
   EmptyState,
+  recordTime,
+  inRange,
+  type RangeKey
 } from './ui';
 
-// Prescriptions extracted from finalized consultations. Same list the web shows,
-// laid out for a phone.
+// Prescriptions extracted from finalized consultations.
 //
 // The badge counts medicines rather than claiming a delivery status: whether a
 // prescription reached the patient on WhatsApp is recorded on the send, not on
-// this record, so a "Sent" pill here would be a guess about something a patient
-// may be relying on.
+// this record, and a patient may be relying on the answer.
 
 interface MobilePrescriptionsProps {
   prescriptions: PrescriptionRecord[];
   patients?: Patient[];
-  onBack: () => void;
+  onBack?: () => void;
 }
+
+const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
+  { key: 'all', label: 'Any time' },
+  { key: 'today', label: 'Today' },
+  { key: 'week', label: '7 days' },
+  { key: 'month', label: '30 days' }
+];
 
 const medNames = (p: PrescriptionRecord): string =>
   (p.prescribedMedications || [])
@@ -61,19 +67,19 @@ export default function MobilePrescriptions({ prescriptions, patients, onBack }:
       <ScreenHeader title="Prescriptions" onBack={onBack} />
 
       <div className="px-5 space-y-3 mb-4">
-        <SearchBar value={query} onChange={setQuery} placeholder="Search prescriptions..." />
-        <RangeChips value={range} onChange={setRange} />
+        <SearchBar value={query} onChange={setQuery} placeholder="Search patient or medicine…" />
+        <Chips value={range} onChange={setRange} options={RANGE_OPTIONS} />
       </div>
 
       <div className="px-5">
         {rows.length === 0 ? (
           <EmptyState
-            icon={<Pill size={24} />}
+            icon={<Pill size={26} />}
             title={prescriptions.length ? 'Nothing matches' : 'No prescriptions yet'}
             hint={
               prescriptions.length
-                ? 'Try a different name, medicine or date range.'
-                : 'Finalize a consultation to generate one.'
+                ? 'Try a different name, medicine or period.'
+                : 'Finalize a consultation with medicines and it will appear here.'
             }
           />
         ) : (
@@ -82,27 +88,27 @@ export default function MobilePrescriptions({ prescriptions, patients, onBack }:
               const count = (p.prescribedMedications || []).length;
               const names = medNames(p);
               return (
-                <div key={p.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                <Card key={p.id} className="p-4">
                   <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center font-bold text-[12px] flex-shrink-0">
-                      {initials(p.patientName)}
-                    </div>
+                    <Avatar name={p.patientName} size={40} />
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-slate-900 text-[15px] truncate">
                         {p.patientName || 'Unknown Patient'}
                       </div>
-                      <div className="text-[12px] text-slate-400 mt-0.5 truncate">{p.date}</div>
+                      <div className="text-[12px] text-slate-400 mt-1 flex items-center gap-1.5">
+                        <Clock size={12} /> {p.date}
+                      </div>
                     </div>
-                    <span className="flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700">
+                    <span className="flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-[#EEEFFE] text-[#4A4BD4]">
                       {count} {count === 1 ? 'medicine' : 'medicines'}
                     </span>
                   </div>
                   {(names || p.advice?.length) && (
-                    <p className="text-[13px] text-slate-500 mt-2.5 pl-12 line-clamp-2 leading-snug">
+                    <p className="text-[13px] text-slate-500 mt-2.5 pl-[52px] line-clamp-2 leading-snug">
                       {names || (p.advice || []).join('; ')}
                     </p>
                   )}
-                </div>
+                </Card>
               );
             })}
           </div>

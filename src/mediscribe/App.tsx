@@ -422,6 +422,8 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // prescription, so the existing pipeline (WhatsApp prescription + medicine
   // reminders + patient timeline) runs exactly as it does for a recorded visit.
   const [quickRxOpen, setQuickRxOpen] = useState(false);
+  // Which slice of notes the phone list shows — set by the dashboard metric cards.
+  const [notesFilter, setNotesFilter] = useState<'all' | 'drafts' | 'completed'>('all');
   const handleQuickPrescription = async (con: Consultation) => {
     await saveConsultation(con);
     setConsultations(prev => [con, ...prev.filter(c => c.id !== con.id)]);
@@ -651,8 +653,15 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 onSelectConsultation={handleSelectExistingConsultation}
                 onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}
                 onViewAppointments={() => setActiveView('appointments')}
-                onViewNotes={() => setActiveView('consultations')}
-                onViewPrescriptions={() => setActiveView('prescriptions')}
+                onViewNotes={() => { setNotesFilter('all'); setActiveView('consultations'); }}
+                // A metric card opens the list it counts, pre-filtered — so the
+                // number and the screen behind it can never disagree.
+                onViewList={(f) => {
+                  if (f === 'follow-ups') { setActiveView('reports'); return; }
+                  setNotesFilter(f === 'today' ? 'all' : f);
+                  setActiveView('consultations');
+                }}
+                onOpenProfile={() => setActiveView('more')}
                 onQuickRx={() => setQuickRxOpen(true)}
               />
             ) : activeView === 'appointments' ? (
@@ -667,6 +676,9 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 consultations={consultations}
                 patients={patients}
                 onSelectConsultation={handleSelectExistingConsultation}
+                initialStatus={notesFilter}
+                title={notesFilter === 'drafts' ? 'Draft reports' : notesFilter === 'completed' ? 'Completed' : 'My notes'}
+                onBack={notesFilter === 'all' ? undefined : () => { setNotesFilter('all'); setActiveView('dashboard'); }}
               />
             ) : activeView === 'prescriptions' ? (
               <MobilePrescriptions

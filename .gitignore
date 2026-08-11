@@ -23,3 +23,8 @@ AI_medical_scribe/
 # Scratch screenshot helpers (mint a JWT, read prod) — never commit.
 backend/_*.mjs
 backend/scripts/_tmp*.ts
+
+# Reference-only: the native MediScribe app whose design the phone UI follows.
+# Not built or deployed from this repo.
+mediscribe-app*/
+novascribe-ai*/

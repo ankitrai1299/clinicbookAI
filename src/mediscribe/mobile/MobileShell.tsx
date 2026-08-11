@@ -46,7 +46,7 @@ export default function MobileShell({ activeView, onNavigate, canView, onRecord,
         onClick={() => onNavigate(t.id)}
         aria-current={active ? 'page' : undefined}
         className={`flex-1 flex flex-col items-center gap-1 py-1 transition-colors ${
-          active ? 'text-violet-600' : 'text-slate-400'
+          active ? 'text-[#5B5CEB]' : 'text-slate-400'
         }`}
       >
         <Icon size={21} strokeWidth={active ? 2.5 : 2} />
@@ -56,11 +56,11 @@ export default function MobileShell({ activeView, onNavigate, canView, onRecord,
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col">
+    <div className="min-h-screen bg-[#FAFBFC] font-sans text-slate-900 flex flex-col">
       {/* Padding-bottom clears the bar AND the mic button that rides above it. */}
       <div className="flex-1 overflow-y-auto pb-28">{children}</div>
 
-      <nav className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(15,23,42,0.07)]">
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[#E8ECF2] shadow-[0_-4px_20px_rgba(15,23,42,0.07)]">
         <div className="relative flex items-stretch px-2 pt-2 pb-[max(env(safe-area-inset-bottom),10px)]">
           {LEFT.filter((t) => canView(t.permission)).map(renderTab)}
 
@@ -72,7 +72,7 @@ export default function MobileShell({ activeView, onNavigate, canView, onRecord,
           <button
             onClick={onRecord}
             aria-label="Start a new consultation"
-            className="absolute left-1/2 -translate-x-1/2 -top-6 w-[58px] h-[58px] rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-violet-600/40 ring-4 ring-white active:scale-95 transition-transform"
+            className="absolute left-1/2 -translate-x-1/2 -top-6 w-[58px] h-[58px] rounded-full bg-gradient-to-br from-[#5B5CEB] to-[#4A4BD4] text-white flex items-center justify-center shadow-lg shadow-[#5B5CEB]/35 ring-4 ring-white active:scale-95 transition-transform"
           >
             <Mic size={24} strokeWidth={2.4} />
           </button>

@@ -69,7 +69,7 @@ export default function MobileAppointments({
       const delta = m - mins;
       if (delta < -15) return { text: 'Done', cls: 'bg-slate-100 text-slate-500' };
       if (delta <= 0) return { text: 'Now', cls: 'bg-emerald-50 text-emerald-700' };
-      if (delta <= 60) return { text: relativeIn(delta), cls: 'bg-violet-50 text-violet-700' };
+      if (delta <= 60) return { text: relativeIn(delta), cls: 'bg-[#EEEFFE] text-[#4A4BD4]' };
     }
     if (a.patientId && !seenPatients.has(a.patientId)) {
       return { text: 'New patient', cls: 'bg-sky-50 text-sky-700' };
@@ -100,7 +100,7 @@ export default function MobileAppointments({
               key={key}
               onClick={() => setSelected(key)}
               className={`flex-shrink-0 w-[52px] py-2.5 rounded-2xl flex flex-col items-center gap-0.5 transition-colors ${
-                active ? 'bg-violet-600 text-white shadow-sm shadow-violet-600/30' : 'bg-white border border-slate-200 text-slate-500'
+                active ? 'bg-[#5B5CEB] text-white shadow-sm shadow-[#5B5CEB]/30' : 'bg-white border border-[#E8ECF2] text-slate-500'
               }`}
             >
               <span className={`text-[11px] font-semibold ${active ? 'text-white/80' : 'text-slate-400'}`}>
@@ -109,7 +109,7 @@ export default function MobileAppointments({
               <span className="text-[17px] font-bold leading-5">{d.getDate()}</span>
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  count ? (active ? 'bg-white' : 'bg-violet-400') : 'bg-transparent'
+                  count ? (active ? 'bg-white' : 'bg-[#5B5CEB]') : 'bg-transparent'
                 }`}
               />
             </button>
@@ -135,14 +135,14 @@ export default function MobileAppointments({
             hint={isToday ? 'Your day is clear.' : 'No appointments on this day.'}
           />
         ) : (
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-[#E8ECF2] shadow-sm overflow-hidden">
             {onDay.map((a, i) => {
               const badge = badgeFor(a);
               return (
                 <button
                   key={a.id}
                   onClick={() => onScribeAppointment?.(a)}
-                  className={`w-full flex items-center gap-3 p-4 text-left active:bg-violet-50/60 transition-colors ${
+                  className={`w-full flex items-center gap-3 p-4 text-left active:bg-[#EEEFFE]/50 transition-colors ${
                     i ? 'border-t border-slate-100' : ''
                   }`}
                 >
@@ -156,7 +156,7 @@ export default function MobileAppointments({
                     </div>
                   </div>
 
-                  <div className="w-9 h-9 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-bold text-[12px] flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-[#EEEFFE] text-[#4A4BD4] flex items-center justify-center font-bold text-[12px] flex-shrink-0">
                     {initials(a.patientName)}
                   </div>
 

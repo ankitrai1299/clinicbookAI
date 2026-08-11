@@ -42,7 +42,7 @@ export default function MobileMore({
       {/* Who is signed in — the question this screen answers first. */}
       <button
         onClick={() => onNavigate('settings')}
-        className="w-full text-left rounded-3xl p-5 mb-5 bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-violet-600/25 active:scale-[0.99] transition-transform"
+        className="w-full text-left rounded-2xl p-5 mb-5 bg-gradient-to-br from-[#5B5CEB] to-[#4A4BD4] shadow-lg shadow-[#5B5CEB]/25 active:scale-[0.99] transition-transform"
       >
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-full bg-white/20 border border-white/30 text-white flex items-center justify-center font-bold text-[17px] flex-shrink-0">
@@ -66,7 +66,7 @@ export default function MobileMore({
         )}
       </button>
 
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden mb-5">
+      <div className="bg-white rounded-2xl border border-[#E8ECF2] shadow-sm overflow-hidden mb-5">
         {rows.map((r, i) => {
           const Icon = r.icon;
           return (
@@ -92,7 +92,7 @@ export default function MobileMore({
 
       <button
         onClick={onLogout}
-        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-white border border-slate-200 text-rose-600 font-bold shadow-sm active:bg-rose-50 transition-colors"
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-white border border-[#E8ECF2] text-rose-600 font-bold shadow-sm active:bg-rose-50 transition-colors"
       >
         <LogOut size={17} /> Log out
       </button>
