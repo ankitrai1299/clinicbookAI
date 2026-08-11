@@ -50,7 +50,8 @@ interface MobileHomeProps {
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
   onViewAppointments: () => void;
   onViewNotes: () => void;
-  onViewList: (filter: 'today' | 'drafts' | 'completed' | 'follow-ups') => void;
+  /** Opens the list a metric counts, over the period the card is showing. */
+  onViewList: (kind: 'today' | 'drafts' | 'completed' | 'follow-ups', range: RangeKey) => void;
   onOpenProfile: () => void;
   onQuickRx?: () => void;
 }
@@ -231,7 +232,7 @@ export default function MobileHome({
             value={s.value}
             label={s.label}
             trend={s.trend}
-            onClick={() => onViewList(s.id)}
+            onClick={() => onViewList(s.id, range)}
           />
         ))}
       </div>

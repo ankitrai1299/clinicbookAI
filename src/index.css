@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -82,3 +82,30 @@ h1, h2, h3, .font-display {
 .audio-seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0; height: 0; background: transparent; border: none; }
 .audio-seek::-moz-range-thumb { width: 0; height: 0; background: transparent; border: none; }
 .audio-seek::-moz-range-track { height: 5px; border-radius: 9999px; background: transparent; }
+
+
+/* ── Phone app (WebView) ─────────────────────────────────────────────────────
+   These live HERE, not in src/mediscribe/index.css: main.tsx only ever imports
+   this stylesheet, so anything written in that file is never served. The phone
+   screens' typeface and their swipeable strips both silently did nothing until
+   this was noticed.
+
+   The native MediScribe app is set in Plus Jakarta Sans. Only the phone screens
+   switch to it — the browser dashboard stays on Inter. */
+.ms-phone,
+.ms-phone input,
+.ms-phone button,
+.ms-phone select,
+.ms-phone textarea {
+  font-family: 'Plus Jakarta Sans', var(--font-sans);
+}
+
+/* Horizontal chip/day strips scroll by swipe; a visible bar under them reads as
+   a rendering fault on a native screen. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -21,6 +21,7 @@ const MobileShell = lazy(() => import('./mobile/MobileShell'));
 const MobileHome = lazy(() => import('./mobile/MobileHome'));
 const MobileAppointments = lazy(() => import('./mobile/MobileAppointments'));
 const MobileSessions = lazy(() => import('./mobile/MobileSessions'));
+const MobileList = lazy(() => import('./mobile/MobileList'));
 const MobilePatients = lazy(() => import('./mobile/MobilePatients'));
 const MobileSettings = lazy(() => import('./mobile/MobileSettings'));
 const DoctorOnlyGate = lazy(() => import('./mobile/DoctorOnlyGate'));
@@ -422,6 +423,10 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // prescription, so the existing pipeline (WhatsApp prescription + medicine
   // reminders + patient timeline) runs exactly as it does for a recorded visit.
   const [quickRxOpen, setQuickRxOpen] = useState(false);
+  // Which dashboard metric was tapped, and the period it was showing — the list
+  // must obey the SAME period, or the number and the list disagree.
+  const [listKind, setListKind] = useState<'today' | 'drafts' | 'completed' | 'follow-ups' | null>(null);
+  const [listRange, setListRange] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const handleQuickPrescription = async (con: Consultation) => {
     await saveConsultation(con);
     setConsultations(prev => [con, ...prev.filter(c => c.id !== con.id)]);
@@ -639,7 +644,16 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 listed here (settings, reports, transcripts, admin) falls through
                 to the shared views, so nothing is lost by not having a phone
                 layout yet. */}
-            {activeView === 'dashboard' ? (
+            {listKind ? (
+              <MobileList
+                kind={listKind}
+                consultations={consultations}
+                range={listRange}
+                onRangeChange={setListRange}
+                onBack={() => setListKind(null)}
+                onSelectConsultation={(c) => { setListKind(null); handleSelectExistingConsultation(c); }}
+              />
+            ) : activeView === 'dashboard' ? (
               <MobileHome
                 consultations={consultations}
                 patients={patients}
@@ -652,9 +666,8 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}
                 onViewAppointments={() => setActiveView('appointments')}
                 onViewNotes={() => setActiveView('consultations')}
-                // A metric card opens the list it counts. Sessions shows the
-                // pipeline stage of each one, which is what "drafts" means here.
-                onViewList={() => setActiveView('consultations')}
+                // A metric card opens the list it counts, over the same period.
+                onViewList={(kind, range) => { setListRange(range); setListKind(kind); }}
                 onOpenProfile={() => setActiveView('settings')}
                 onQuickRx={() => setQuickRxOpen(true)}
               />
