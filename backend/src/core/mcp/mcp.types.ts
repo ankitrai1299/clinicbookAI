@@ -25,7 +25,7 @@ export type McpChannel =
 
 // Which product owns a capability. Purely for routing/observability — the brain
 // treats all capabilities uniformly.
-export type McpProduct = 'clinicbook' | 'patientloop' | 'novascribe' | 'core';
+export type McpProduct = 'clinicbook' | 'novascribe' | 'core';
 
 // WHO is making the request, resolved to platform identities. There is ONE
 // patient identity shared across all products — a capability reads `patientId`

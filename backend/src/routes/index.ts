@@ -8,7 +8,8 @@ import authRouter from '../core/auth/auth.routes.js';
 import billingRouter from '../core/billing/billing.routes.js';
 import clinicRouter from '../core/clinics/clinic.routes.js';
 import doctorRouter from '../core/doctors/doctor.routes.js';
-import doctorPortalRouter from '../modules/doctor-portal/doctorPortal.routes.js';
+// Unmounted below — kept so restoring the portal is a one-line change.
+// import doctorPortalRouter from '../modules/doctor-portal/doctorPortal.routes.js';
 import notificationRouter from '../core/notifications/notification.routes.js';
 import patientRouter from '../core/patients/patient.routes.js';
 import publicPatientRouter from '../core/patients/public.routes.js';
@@ -28,9 +29,15 @@ apiRouter.use('/api/ai', aiRouter);
 apiRouter.use('/api/billing', billingRouter);
 apiRouter.use('/api/clinics', clinicRouter);
 apiRouter.use('/api/doctors', doctorRouter);
-// Doctor login portal (separate doctor token; a doctor sees only their OWN data).
-// Admin gives a doctor login via POST /api/doctors/:id/credentials.
-apiRouter.use('/api/doctor-portal', doctorPortalRouter);
+// Doctor login portal — UNMOUNTED. In this product a doctor is a bookable
+// RESOURCE, not an account: the clinic admin is the customer, and doctors reach
+// their work through MediScribe's own login. The portal was built before that was
+// settled, and nothing renders its UI, so all this mount contributed was a live
+// self-registration endpoint nobody could reach a screen for.
+//
+// The module and the two doctor rows that carry a portal password are left
+// alone — restoring it is this one line.
+// apiRouter.use('/api/doctor-portal', doctorPortalRouter);
 apiRouter.use('/api/notifications', notificationRouter);
 apiRouter.use('/api/patients', patientRouter);
 apiRouter.use('/api/public', publicPatientRouter);
