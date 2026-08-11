@@ -6,8 +6,14 @@ import type { NotificationType } from '../contracts/index.js';
 // generate-report, save-consultation, patients) to feed the admin dashboard's
 // usage analytics and notification feed. Never throw into the caller.
 
+// The pipeline's own event kinds, plus whatever the phone app reports (a report
+// exported, a recording that failed). Kept as a widened string rather than a
+// closed union so a new client-side event never needs a backend release — the
+// value is bounded and sanitised at the route before it reaches here.
+export type UsageEventType = 'stt' | 'ai_report' | (string & {});
+
 export async function logUsage(event: {
-  type: 'stt' | 'ai_report';
+  type: UsageEventType;
   consultationId?: string;
   doctorId?: string;
   language?: string;
@@ -15,6 +21,8 @@ export async function logUsage(event: {
   sttConfidence?: number;
   success?: boolean;
   bytes?: number;
+  /** Free-text context from a client-reported event (bounded by the caller). */
+  detail?: string;
 }): Promise<void> {
   try {
     await usageRepo.upsert({
@@ -27,6 +35,7 @@ export async function logUsage(event: {
       sttConfidence: event.sttConfidence ?? -1,
       success: event.success ?? true,
       bytes: event.bytes || 0,
+      detail: event.detail || '',
     });
   } catch (err) {
     console.error('[usage:log]', err);

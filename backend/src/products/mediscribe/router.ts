@@ -42,6 +42,12 @@ import { emitEvent, getPatientTimeline } from '../../core/timeline/patientTimeli
 import { createAppointment } from '../../core/appointments/appointment.service.js';
 import { completeAppointmentForConsultation } from './appointmentCompletion.js';
 import { askAssistant } from './services/assistant.js';
+import {
+  buildDoctorAnalytics,
+  parseDay,
+  withinRange,
+  type CountableConsultation
+} from './services/doctorAnalytics.js';
 
 // 25 MB ceiling — matches the client-side limit for uploaded audio files.
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -412,12 +418,69 @@ mediscribeRouter.get('/patients/:patientId/timeline', async (req: Request, res: 
 
 // ── Consultations ────────────────────────────────────────────
 // A Doctor sees only their own sessions; admins see all.
+//
+// Optional ?startDate=&endDate= (YYYY-MM-DD) narrows to a period, so a screen
+// showing one week doesn't download years of history to throw most of it away.
+// Omitting them returns everything, which is what the web dashboard does.
 mediscribeRouter.get('/consultations', async (req: AuthedRequest, res: Response) => {
   try {
     const items = (await consultationsRepo.findAll()) as Array<{ doctorId?: string }>;
     const me = await resolvePrincipal(req);
-    return res.json(me.role === 'doctor' ? items.filter((c) => c.doctorId === me.id) : items);
+    const mine = me.role === 'doctor' ? items.filter((c) => c.doctorId === me.id) : items;
+
+    const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+    if (!startDate && !endDate) return res.json(mine);
+
+    const start = parseDay(startDate);
+    const end = parseDay(endDate);
+    return res.json(mine.filter((c) => withinRange(c as CountableConsultation, start, end)));
   } catch (error) { console.error('[mediscribe:consultations]', error); return res.json([]); }
+});
+
+// The doctor's own summary figures for a period — the six numbers the phone
+// dashboard shows. Scoped to the signed-in doctor exactly like /consultations
+// above, so a card and the list it opens can never disagree.
+mediscribeRouter.get('/analytics', async (req: AuthedRequest, res: Response) => {
+  try {
+    const me = await resolvePrincipal(req);
+    const items = (await consultationsRepo.findAll()) as Array<{ doctorId?: string }>;
+    const mine = me.role === 'doctor' ? items.filter((c) => c.doctorId === me.id) : items;
+
+    return res.json(
+      buildDoctorAnalytics(mine as CountableConsultation[], {
+        startDate: typeof req.query.startDate === 'string' ? req.query.startDate : undefined,
+        endDate: typeof req.query.endDate === 'string' ? req.query.endDate : undefined
+      })
+    );
+  } catch (error) {
+    console.error('[mediscribe:analytics]', error);
+    // Six numbers are not worth an error dialog over a dashboard; an empty
+    // summary renders as zeroes and the screen still works.
+    return res.json(buildDoctorAnalytics([], {}));
+  }
+});
+
+// Usage telemetry from the app (a report exported, a recording that failed).
+// Fire-and-forget by contract: the client never surfaces a failure here, so a
+// doctor sharing a PDF must never see an error because an event could not be
+// written. Always 202, never a body worth reading.
+mediscribeRouter.post('/events', async (req: AuthedRequest, res: Response) => {
+  try {
+    const type = String(req.body?.type ?? '').trim().slice(0, 60);
+    if (type) {
+      logUsage({
+        type,
+        consultationId: String(req.body?.consultationId ?? '').slice(0, 120),
+        // Free text from the client — bounded, and never echoed back.
+        detail: String(req.body?.detail ?? '').slice(0, 500),
+        success: true
+      });
+    }
+  } catch (error) {
+    console.error('[mediscribe:events]', error);
+  }
+  return res.status(202).json({ ok: true });
 });
 
 // Ask the assistant a question about your own patients — spoken or typed.
