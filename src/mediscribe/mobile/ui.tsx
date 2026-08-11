@@ -80,9 +80,9 @@ export type RangeKey = 'today' | 'week' | 'month' | 'all';
 
 export const RANGES: { key: RangeKey; label: string }[] = [
   { key: 'today', label: 'Today' },
-  { key: 'week', label: '7 days' },
-  { key: 'month', label: '30 days' },
-  { key: 'all', label: 'All' }
+  { key: 'week', label: 'This week' },
+  { key: 'month', label: 'This month' },
+  { key: 'all', label: 'All time' }
 ];
 
 /** Start of a range, as a timestamp. `all` starts at the epoch. */
@@ -272,21 +272,34 @@ export const SearchBar = ({
   </div>
 );
 
-/** Today / 7 days / 30 days / All — the period every stat on a screen obeys. */
-export const DateRangeBar = ({ value, onChange }: { value: RangeKey; onChange: (r: RangeKey) => void }) => (
-  <div className="flex gap-1.5 p-1 bg-white border border-[#E8ECF2] rounded-2xl mb-3">
-    {RANGES.map((r) => (
-      <button
-        key={r.key}
-        onClick={() => onChange(r.key)}
-        className={`flex-1 py-2 rounded-xl text-[12.5px] font-semibold transition-colors ${
-          value === r.key ? 'bg-[#5B5CEB] text-white' : 'text-slate-500'
-        }`}
-      >
-        {r.label}
-      </button>
-    ))}
-  </div>
+/**
+ * The period every stat on the screen obeys — a compact dropdown rather than a
+ * row of buttons, so the header stays quiet and the chosen period is stated in
+ * words instead of inferred from which pill is filled.
+ */
+export const DateRangeSelect = ({ value, onChange }: { value: RangeKey; onChange: (r: RangeKey) => void }) => (
+  <label className="relative inline-flex items-center gap-1.5 cursor-pointer">
+    <span className="text-[17px] font-bold text-slate-900 tracking-tight">
+      {RANGES.find((r) => r.key === value)?.label ?? 'Today'}
+    </span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="text-slate-500">
+      <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+    {/* The native picker sits invisibly on top: a phone then gets its own
+        familiar wheel/sheet instead of a hand-rolled menu. */}
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as RangeKey)}
+      aria-label="Period"
+      className="absolute inset-0 opacity-0 w-full h-full"
+    >
+      {RANGES.map((r) => (
+        <option key={r.key} value={r.key}>
+          {r.label}
+        </option>
+      ))}
+    </select>
+  </label>
 );
 
 /** Filter chips used by the list screens. */

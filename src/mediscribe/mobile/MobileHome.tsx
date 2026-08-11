@@ -9,7 +9,7 @@ import {
   StatusBadge,
   SectionHeader,
   SearchBar,
-  DateRangeBar,
+  DateRangeSelect,
   EmptyState,
   WarningBanner,
   bareName,
@@ -190,9 +190,9 @@ export default function MobileHome({
           disc, never as a full coloured slab. */}
       <Card className="p-5 flex items-center" onClick={onStartNew}>
         <div className="flex-1 pr-3 min-w-0">
-          <div className="text-[12px] font-semibold text-[#5B5CEB] uppercase tracking-wide">Start new</div>
+          <div className="text-[12px] font-semibold text-[#5B5CEB] uppercase tracking-wide">Start a new</div>
           <div className="text-[22px] font-bold text-slate-900 tracking-tight mt-1">Consultation</div>
-          <div className="text-[13px] text-slate-500 mt-1 leading-5">AI scribe is ready to listen</div>
+          <div className="text-[13px] text-slate-500 mt-1 leading-5">Ready to listen and transcribe</div>
           <span className="inline-flex items-center gap-1.5 mt-4 bg-[#5B5CEB] rounded-xl px-3.5 py-2">
             <Mic size={14} className="text-white" />
             <span className="text-white font-semibold text-[13px]">Tap to begin</span>
@@ -214,8 +214,13 @@ export default function MobileHome({
       )}
 
       {/* Practice overview */}
-      <h2 className="text-[17px] font-bold text-slate-900 tracking-tight mt-7 mb-3">Practice overview</h2>
-      <DateRangeBar value={range} onChange={setRange} />
+      <h2 className="text-[19px] font-bold text-slate-900 tracking-tight mt-7 mb-3">Practice Overview</h2>
+      <div className="flex items-center justify-between mb-3">
+        <DateRangeSelect value={range} onChange={setRange} />
+        <span className="text-[12.5px] text-slate-400">
+          {now.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+        </span>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         {stats.map((s) => (
           <StatCard
