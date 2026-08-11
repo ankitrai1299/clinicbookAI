@@ -44,8 +44,50 @@ export const TENANT_MODELS = new Set<string>([
   // delivery cron sweeps across ALL clinics with the raw client and re-scopes per
   // row, exactly like the reminder/waitlist crons.
   'WebhookEndpoint',
-  'WebhookDelivery'
+  'WebhookDelivery',
+  // The MediScribe clinical record — consultations, reports, prescriptions,
+  // transcripts, all of it. It was isolated only by hand-written clinicId
+  // filters in the repository, which is the one class of bug this extension
+  // exists to make impossible.
+  'NovaDoc',
+  // Patient timeline events, and the medicine reminders derived from a
+  // prescription. Both are patient clinical data. The reminder CRON still sweeps
+  // across clinics with the raw client and re-scopes per row, like the others.
+  'PatientEvent',
+  'MedicineReminder',
+  // Per-clinic template approval state on the clinic's own WABA.
+  'WhatsAppTemplateStatus'
 ]);
+
+/**
+ * Clinic-owned models deliberately NOT scoped, with the reason. Every one of
+ * these is consulted BEFORE a clinic is known — they are the routing tables that
+ * answer "which clinic is this?", so scoping them to a clinic would be circular.
+ *
+ * Kept as data, not a comment, so the test that no clinic-owned model is
+ * forgotten can tell "deliberately out" from "nobody noticed".
+ */
+export const UNSCOPED_BY_DESIGN: Readonly<Record<string, string>> = {
+  Clinic: 'its tenant key IS its primary key, not a clinicId column',
+  WhatsAppChannel: 'the routing table: phone_number_id → clinic, read before a clinic is known',
+  WhatsAppPatientBinding: 'answers which clinic a phone belongs to, so it cannot presuppose one',
+  ApiKey: 'maps a key to a clinic, read before a clinic is known',
+  WhatsAppAudit:
+    'its clinicId is NULLABLE on purpose — a message from an unrecognised number ' +
+    'is audited before any clinic is resolved, and scoping would drop exactly the ' +
+    'rows kept for diagnosing that case'
+};
+
+/**
+ * Scoped models whose clinicId is nevertheless NULLABLE, and why that is the
+ * right call. Scoping such a table hides its null rows from every clinic, so the
+ * question is always "is hiding them correct?" — not a detail to leave implicit.
+ */
+export const SCOPED_DESPITE_NULLABLE: Readonly<Record<string, string>> = {
+  WhatsAppLog:
+    'a send logged before a clinic is resolved has no owner, so no clinic should ' +
+    'see it in its own message log; writes through forClinic always carry one'
+};
 
 // Operations whose `where` we constrain with clinicId.
 export const WHERE_OPS = new Set([

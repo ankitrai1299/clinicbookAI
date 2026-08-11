@@ -11,8 +11,14 @@
 
 import type { Prisma } from '@prisma/client';
 
-import { prisma } from '../../../config/prisma.js';
+import { forClinic } from '../../../config/tenantPrisma.js';
 import { currentClinicId } from '../context.js';
+
+// The clinic's own Prisma client. Every NovaDoc query made through it is scoped
+// to that clinic BY THE CLIENT, so the explicit clinicId kept in each where
+// below is now defence in depth rather than the only thing standing between two
+// clinics' consultation notes.
+const db = () => forClinic(currentClinicId());
 
 export interface WithId {
   id: string;
@@ -37,7 +43,7 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
   }) as unknown as T;
 
   const allRows = (clinicId: string): Promise<NovaRow[]> =>
-    prisma.novaDoc.findMany({
+    forClinic(clinicId).novaDoc.findMany({
       where: { clinicId, collection },
       select: { id: true, patientId: true, data: true, createdAt: true, updatedAt: true }
     });
@@ -61,7 +67,7 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
   return {
     /** Every document, newest-updated first. */
     async findAll(): Promise<T[]> {
-      const rows = await prisma.novaDoc.findMany({
+      const rows = await db().novaDoc.findMany({
         where: { clinicId: currentClinicId(), collection },
         orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
         select: { id: true, patientId: true, data: true, createdAt: true, updatedAt: true }
@@ -71,7 +77,7 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
 
     /** A single document by its app `id`, or null. */
     async findById(id: string): Promise<T | null> {
-      const row = await prisma.novaDoc.findUnique({
+      const row = await db().novaDoc.findUnique({
         where: { clinicId_collection_id: { clinicId: currentClinicId(), collection, id } },
         select: { id: true, patientId: true, data: true, createdAt: true, updatedAt: true }
       });
@@ -109,11 +115,11 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
 
       let data: Record<string, unknown> = strip({ ...doc });
       if (!replace) {
-        const existing = await prisma.novaDoc.findUnique({ where: key, select: { data: true } });
+        const existing = await db().novaDoc.findUnique({ where: key, select: { data: true } });
         data = { ...((existing?.data as Record<string, unknown>) ?? {}), ...data };
       }
 
-      await prisma.novaDoc.upsert({
+      await db().novaDoc.upsert({
         where: key,
         create: { clinicId, collection, id, patientId, data: data as Prisma.InputJsonValue },
         update: { patientId, data: data as Prisma.InputJsonValue }
@@ -122,7 +128,7 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
 
     /** Exact total document count for the clinic. */
     count(): Promise<number> {
-      return prisma.novaDoc.count({ where: { clinicId: currentClinicId(), collection } });
+      return db().novaDoc.count({ where: { clinicId: currentClinicId(), collection } });
     },
 
     /** Exact count matching `filter`. */
@@ -134,7 +140,7 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
     /** Delete a document by `id`. Returns true when a row was removed. */
     async remove(id: string): Promise<boolean> {
       try {
-        await prisma.novaDoc.delete({
+        await db().novaDoc.delete({
           where: { clinicId_collection_id: { clinicId: currentClinicId(), collection, id } }
         });
         return true;
