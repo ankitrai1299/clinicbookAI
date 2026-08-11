@@ -42,11 +42,35 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
     updatedAt: row.updatedAt.toISOString()
   }) as unknown as T;
 
-  const allRows = (clinicId: string): Promise<NovaRow[]> =>
+  /**
+   * Rows for this clinic + collection, optionally narrowed to one patient in SQL.
+   *
+   * patientId is a real column (denormalised from the JSON on every write) with
+   * an index on (clinicId, collection, patientId). Reading a patient's history
+   * used to load the clinic's ENTIRE collection and filter it in JS — fine at a
+   * few dozen consultations, quadratic-feeling at a few thousand across a
+   * hundred clinics, and the index existed for exactly this the whole time.
+   */
+  const allRows = (clinicId: string, patientId?: string): Promise<NovaRow[]> =>
     forClinic(clinicId).novaDoc.findMany({
-      where: { clinicId, collection },
+      where: { clinicId, collection, ...(patientId ? { patientId } : {}) },
       select: { id: true, patientId: true, data: true, createdAt: true, updatedAt: true }
     });
+
+  /**
+   * The patientId to push into SQL, or undefined to scan the collection.
+   *
+   * Only safe because the column is kept in step with data.patientId on every
+   * write AND the rows predating the column have been backfilled
+   * (scripts/backfillNovaDocPatientId.ts). A row whose column is null while its
+   * JSON names a patient would simply vanish from that patient's history — so
+   * this narrows ONLY on a non-empty string, and the JS filter below still
+   * re-checks the value from the document itself.
+   */
+  const sqlPatientId = (filter: Record<string, unknown>): string | undefined => {
+    const v = filter.patientId;
+    return typeof v === 'string' && v.trim() ? v : undefined;
+  };
 
   const compareBy = (sort: Record<string, 1 | -1>) => (a: T, b: T): number => {
     for (const [key, dir] of Object.entries(sort)) {
@@ -87,14 +111,18 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
     /**
      * Every document matching `filter` (simple equality map), sorted. Defaults to
      * oldest-first by creation time — the patient-history endpoint relies on it.
-     * Filtering/sorting is done in JS over the clinic's rows (mirrors the Mongo
-     * semantics exactly; per-clinic volumes are small).
+     *
+     * A patientId in the filter is pushed into SQL so the index does the work;
+     * every other key is still matched in JS over the returned rows, which keeps
+     * the Mongo-like semantics the ported call sites expect. The JS pass also
+     * re-checks patientId, so the SQL narrowing is a speed-up rather than the
+     * only thing deciding whose record this is.
      */
     async findBy(
       filter: Record<string, unknown>,
       sort: Record<string, 1 | -1> = { createdAt: 1, updatedAt: 1 }
     ): Promise<T[]> {
-      const docs = (await allRows(currentClinicId())).map(toDoc);
+      const docs = (await allRows(currentClinicId(), sqlPatientId(filter))).map(toDoc);
       return docs.filter((d) => matches(d, filter)).sort(compareBy(sort));
     },
 
@@ -131,9 +159,9 @@ export function createRepository<T extends WithId = WithId>(collection: string) 
       return db().novaDoc.count({ where: { clinicId: currentClinicId(), collection } });
     },
 
-    /** Exact count matching `filter`. */
+    /** Exact count matching `filter`. Narrowed by patientId in SQL, like findBy. */
     async countBy(filter: Record<string, unknown>): Promise<number> {
-      const docs = (await allRows(currentClinicId())).map(toDoc);
+      const docs = (await allRows(currentClinicId(), sqlPatientId(filter))).map(toDoc);
       return docs.filter((d) => matches(d, filter)).length;
     },
 
