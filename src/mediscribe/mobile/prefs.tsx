@@ -153,7 +153,17 @@ const EN: Dict = {
   'recording.resume': 'Resume',
   'recording.stop': 'Stop',
   'recording.mark': 'Mark',
-  'recording.hint': 'Keep the phone between you and the patient. The report is written when you stop.'
+  'recording.hint': 'Keep the phone between you and the patient. The report is written when you stop.',
+
+  'consult.back': 'Back',
+  'consult.more': 'More',
+  'consult.share': 'Share',
+  'consult.newConsultation': 'New Consultation',
+  'consult.transcript': 'Transcript',
+  'consult.startTitle': 'Start a Consultation',
+  'consult.startBody': 'Tap the microphone to start recording',
+  'consult.uploadTitle': 'Upload an Existing Recording',
+  'consult.uploadBody': 'Upload a consultation recording (.mp3, .wav, .m4a)'
 };
 
 const HI: Dict = {
@@ -267,7 +277,17 @@ const HI: Dict = {
   'recording.resume': 'जारी रखें',
   'recording.stop': 'बंद करें',
   'recording.mark': 'चिह्न',
-  'recording.hint': 'फ़ोन को अपने और मरीज़ के बीच रखें। बंद करते ही रिपोर्ट बनेगी।'
+  'recording.hint': 'फ़ोन को अपने और मरीज़ के बीच रखें। बंद करते ही रिपोर्ट बनेगी।',
+
+  'consult.back': 'वापस',
+  'consult.more': 'और',
+  'consult.share': 'साझा करें',
+  'consult.newConsultation': 'नया परामर्श',
+  'consult.transcript': 'ट्रांसक्रिप्ट',
+  'consult.startTitle': 'परामर्श शुरू करें',
+  'consult.startBody': 'रिकॉर्डिंग शुरू करने के लिए माइक दबाएँ',
+  'consult.uploadTitle': 'पहले से रिकॉर्ड की गई फ़ाइल अपलोड करें',
+  'consult.uploadBody': 'परामर्श रिकॉर्डिंग अपलोड करें (.mp3, .wav, .m4a)'
 };
 
 interface Prefs {

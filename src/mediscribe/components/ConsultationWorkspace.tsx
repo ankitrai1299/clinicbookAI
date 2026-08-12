@@ -18,6 +18,7 @@ import PatientSnapshot from './PatientSnapshot';
 import { isMobileApp } from '../utils/platform';
 // Phone-only recording takeover. Lazy so the web never downloads it.
 const MobileRecording = React.lazy(() => import('../mobile/MobileRecording'));
+const MobileConsultation = React.lazy(() => import('../mobile/MobileConsultation'));
 const RecordingPrefs = React.lazy(() =>
   import('../mobile/prefs').then((m) => ({ default: m.PrefsProvider }))
 );
@@ -2174,6 +2175,24 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
       {/* While recording, the phone app shows the native full-screen takeover
           OVER this workspace. The workspace keeps owning the session — the same
           audio, transcript and report — so stopping here is the same stop. */}
+      {/* Nothing captured yet: the phone shows one large mic instead of the
+          web's language dropdown, empty transcript pane and upload control. The
+          moment a transcript exists, the shared workspace takes over. */}
+      {isMobileApp() && !isRecording && !hasTranscript && !isTranscribing && (
+        <React.Suspense fallback={null}>
+          <RecordingPrefs>
+            <MobileConsultation
+              patientName={consultation.patientName}
+              date={consultation.date}
+              status={consultation.status}
+              onBack={() => onExit?.()}
+              onStart={startRecording}
+              onUpload={triggerFilePicker}
+            />
+          </RecordingPrefs>
+        </React.Suspense>
+      )}
+
       {isMobileApp() && isRecording && (
         <React.Suspense fallback={null}>
           <RecordingPrefs>
