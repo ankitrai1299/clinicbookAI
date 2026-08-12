@@ -15,6 +15,12 @@ import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2,
 import Logo from './Logo';
 import UploadedAudioPlayer from './UploadedAudioPlayer';
 import PatientSnapshot from './PatientSnapshot';
+import { isMobileApp } from '../utils/platform';
+// Phone-only recording takeover. Lazy so the web never downloads it.
+const MobileRecording = React.lazy(() => import('../mobile/MobileRecording'));
+const RecordingPrefs = React.lazy(() =>
+  import('../mobile/prefs').then((m) => ({ default: m.PrefsProvider }))
+);
 import DrugSafetyAlerts from './DrugSafetyAlerts';
 import { checkDrugSafety } from '../utils/drugSafety';
 import { saveChunk, loadRecording, clearRecording, type StoredRecording } from '../utils/recordingStore';
@@ -2164,6 +2170,24 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   );
 
   return (
+    <>
+      {/* While recording, the phone app shows the native full-screen takeover
+          OVER this workspace. The workspace keeps owning the session — the same
+          audio, transcript and report — so stopping here is the same stop. */}
+      {isMobileApp() && isRecording && (
+        <React.Suspense fallback={null}>
+          <RecordingPrefs>
+            <MobileRecording
+              patientName={consultation.patientName}
+              seconds={timer}
+              isPaused={isPaused}
+              onPause={pauseRecording}
+              onResume={resumeRecording}
+              onStop={stopRecording}
+            />
+          </RecordingPrefs>
+        </React.Suspense>
+      )}
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
       {/* LEFT PANEL: SESSIONS */}
       <div className="w-64 sm:w-80 border-r border-slate-200 bg-white flex flex-col hidden md:flex">
@@ -2816,5 +2840,6 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         </div>
       )}
     </div>
+    </>
   );
 }

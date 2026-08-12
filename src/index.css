@@ -165,3 +165,21 @@ h1, h2, h3, .font-display {
 .ms-phone.ms-dark select,
 .ms-phone.ms-dark textarea { background-color: #0F1728; color: #F1F5F9; }
 .ms-phone.ms-dark input::placeholder { color: #8B9AB8; }
+
+
+/* ── Phone app: fill the WebView ─────────────────────────────────────────────
+   body is painted #f8fafc for the web. Any part of the WebView the app does not
+   cover therefore shows THAT — which is the band of white under the tab bar the
+   phone app kept showing. While a phone screen is mounted, the page itself is
+   painted the app canvas and told to fill the DYNAMIC viewport (100dvh), which
+   is the height that accounts for a collapsing browser/system chrome. */
+html.ms-phone-page,
+html.ms-phone-page body {
+  background-color: #FAFBFC;
+  min-height: 100dvh;
+  margin: 0;
+}
+html.ms-phone-page.ms-dark-page,
+html.ms-phone-page.ms-dark-page body {
+  background-color: #0B1220;
+}

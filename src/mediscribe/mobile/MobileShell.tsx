@@ -41,8 +41,20 @@ export default function MobileShell({ activeView, onNavigate, canView, onAsk, ch
   const { t: tr, appearance } = usePrefs();
   const tabs = TABS.filter((t) => canView(t.permission));
 
+  // Paint the PAGE, not just this element. body is #f8fafc for the web, so any
+  // part of the WebView the app does not cover showed as a band of white under
+  // the tab bar. Reverted on unmount so the browser dashboard is untouched.
+  React.useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('ms-phone-page');
+    root.classList.toggle('ms-dark-page', appearance === 'dark');
+    return () => {
+      root.classList.remove('ms-phone-page', 'ms-dark-page');
+    };
+  }, [appearance]);
+
   return (
-    <div className={`ms-phone ${appearance === 'dark' ? 'ms-dark' : ''} min-h-screen bg-[#FAFBFC] text-slate-900 flex flex-col`}>
+    <div className={`ms-phone ${appearance === 'dark' ? 'ms-dark' : ''} min-h-[100dvh] bg-[#FAFBFC] text-slate-900 flex flex-col`}>
       {/* Padding-bottom is exactly the bar: 60px plus whatever the device
           reserves for its gesture pill. The old pb-24/pb-28 was a guess that
           left a visible band of empty canvas under every screen. */}

@@ -143,7 +143,17 @@ const EN: Dict = {
   'lists.inPeriod': 'in this period',
   'lists.emptyBody': 'Try a wider date range.',
 
-  'empty.nothingMatches': 'Nothing matches'
+  'empty.nothingMatches': 'Nothing matches',
+
+  'recording.title': 'New Consultation',
+  'recording.live': 'Live',
+  'recording.paused': 'Paused',
+  'recording.listening': 'Listening…',
+  'recording.pause': 'Pause',
+  'recording.resume': 'Resume',
+  'recording.stop': 'Stop',
+  'recording.mark': 'Mark',
+  'recording.hint': 'Keep the phone between you and the patient. The report is written when you stop.'
 };
 
 const HI: Dict = {
@@ -247,7 +257,17 @@ const HI: Dict = {
   'lists.inPeriod': 'इस अवधि में',
   'lists.emptyBody': 'बड़ी अवधि चुनकर देखें।',
 
-  'empty.nothingMatches': 'कुछ नहीं मिला'
+  'empty.nothingMatches': 'कुछ नहीं मिला',
+
+  'recording.title': 'नया परामर्श',
+  'recording.live': 'लाइव',
+  'recording.paused': 'रुका हुआ',
+  'recording.listening': 'सुन रहे हैं…',
+  'recording.pause': 'रोकें',
+  'recording.resume': 'जारी रखें',
+  'recording.stop': 'बंद करें',
+  'recording.mark': 'चिह्न',
+  'recording.hint': 'फ़ोन को अपने और मरीज़ के बीच रखें। बंद करते ही रिपोर्ट बनेगी।'
 };
 
 interface Prefs {
