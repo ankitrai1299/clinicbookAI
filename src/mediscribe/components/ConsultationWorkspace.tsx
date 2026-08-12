@@ -967,7 +967,11 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         // words from THIS recording (best accuracy for mixed Hindi/English/Urdu).
         // Conversion into the selected output language happens afterwards.
         debug('[transcribe] sending file — size (bytes):', audioBlob.size, '| type:', audioBlob.type || mimeType);
-        const result = await transcribeAudio(audioBlob);
+        // Persist it: the doctor must be able to play the consultation back and
+        // hear whether it actually recorded, rather than inferring that from a
+        // thin transcript.
+        const result = await transcribeAudio(audioBlob, undefined, { consultationId: consultation.id });
+        if (result.audioUrl) setAudioUrl(result.audioUrl);
         const text = (result.rawText || '').trim();
         debug('[transcribe] API response — text length:', text.length);
 

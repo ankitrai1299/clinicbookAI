@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   BackHandler,
   Linking,
+  PermissionsAndroid,
   Platform,
   StyleSheet,
   Text,
@@ -21,8 +22,8 @@ import { colors } from '../src/theme';
 // The whole phone app: one full-screen WebView loading the deployed web
 // NovaScribe (same login, same functions, always in sync). A tiny JS bridge
 // carries the report/transcript PDF (rendered on the server) out to the native
-// share sheet, and the microphone permission is pre-granted so live recording
-// and audio upload work exactly like the browser.
+// share sheet, and the microphone permission is requested at runtime so live
+// recording and audio upload work exactly like the browser.
 // ─────────────────────────────────────────────────────────────
 
 // Turn a `data:application/pdf;base64,XXXX` URL into a shareable file and open the
@@ -58,6 +59,26 @@ async function printDoc(html: string): Promise<void> {
 
 export default function App() {
   const webRef = useRef<WebView>(null);
+
+  // Android runtime microphone permission.
+  //
+  // Declaring RECORD_AUDIO in app.json only puts it in the manifest. Until the
+  // APP is granted it at runtime, getUserMedia inside the WebView is refused —
+  // which is exactly why recording did nothing in the app while working in a
+  // browser. Asked once on launch, before the doctor is mid-consultation with a
+  // patient in front of them.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, {
+      title: 'Microphone access',
+      message: 'MediScribe records the consultation to write the note. Audio never leaves your clinic account.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Not now',
+    }).catch(() => {
+      // Denied or unavailable: the web layer already surfaces its own
+      // "microphone access is required" message when a recording is attempted.
+    });
+  }, []);
   const canGoBack = useRef(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -129,8 +150,9 @@ export default function App() {
             // Core web features the scribe relies on.
             javaScriptEnabled
             domStorageEnabled
-            // Live recording + audio upload: play/capture without a user gesture,
-            // and auto-grant mic capture (OS permission is requested above).
+            // Live recording + audio upload: play/capture without a user gesture.
+            // Android grants the WebView's getUserMedia only once the APP itself
+            // holds RECORD_AUDIO, which is what the effect above requests.
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={false}
             mediaCapturePermissionGrantType="prompt"

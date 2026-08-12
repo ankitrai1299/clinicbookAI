@@ -86,13 +86,21 @@ async function fetchWithTimeout(
 
 export async function transcribeAudio(
   blob: Blob,
-  language?: string
+  language?: string,
+  // Keep the audio so the doctor can play the consultation back and check it
+  // recorded properly. Without this the recording is transcribed and thrown
+  // away, and a bad recording is only discoverable by reading a bad transcript.
+  persist?: { consultationId: string }
 ): Promise<{ transcript: string; rawText: string; audioUrl: string }> {
   const form = new FormData();
   form.append('audio', blob, 'consultation.webm');
   // Forward the selected language; the server treats "Auto Detect" as auto-detect.
   // Do NOT set Content-Type — the browser sets the multipart boundary automatically.
   form.append('language', language || 'Auto Detect');
+  if (persist?.consultationId) {
+    form.append('persist', 'true');
+    form.append('consultationId', persist.consultationId);
+  }
   // Transcription can take a while — allow up to 3 minutes before giving up.
   const res = await fetchWithTimeout(`${BASE}/transcribe`, { method: 'POST', body: form, headers: authHeader() }, 180000);
   if (!res.ok) {
