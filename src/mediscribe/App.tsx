@@ -18,6 +18,7 @@ import { ROLE_LABELS, type Permission } from './contracts';
 import { isMobileApp } from './utils/platform';
 // Native-style phone-app shell (WebView only — never used by the web).
 const MobileShell = lazy(() => import('./mobile/MobileShell'));
+const PrefsProvider = lazy(() => import('./mobile/prefs').then((m) => ({ default: m.PrefsProvider })));
 const MobileHome = lazy(() => import('./mobile/MobileHome'));
 const MobileAppointments = lazy(() => import('./mobile/MobileAppointments'));
 const MobileSessions = lazy(() => import('./mobile/MobileSessions'));
@@ -634,6 +635,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
     return (
       <>
         <Suspense fallback={<Loading />}>
+          <PrefsProvider>
           <MobileShell
             activeView={activeView}
             onNavigate={(v) => setActiveView(v as ViewState)}
@@ -706,6 +708,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
               renderActiveView()
             )}
           </MobileShell>
+          </PrefsProvider>
         </Suspense>
         {isPatientModalOpen && (
           <Suspense fallback={null}>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePrefs } from './prefs';
 
 // Shared pieces for the phone app's screens, in the design language of the
 // native MediScribe app: one restrained indigo used only on the primary action,
@@ -29,11 +30,12 @@ export const initials = (name?: string): string =>
 /** The doctor's name without a leading "Dr." — callers re-add it themselves. */
 export const bareName = (name?: string): string => (name || '').replace(/^dr\.?\s*/i, '').trim();
 
-export const greeting = (d: Date = new Date()): string => {
+/** The translation key for the time of day — the caller renders it. */
+export const greetingKey = (d: Date = new Date()): string => {
   const h = d.getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'greeting.morning';
+  if (h < 17) return 'greeting.afternoon';
+  return 'greeting.evening';
 };
 
 /** Local YYYY-MM-DD. Never toISOString — that silently shifts the day in IST. */
@@ -152,6 +154,7 @@ export const Avatar = ({ name, size = 44 }: { name?: string; size?: number }) =>
 
 /** Consultation status, in the one place that decides its colour. */
 export const StatusBadge = ({ status }: { status?: string }) => {
+  const { t } = usePrefs();
   const s = (status || '').toLowerCase();
   const style =
     s === 'completed'
@@ -159,7 +162,8 @@ export const StatusBadge = ({ status }: { status?: string }) => {
       : s === 'recording' || s === 'processing'
         ? 'bg-[#EEEFFE] text-[#4A4BD4]'
         : 'bg-[#FEF8EB] text-[#D97706]';
-  const label = s === 'completed' ? 'Completed' : s === 'recording' ? 'Recording' : s === 'processing' ? 'Processing' : 'Draft';
+  const key = s === 'completed' ? 'Completed' : s === 'recording' ? 'Recording' : s === 'processing' ? 'Processing' : 'Draft';
+  const label = t(`status.${key}`);
   const dot = s === 'completed' ? '#16A34A' : s === 'recording' || s === 'processing' ? '#4A4BD4' : '#D97706';
   return (
     <span className={`inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${style}`}>
@@ -314,10 +318,12 @@ export const SearchBar = ({
  * row of buttons, so the header stays quiet and the chosen period is stated in
  * words instead of inferred from which pill is filled.
  */
-export const DateRangeSelect = ({ value, onChange }: { value: RangeKey; onChange: (r: RangeKey) => void }) => (
+export const DateRangeSelect = ({ value, onChange }: { value: RangeKey; onChange: (r: RangeKey) => void }) => {
+  const { t } = usePrefs();
+  return (
   <label className="relative inline-flex items-center gap-1.5 cursor-pointer">
     <span className="text-[17px] font-bold text-slate-900 tracking-tight">
-      {RANGES.find((r) => r.key === value)?.label ?? 'Today'}
+      {t(`range.${value}`)}
     </span>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="text-slate-500">
       <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -332,12 +338,13 @@ export const DateRangeSelect = ({ value, onChange }: { value: RangeKey; onChange
     >
       {RANGES.map((r) => (
         <option key={r.key} value={r.key}>
-          {r.label}
+          {t(`range.${r.key}`)}
         </option>
       ))}
     </select>
   </label>
-);
+  );
+};
 
 /** Filter chips used by the list screens. */
 export const Chips = <T extends string>({

@@ -109,3 +109,59 @@ h1, h2, h3, .font-display {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+
+/* ── Phone app: dark appearance ──────────────────────────────────────────────
+   The native app's own dark palette, scoped to .ms-phone.ms-dark so it can
+   never leak into the browser dashboard.
+
+   Surfaces are a desaturated navy rather than black: against the brand indigo,
+   pure black smears while scrolling on OLED, and the blue cast keeps the
+   neutrals coherent. The slate ramp is INVERTED — in this design
+   `text-slate-900` means "strongest text" and `bg-slate-50` means "faintest
+   fill", and both intents hold in either theme, so flipping the ramp keeps the
+   existing classes correct instead of rewriting every screen.
+
+   These are utility overrides rather than tokens because the phone screens are
+   written with Tailwind's literal colour classes; re-theming them at the class
+   level is what makes one switch flip the whole app without touching a file. */
+.ms-phone.ms-dark { background-color: #0B1220; color: #F1F5F9; }
+
+.ms-phone.ms-dark .bg-white { background-color: #131C2E; }
+.ms-phone.ms-dark .bg-\[\#FAFBFC\] { background-color: #0B1220; }
+.ms-phone.ms-dark .bg-\[\#FAFBFC\]\/95 { background-color: rgb(11 18 32 / 0.95); }
+.ms-phone.ms-dark .bg-slate-50 { background-color: #1A2337; }
+.ms-phone.ms-dark .bg-slate-100 { background-color: #1F2A40; }
+
+.ms-phone.ms-dark .text-slate-900 { color: #F1F5F9; }
+.ms-phone.ms-dark .text-slate-800 { color: #E5EBF5; }
+.ms-phone.ms-dark .text-slate-700 { color: #D2DAE9; }
+.ms-phone.ms-dark .text-slate-600 { color: #BEC8DC; }
+.ms-phone.ms-dark .text-slate-500 { color: #A6B3CD; }
+.ms-phone.ms-dark .text-slate-400 { color: #8B9AB8; }
+.ms-phone.ms-dark .text-slate-300 { color: #4A5B7C; }
+
+.ms-phone.ms-dark .border-\[\#E8ECF2\] { border-color: #2A3752; }
+.ms-phone.ms-dark .border-slate-100 { border-color: #1F2A40; }
+.ms-phone.ms-dark .border-slate-200 { border-color: #2A3752; }
+.ms-phone.ms-dark .bg-slate-100.h-px,
+.ms-phone.ms-dark .h-px.bg-slate-100 { background-color: #1F2A40; }
+
+/* Tints become low-luminance washes; their text lightens to stay legible. */
+.ms-phone.ms-dark .bg-\[\#EEEFFE\] { background-color: #1E2A5A; }
+.ms-phone.ms-dark .text-\[\#4A4BD4\] { color: #9AADFF; }
+.ms-phone.ms-dark .text-\[\#5B5CEB\] { color: #9AADFF; }
+.ms-phone.ms-dark .bg-\[\#ECFAF1\] { background-color: #143726; }
+.ms-phone.ms-dark .text-\[\#16A34A\] { color: #86DBAA; }
+.ms-phone.ms-dark .text-\[\#15803D\] { color: #86DBAA; }
+.ms-phone.ms-dark .bg-\[\#FEF8EB\] { background-color: #422F0E; }
+.ms-phone.ms-dark .text-\[\#D97706\] { color: #FAC878; }
+.ms-phone.ms-dark .text-\[\#B45309\] { color: #FAC878; }
+.ms-phone.ms-dark .bg-\[\#FEF2F2\] { background-color: #481B1B; }
+.ms-phone.ms-dark .text-\[\#DC2626\] { color: #FCA5A5; }
+
+/* Inputs sit on the card, not on white. */
+.ms-phone.ms-dark input,
+.ms-phone.ms-dark select,
+.ms-phone.ms-dark textarea { background-color: #0F1728; color: #F1F5F9; }
+.ms-phone.ms-dark input::placeholder { color: #8B9AB8; }

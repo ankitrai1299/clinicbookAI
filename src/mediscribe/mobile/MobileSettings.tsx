@@ -1,5 +1,6 @@
 import React from 'react';
-import { LogOut, Info, ShieldCheck, FileText, LifeBuoy, ChevronRight, Check } from 'lucide-react';
+import { LogOut, Info, ShieldCheck, FileText, LifeBuoy, ChevronRight, Check, Sun, Moon } from 'lucide-react';
+import { usePrefs, type Lang, type Appearance } from './prefs';
 import { Avatar, Card } from './ui';
 import { loadDoctorProfile, saveDoctorProfile, loadLanguage, saveLanguage, LANGUAGES, type DoctorProfile } from '../utils/settings';
 
@@ -63,6 +64,7 @@ export default function MobileSettings({
     return p.name ? p : { ...p, name: doctorName || '' };
   });
   const [language, setLanguage] = React.useState<string>(() => loadLanguage());
+  const { t, lang, setLang, appearance, setAppearance } = usePrefs();
   const [saved, setSaved] = React.useState(false);
 
   const set = (k: keyof DoctorProfile, v: string) => {
@@ -83,14 +85,14 @@ export default function MobileSettings({
   };
 
   const about = [
-    { key: 'privacy', label: 'Privacy Policy', icon: ShieldCheck, tint: 'text-[#16A34A]', href: '/privacy.html' },
-    { key: 'terms', label: 'Terms of Service', icon: FileText, tint: 'text-[#5B5CEB]', href: '/terms.html' },
-    { key: 'support', label: 'Support', icon: LifeBuoy, tint: 'text-[#D97706]', href: 'mailto:apps@nextdot.co.in' }
+    { key: 'privacy', label: t('settings.privacyPolicy'), icon: ShieldCheck, tint: 'text-[#16A34A]', href: '/privacy.html' },
+    { key: 'terms', label: t('settings.termsOfService'), icon: FileText, tint: 'text-[#5B5CEB]', href: '/terms.html' },
+    { key: 'support', label: t('settings.support'), icon: LifeBuoy, tint: 'text-[#D97706]', href: 'mailto:apps@nextdot.co.in' }
   ];
 
   return (
     <div className="p-5 pb-8">
-      <h1 className="text-[28px] font-bold tracking-tight text-slate-900 mb-4">Settings</h1>
+      <h1 className="text-[28px] font-bold tracking-tight text-slate-900 mb-4">{t('settings.title')}</h1>
 
       {/* Who is signed in — the question this screen answers first. */}
       <Card className="p-4 mb-4">
@@ -98,12 +100,12 @@ export default function MobileSettings({
           <Avatar name={doctorName} size={52} />
           <div className="min-w-0">
             <div className="font-bold text-slate-900 text-[17px] truncate">{profile.name || doctorName || 'Doctor'}</div>
-            <div className="text-[13px] text-slate-400 truncate">{profile.qualification || 'Qualification not set'}</div>
+            <div className="text-[13px] text-slate-400 truncate">{profile.qualification || t('settings.qualificationNotSet')}</div>
           </div>
         </div>
       </Card>
 
-      <Section title="Account">
+      <Section title={t('settings.account')}>
         <Card className="p-4">
           <div className="flex items-center gap-3.5">
             <Avatar name={doctorName} size={44} />
@@ -121,42 +123,77 @@ export default function MobileSettings({
             onClick={onLogout}
             className="w-full mt-3.5 inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-[#FEF2F2] text-[#DC2626] font-semibold text-[14px] active:bg-rose-100 transition-colors"
           >
-            <LogOut size={17} /> Sign out
+            <LogOut size={17} /> {t('settings.signOut')}
           </button>
         </Card>
       </Section>
 
-      <Section title="Doctor profile">
+      <Section title={t('settings.doctorProfile')}>
         <Card className="p-4">
-          <Field label="Doctor name" value={profile.name} placeholder="Dr. Full Name" onChange={(v) => set('name', v)} />
-          <Field label="Qualification" value={profile.qualification} placeholder="MBBS, MD" onChange={(v) => set('qualification', v)} />
-          <Field label="Registration number" value={profile.regNo} placeholder="Medical council reg. no." onChange={(v) => set('regNo', v)} />
-          <Field label="Clinic name" value={profile.clinicName} placeholder="Clinic / hospital name" onChange={(v) => set('clinicName', v)} />
+          <Field label={t('settings.doctorName')} value={profile.name} placeholder="Dr. Full Name" onChange={(v) => set('name', v)} />
+          <Field label={t('settings.qualification')} value={profile.qualification} placeholder="MBBS, MD" onChange={(v) => set('qualification', v)} />
+          <Field label={t('settings.registrationNumber')} value={profile.regNo} placeholder="Medical council reg. no." onChange={(v) => set('regNo', v)} />
+          <Field label={t('settings.clinicName')} value={profile.clinicName} placeholder="Clinic / hospital name" onChange={(v) => set('clinicName', v)} />
           <button
             onClick={save}
             className="w-full mt-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-[#5B5CEB] text-white font-semibold text-[14px] active:bg-[#4A4BD4] transition-colors"
           >
             {saved ? (
               <>
-                <Check size={17} /> Saved
+                <Check size={17} /> {t('settings.saved')}
               </>
             ) : (
-              'Save profile'
+              t('settings.saveProfile')
             )}
           </button>
           <p className="text-[11.5px] text-slate-400 mt-2.5 leading-snug">
-            This is what prints on your prescriptions and reports.
+            {t('settings.printsOn')}
           </p>
         </Card>
       </Section>
 
-      <Section title="Preferences">
+      <Section title={t('settings.preferences')}>
         <Card className="p-4">
+          {/* App interface language. Separate from the transcription language
+              below: a doctor may read the app in Hindi and still dictate in
+              English, or the other way round. */}
           <div className="flex items-baseline justify-between mb-2">
-            <span className="text-[13px] font-medium text-slate-500">Default transcription language</span>
+            <span className="text-[13px] font-medium text-slate-500">{t('settings.appLanguage')}</span>
+            <span className="text-[12px] text-slate-400">{t('settings.appLanguageHint')}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5 mb-5">
+            {([
+              { key: 'en' as Lang, label: 'English' },
+              { key: 'hi' as Lang, label: 'हिन्दी' }
+            ]).map((o) => (
+              <button
+                key={o.key}
+                onClick={() => setLang(o.key)}
+                className={`flex items-center gap-2.5 px-3.5 py-3 rounded-xl border transition-colors ${
+                  lang === o.key ? 'border-[#5B5CEB] bg-[#EEEFFE]' : 'border-[#E8ECF2] bg-white'
+                }`}
+              >
+                <span
+                  className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center ${
+                    lang === o.key ? 'border-[#5B5CEB]' : 'border-slate-300'
+                  }`}
+                >
+                  {lang === o.key && <span className="w-2 h-2 rounded-full bg-[#5B5CEB]" />}
+                </span>
+                <span className={`text-[14.5px] font-medium ${lang === o.key ? 'text-[#4A4BD4]' : 'text-slate-600'}`}>
+                  {o.label}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-[13px] font-medium text-slate-500">
+              {t('settings.defaultTranscriptionLanguage')}
+            </span>
             <span className="text-[12.5px] font-semibold text-[#5B5CEB]">{language}</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-5">
             {LANGUAGES.map((l) => (
               <button
                 key={l}
@@ -169,14 +206,32 @@ export default function MobileSettings({
               </button>
             ))}
           </div>
-          <p className="text-[11.5px] text-slate-400 mt-3 leading-snug">
-            Auto Detect works for most consultations; pick a language when the recording is hard to hear.
-          </p>
+
+          <div className="text-[13px] font-medium text-slate-500 mb-2">{t('settings.appearance')}</div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {([
+              { key: 'light' as Appearance, label: t('settings.light'), Icon: Sun },
+              { key: 'dark' as Appearance, label: t('settings.dark'), Icon: Moon }
+            ]).map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                onClick={() => setAppearance(key)}
+                className={`flex flex-col items-center gap-1.5 py-3.5 rounded-xl border transition-colors ${
+                  appearance === key ? 'border-[#5B5CEB] bg-[#EEEFFE]' : 'border-[#E8ECF2] bg-white'
+                }`}
+              >
+                <Icon size={19} className={appearance === key ? 'text-[#5B5CEB]' : 'text-slate-400'} />
+                <span className={`text-[13.5px] font-medium ${appearance === key ? 'text-[#4A4BD4]' : 'text-slate-500'}`}>
+                  {label}
+                </span>
+              </button>
+            ))}
+          </div>
         </Card>
       </Section>
 
       {(onNavigate || canViewAdmin) && (
-        <Section title="More">
+        <Section title={t('settings.more')}>
           <Card className="overflow-hidden">
             {[
               { key: 'prescriptions', label: 'Prescriptions' },
@@ -199,13 +254,13 @@ export default function MobileSettings({
         </Section>
       )}
 
-      <Section title="About">
+      <Section title={t('settings.about')}>
         <Card className="overflow-hidden">
           <div className="flex items-center gap-3 p-4">
             <span className="w-8 h-8 rounded-lg bg-[#EEEFFE] text-[#5B5CEB] flex items-center justify-center flex-shrink-0">
               <Info size={17} />
             </span>
-            <span className="flex-1 font-semibold text-slate-900 text-[14.5px]">App version</span>
+            <span className="flex-1 font-semibold text-slate-900 text-[14.5px]">{t('settings.appVersion')}</span>
             <span className="text-[13px] text-slate-400">{appVersion}</span>
           </div>
           {about.map(({ key, label, icon: Icon, tint, href }) => (

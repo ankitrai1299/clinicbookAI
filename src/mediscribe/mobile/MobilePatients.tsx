@@ -2,6 +2,7 @@ import React from 'react';
 import { Users, Plus, ChevronRight, CalendarDays, FileText } from 'lucide-react';
 import { Consultation, Patient } from '../types';
 import { Avatar, Card, SearchBar, EmptyState, recordTime } from './ui';
+import { usePrefs } from './prefs';
 
 // The doctor's patients, each with what actually helps recognise them: age and
 // sex, what they last came in with, when that was, and how many times.
@@ -26,6 +27,7 @@ const chipsFrom = (c?: Consultation): string[] => {
 const CHIP_TONES = ['bg-[#EEEFFE] text-[#4A4BD4]', 'bg-[#EEEFFE] text-[#4A4BD4]', 'bg-[#ECFAF1] text-[#16A34A]'];
 
 export default function MobilePatients({ patients, consultations, onSelectPatient, onAddPatient }: MobilePatientsProps) {
+  const { t } = usePrefs();
   const [query, setQuery] = React.useState('');
 
   // Per patient: their consultations, newest first. Keyed by id, falling back to
@@ -63,7 +65,7 @@ export default function MobilePatients({ patients, consultations, onSelectPatien
   return (
     <div className="p-5 pb-8">
       <div className="flex items-start justify-between mb-1">
-        <h1 className="text-[28px] font-bold tracking-tight text-slate-900">Patients</h1>
+        <h1 className="text-[28px] font-bold tracking-tight text-slate-900">{t('patients.title')}</h1>
         {onAddPatient && (
           <button
             onClick={onAddPatient}
@@ -75,18 +77,18 @@ export default function MobilePatients({ patients, consultations, onSelectPatien
         )}
       </div>
       <p className="text-[13.5px] text-slate-500 mb-4">
-        {patients.length} patient{patients.length === 1 ? '' : 's'} · records &amp; visit history
+        {patients.length} · {t('patients.subtitle')}
       </p>
 
       <div className="mb-4">
-        <SearchBar value={query} onChange={setQuery} placeholder="Search patients by name…" />
+        <SearchBar value={query} onChange={setQuery} placeholder={t('patients.search')} />
       </div>
 
       {rows.length === 0 ? (
         <EmptyState
           icon={<Users size={26} />}
-          title={patients.length ? 'No matching patients' : 'No patients yet'}
-          hint={patients.length ? 'Try a different name or number.' : 'Patients appear here once they are registered.'}
+          title={patients.length ? t('empty.nothingMatches') : t('patients.noneTitle')}
+          hint={patients.length ? undefined : t('patients.noneBody')}
         />
       ) : (
         <div className="space-y-3">
@@ -99,7 +101,7 @@ export default function MobilePatients({ patients, consultations, onSelectPatien
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-slate-900 text-[16px] truncate">{p.name}</div>
                     <div className="text-[12.5px] text-slate-400 mt-0.5">
-                      {typeof p.age === 'number' && p.age > 0 ? `${p.age} yrs` : 'Age not recorded'}
+                      {typeof p.age === 'number' && p.age > 0 ? `${p.age} yrs` : t('patients.ageUnknown')}
                       {p.gender ? ` · ${p.gender}` : ''}
                     </div>
                   </div>
@@ -119,11 +121,11 @@ export default function MobilePatients({ patients, consultations, onSelectPatien
                 <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-100 text-[12px] text-slate-400">
                   <span className="inline-flex items-center gap-1.5">
                     <CalendarDays size={13} />
-                    {latest ? `Last visit ${latest.date}` : 'No visit yet'}
+                    {latest ? `${t('patients.lastVisit')} ${latest.date}` : t('patients.noVisit')}
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <FileText size={13} />
-                    {visits} consultation{visits === 1 ? '' : 's'}
+                    {visits} {visits === 1 ? t('patients.consultation') : t('patients.consultations')}
                   </span>
                 </div>
               </Card>

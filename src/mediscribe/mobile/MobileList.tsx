@@ -11,6 +11,7 @@ import {
   inRange,
   type RangeKey
 } from './ui';
+import { usePrefs } from './prefs';
 
 // The four dashboard drill-downs behind the metric cards: Consultations, Draft
 // Reports, Completed, Pending Follow-ups.
@@ -32,7 +33,14 @@ interface MobileListProps {
   onSelectConsultation: (c: Consultation) => void;
 }
 
-const COPY: Record<ListKind, { title: string; subtitle?: string; emptyTitle: string; emptyBody: string }> = {
+const TITLE_KEY: Record<ListKind, string> = {
+  today: 'lists.today.title',
+  drafts: 'lists.drafts.title',
+  completed: 'lists.completed.title',
+  'follow-ups': 'lists.followups.title'
+};
+
+const COPY: Record<ListKind, { title: string; subtitleKey?: string; emptyTitle: string; emptyBody: string }> = {
   today: {
     title: 'Consultations',
     emptyTitle: 'No consultations in this period',
@@ -40,19 +48,19 @@ const COPY: Record<ListKind, { title: string; subtitle?: string; emptyTitle: str
   },
   drafts: {
     title: 'Draft Reports',
-    subtitle: 'not yet completed',
+    subtitleKey: 'lists.drafts.subtitle',
     emptyTitle: 'No drafts in this period',
     emptyBody: 'Every consultation in this range has been completed.'
   },
   completed: {
     title: 'Completed',
-    subtitle: 'with a finished report',
+    subtitleKey: 'lists.completed.subtitle',
     emptyTitle: 'Nothing completed in this period',
     emptyBody: 'Try a wider date range.'
   },
   'follow-ups': {
     title: 'Pending Follow-ups',
-    subtitle: 'pending',
+    subtitleKey: 'lists.followups.subtitle',
     emptyTitle: 'No follow-ups in this period',
     emptyBody: 'Try a wider date range.'
   }
@@ -90,6 +98,7 @@ export default function MobileList({
   onBack,
   onSelectConsultation
 }: MobileListProps) {
+  const { t } = usePrefs();
   const copy = COPY[kind];
 
   const rows = React.useMemo(() => {
@@ -116,9 +125,9 @@ export default function MobileList({
           <ChevronLeft size={20} />
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-[22px] font-bold text-slate-900 tracking-tight truncate">{copy.title}</h1>
+          <h1 className="text-[22px] font-bold text-slate-900 tracking-tight truncate">{t(TITLE_KEY[kind])}</h1>
           <p className="text-[12px] text-slate-400 mt-0.5 truncate">
-            {rows.length} {copy.subtitle ?? 'in this period'}
+            {rows.length} {copy.subtitleKey ? t(copy.subtitleKey) : t('lists.inPeriod')}
           </p>
         </div>
         {rows.length > 0 && (
@@ -156,7 +165,7 @@ export default function MobileList({
                         fu.overdue ? 'bg-[#FEF2F2] text-[#DC2626]' : 'bg-[#FEF8EB] text-[#B45309]'
                       }`}
                     >
-                      {fu.overdue ? 'Overdue' : fu.label}
+                      {fu.overdue ? t('lists.followups.overdue') : fu.label}
                     </span>
                   ) : (
                     <StatusBadge status={c.status} />

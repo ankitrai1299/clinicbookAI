@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, Sparkles, Check } from 'lucide-react';
 import { Consultation, Patient } from '../types';
 import { Avatar, Card, SearchBar, EmptyState, recordTime } from './ui';
+import { usePrefs } from './prefs';
 
 // Every recorded consultation, as a PIPELINE rather than a list row.
 //
@@ -72,6 +73,7 @@ export default function MobileSessions({
   onOpenTranscript,
   onOpenReport
 }: MobileSessionsProps) {
+  const { t } = usePrefs();
   const [query, setQuery] = React.useState('');
 
   const phoneOf = React.useMemo(
@@ -97,20 +99,20 @@ export default function MobileSessions({
 
   return (
     <div className="p-5 pb-8">
-      <h1 className="text-[28px] font-bold tracking-tight text-slate-900">Sessions</h1>
+      <h1 className="text-[28px] font-bold tracking-tight text-slate-900">{t('sessions.title')}</h1>
       <p className="text-[13.5px] text-slate-500 mt-0.5 mb-4">
-        {consultations.length} recorded consultation{consultations.length === 1 ? '' : 's'}
+        {consultations.length} {t('sessions.count')}
       </p>
 
       <div className="mb-4">
-        <SearchBar value={query} onChange={setQuery} placeholder="Search by patient or date…" />
+        <SearchBar value={query} onChange={setQuery} placeholder={t('sessions.search')} />
       </div>
 
       {rows.length === 0 ? (
         <EmptyState
           icon={<FileText size={26} />}
-          title={consultations.length ? 'Nothing matches' : 'No sessions yet'}
-          hint={consultations.length ? 'Try a patient name or a date.' : 'Record a consultation and it will appear here.'}
+          title={consultations.length ? t('empty.nothingMatches') : t('sessions.noneTitle')}
+          hint={consultations.length ? undefined : t('sessions.noneBody')}
         />
       ) : (
         <div className="space-y-3">
@@ -135,14 +137,14 @@ export default function MobileSessions({
                     }`}
                   >
                     <span className={`w-1.5 h-1.5 rounded-full ${done ? 'bg-[#16A34A]' : 'bg-[#D97706]'}`} />
-                    {done ? 'Completed' : 'Draft'}
+                    {done ? t('status.Completed') : t('status.Draft')}
                   </span>
                 </button>
 
                 <div className="space-y-0">
-                  <Stage label="Recording" done={rec} active={!rec} right={durationOf(c)} />
-                  <Stage label="Transcript ready" done={tr} active={rec && !tr} />
-                  <Stage label="Report ready" done={rep} active={tr && !rep} last />
+                  <Stage label={t('sessions.recording')} done={rec} active={!rec} right={durationOf(c)} />
+                  <Stage label={t('sessions.transcriptReady')} done={tr} active={rec && !tr} />
+                  <Stage label={t('sessions.reportReady')} done={rep} active={tr && !rep} last />
                 </div>
 
                 {(tr || rep) && (
@@ -152,7 +154,7 @@ export default function MobileSessions({
                         onClick={() => (onOpenTranscript ?? onSelectConsultation)(c)}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#ECFAF1] text-[#16A34A] text-[13px] font-semibold active:opacity-80 transition-opacity"
                       >
-                        <FileText size={15} /> Transcript
+                        <FileText size={15} /> {t('sessions.transcript')}
                       </button>
                     )}
                     {rep && (
@@ -160,7 +162,7 @@ export default function MobileSessions({
                         onClick={() => (onOpenReport ?? onSelectConsultation)(c)}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#EEEFFE] text-[#4A4BD4] text-[13px] font-semibold active:opacity-80 transition-opacity"
                       >
-                        <Sparkles size={15} /> Report
+                        <Sparkles size={15} /> {t('sessions.report')}
                       </button>
                     )}
                   </div>
