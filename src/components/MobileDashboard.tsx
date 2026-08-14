@@ -12,6 +12,7 @@ import { getWaitlist } from '../api/waitlist';
 import { getChannelStatus } from '../api/whatsapp';
 import ConnectWhatsApp from './ConnectWhatsApp';
 import PatientRegistrationQR from './PatientRegistrationQR';
+import AddPatientSheet from './AddPatientSheet';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A phone-first ClinicBook dashboard for the mobile app (and mobile browsers via
@@ -117,6 +118,7 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -246,17 +248,31 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
           <NavTab id="patients" label="Patients" Icon={Users} tab={tab} setTab={setTab} />
           <NavTab id="more" label="More" Icon={MoreHorizontal} tab={tab} setTab={setTab} />
 
-          {/* Booking a new appointment lives in the full dashboard — this opens
-              it rather than adding a second, half-featured booking form. */}
+          {/* Adds a patient right here. It used to bounce to the full dashboard,
+              which meant a walk-in at the counter could not be registered from
+              the phone at all — the one thing a desk does most. */}
           <button
-            onClick={() => (onOpenFull ? onOpenFull() : setTab('appointments'))}
-            aria-label="New appointment"
+            onClick={() => setAddOpen(true)}
+            aria-label="Add patient"
             className="absolute left-1/2 -translate-x-1/2 -top-6 w-[58px] h-[58px] rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/40 ring-4 ring-white active:scale-95 transition-transform"
           >
             <Plus className="w-6 h-6" strokeWidth={2.6} />
           </button>
         </div>
       </nav>
+
+      {addOpen && (
+        <AddPatientSheet
+          existing={patients}
+          onClose={() => setAddOpen(false)}
+          onAdded={(p) => {
+            // Show them immediately rather than waiting for the next refresh —
+            // the desk has the patient in front of them.
+            setPatients((list) => [p, ...list]);
+            setTab('patients');
+          }}
+        />
+      )}
     </div>
   );
 }
