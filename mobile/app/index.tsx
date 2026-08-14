@@ -125,14 +125,15 @@ export default function App() {
     setReloadKey((k) => k + 1);
   }, []);
 
+  // Only the TOP edge is inset natively.
+  //
+  // 'bottom' padded the area BELOW the WebView with the device's bottom inset —
+  // a band of canvas the web page cannot reach or paint, sitting under the app's
+  // own tab bar. That was the empty strip at the foot of every screen. The web
+  // handles its own bottom spacing (the tab bar reserves
+  // env(safe-area-inset-bottom), capped), so the WebView now runs to the real
+  // bottom of the screen.
   return (
-    {/* Only the TOP edge is inset natively.
-        'bottom' padded the area BELOW the WebView with the device's bottom
-        inset — a band of canvas the web page cannot reach or paint, sitting
-        under the app's own tab bar. That was the empty strip at the foot of
-        every screen. The web handles its own bottom spacing (the bar reserves
-        env(safe-area-inset-bottom), capped), so the WebView now runs to the
-        real bottom of the screen. */}
     <SafeAreaView style={styles.root} edges={['top']}>
       {failed ? (
         <View style={styles.center}>
