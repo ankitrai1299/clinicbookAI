@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 
 import { AppError } from '../../utils/AppError.js';
+import { toNativeAppUser, withNativeAppAuth } from './nativeAppCompat.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getAuthenticatedUser, loginUser, resendEmailOtp, signupUser, verifyEmailOtp } from './auth.service.js';
 import { LoginInput, ResendOtpInput, SignupInput, VerifyOtpInput } from './auth.schemas.js';
@@ -24,11 +25,18 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await loginUser(req.body as LoginInput);
 
-  res.status(200).json({
-    success: true,
-    message: 'Login successful',
-    data: result
-  });
+  // The native MediScribe app reads { token, user } from the top level; the web
+  // reads `data`. Both are sent — see nativeAppCompat.
+  res.status(200).json(
+    withNativeAppAuth(
+      {
+        success: true,
+        message: 'Login successful',
+        data: result
+      },
+      result
+    )
+  );
 });
 
 // Verify the signup OTP → returns { user, accessToken } (the verified login).
@@ -54,6 +62,9 @@ export const me = asyncHandler(async (req: Request, res: Response) => {
   const user = await getAuthenticatedUser(userId);
 
   res.status(200).json({
+    // The app takes `data?.user ?? data`, so a top-level `user` in the app's own
+    // shape is what it ends up reading.
+    user: toNativeAppUser(user),
     success: true,
     data: user
   });
