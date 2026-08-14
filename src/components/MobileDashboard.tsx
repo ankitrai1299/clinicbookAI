@@ -180,7 +180,7 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
 
   return (
     <div className="min-h-[100dvh] bg-[#F6F8FA] font-sans text-slate-900 flex flex-col">
-      <header style={{ paddingTop: 'calc(12px + min(env(safe-area-inset-top), 24px))' }} className="sticky top-0 z-30 bg-[#F6F8FA]/95 backdrop-blur px-4 pb-3 flex items-center justify-between">
+      <header className="sticky top-0 pt-3 z-30 bg-[#F6F8FA]/95 backdrop-blur px-4 pb-3 flex items-center justify-between">
         <button onClick={() => setTab('more')} aria-label="More" className="text-slate-500 p-1 -ml-1">
           <MoreHorizontal className="w-5 h-5 rotate-90" />
         </button>
