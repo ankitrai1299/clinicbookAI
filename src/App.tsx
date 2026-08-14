@@ -354,6 +354,7 @@ function AppShell() {
         {currentPage === 'dashboard' && user && APP_ONLY && !mobileFull && (
           <MobileDashboard
             clinicName={clinicConfig.clinicName}
+            clinicId={user.clinicId}
             userName={clinicConfig.ownerName || user.name}
             onLogout={handleLogout}
             onOpenFull={() => setMobileFull(true)}

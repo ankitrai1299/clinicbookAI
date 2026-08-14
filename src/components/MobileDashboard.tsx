@@ -11,6 +11,7 @@ import { getNotifications, type ApiNotification } from '../api/notifications';
 import { getWaitlist } from '../api/waitlist';
 import { getChannelStatus } from '../api/whatsapp';
 import ConnectWhatsApp from './ConnectWhatsApp';
+import PatientRegistrationQR from './PatientRegistrationQR';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A phone-first ClinicBook dashboard for the mobile app (and mobile browsers via
@@ -33,6 +34,8 @@ type Tab = 'home' | 'appointments' | 'patients' | 'calendar' | 'reports' | 'what
 interface Props {
   clinicName?: string;
   userName?: string;
+  /** Needed for the patient self-registration link/QR. */
+  clinicId?: string;
   onLogout: () => void;
   // Opens the full dashboard (all web features: Doctors, Waitlist, Bot Settings,
   // Developers, Billing) — reuses the complete ClinicDashboard.
@@ -104,7 +107,7 @@ const apptPill = (a: ApiAppointment, isToday: boolean, nowMins: number): { text:
   return { text: 'Pending', cls: 'bg-amber-50 text-amber-700' };
 };
 
-export default function MobileDashboard({ clinicName, userName, onLogout, onOpenFull }: Props) {
+export default function MobileDashboard({ clinicName, userName, clinicId, onLogout, onOpenFull }: Props) {
   const [tab, setTab] = useState<Tab>('home');
   const [appointments, setAppointments] = useState<ApiAppointment[]>([]);
   const [patients, setPatients] = useState<ApiPatient[]>([]);
@@ -206,7 +209,13 @@ export default function MobileDashboard({ clinicName, userName, onLogout, onOpen
             )}
             {tab === 'appointments' && <AppointmentsTab appointments={appointments} {...actions} />}
             {tab === 'patients' && (
-              <PatientsTab patients={patients} appointments={appointments} search={search} setSearch={setSearch} />
+              <PatientsTab
+                patients={patients}
+                appointments={appointments}
+                search={search}
+                setSearch={setSearch}
+                clinicId={clinicId}
+              />
             )}
             {tab === 'calendar' && <CalendarTab appointments={appointments} />}
             {tab === 'reports' && <ReportsTab appointments={appointments} patients={patients} />}
@@ -650,9 +659,10 @@ type PatientFilter = 'all' | 'new' | 'followup' | 'inactive';
 const INACTIVE_DAYS = 90;
 
 function PatientsTab({
-  patients, appointments, search, setSearch,
+  patients, appointments, search, setSearch, clinicId,
 }: {
   patients: ApiPatient[]; appointments: ApiAppointment[]; search: string; setSearch: (s: string) => void;
+  clinicId?: string;
 }) {
   const [filter, setFilter] = useState<PatientFilter>('all');
   const today = todayKey();
