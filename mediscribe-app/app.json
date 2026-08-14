@@ -1,5 +1,6 @@
 {
   "expo": {
+    "owner": "ruchi5286",
     "name": "NovaScribe",
     "slug": "mediscribe-app",
     "version": "1.0.0",
@@ -72,7 +73,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6c887e06-4b1c-4b25-b64b-718ad634d3bb"
+        "projectId": "ebbb9205-a7ff-4ce2-9621-3a88fde7ef00"
       }
     }
   }
