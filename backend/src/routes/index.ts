@@ -50,6 +50,15 @@ apiRouter.use('/api/waitlist', waitlistRouter);
 // MediScribe (the new AI scribe) — ClinicBook requireAuth first so the bridge has
 // req.user; then the ported router scopes everything to that clinic.
 apiRouter.use('/api/mediscribe', requireAuth, mediscribeRouter);
+
+// The SAME router, also under /api/doctor.
+//
+// The native MediScribe app calls /api/doctor/* — it was built against an
+// earlier backend that used that prefix. Rather than edit the app (it is
+// reproduced from its reference verbatim, and any edit would be lost the next
+// time it is copied), the routes answer on both paths. One handler, one set of
+// permissions, two spellings.
+apiRouter.use('/api/doctor', requireAuth, mediscribeRouter);
 apiRouter.use('/api/whatsapp', whatsappRouter);
 apiRouter.use('/api/analytics', analyticsRouter);
 // Patient 360 — one patient id/code → their complete cross-product record.

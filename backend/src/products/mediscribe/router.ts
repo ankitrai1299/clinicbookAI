@@ -461,6 +461,13 @@ mediscribeRouter.get('/analytics', async (req: AuthedRequest, res: Response) => 
   }
 });
 
+// The native app deletes a stored recording by FILENAME (its older backend kept
+// uploads flat). Ours are clinic-scoped keys, so a bare filename cannot identify
+// one — and guessing which file a name refers to could delete another clinic's
+// audio. Answers ok so the app's best-effort cleanup never surfaces an error,
+// and does nothing.
+mediscribeRouter.delete('/uploads/:filename', (_req, res) => res.json({ ok: false }));
+
 // Usage telemetry from the app (a report exported, a recording that failed).
 // Fire-and-forget by contract: the client never surfaces a failure here, so a
 // doctor sharing a PDF must never see an error because an event could not be
@@ -487,7 +494,10 @@ mediscribeRouter.post('/events', async (req: AuthedRequest, res: Response) => {
 //
 // READ-ONLY by construction: this reaches no write path at all. A misheard word
 // costs the doctor a re-ask, never a wrong prescription on someone's phone.
-mediscribeRouter.post('/ask', async (req: AuthedRequest, res: Response) => {
+// '/chat' is the native app's name for the same thing; one handler answers to
+// both so neither client has to change its spelling. Registered as two paths
+// rather than by re-entering the router, which would run the auth bridge twice.
+mediscribeRouter.post(['/ask', '/chat'], async (req: AuthedRequest, res: Response) => {
   try {
     const question = String(req.body?.question ?? '').trim();
     if (!question) return res.status(400).json({ error: 'question is required' });

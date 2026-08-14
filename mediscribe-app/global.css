@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Theme tokens.
+ *
+ * Every colour the app draws with resolves through one of these variables, so a
+ * single `dark` class on the root flips the whole UI. Values are space-separated
+ * RGB channels (not hex) because tailwind.config.js wraps them as
+ * `rgb(var(--x) / <alpha-value>)` — that is what keeps `bg-slate-100/50` and
+ * other alpha variants working.
+ *
+ * The slate ramp is INVERTED in dark rather than remapped per component. In this
+ * design `text-slate-900` means "strongest text" and `bg-slate-50` means
+ * "faintest fill"; both intents hold in either theme, so flipping the ramp keeps
+ * ~260 existing class usages correct without touching them. Only the literal
+ * `bg-white` card surface needed a real token (`bg-surface`), because white
+ * means "card" in some places and "text on a gradient" in others.
+ */
+@layer base {
+  :root {
+    /* Page background and card surface. Background is a near-white #FAFBFC so
+       white cards read as raised without a heavy shadow; the interface stays
+       overwhelmingly white and calm, with colour reserved for meaning. */
+    --color-canvas: 250 251 252;      /* #FAFBFC */
+    --color-surface: 255 255 255;     /* #FFFFFF */
+
+    /* Neutral ramp — warm grey (Tailwind gray), 50 = faintest fill … 900 =
+       strongest text. Anchored to the spec: 900 = #111827 text, 500 = #6B7280
+       secondary, 200 = #E8ECF2 hairline border. */
+    --slate-50: 249 250 251;          /* #F9FAFB */
+    --slate-100: 243 244 246;         /* #F3F4F6 — faint fills / dividers */
+    --slate-200: 232 236 242;         /* #E8ECF2 — hairline border */
+    --slate-300: 209 213 219;         /* #D1D5DB */
+    --slate-400: 156 163 175;         /* #9CA3AF — muted icons */
+    --slate-500: 107 114 128;         /* #6B7280 — secondary text */
+    --slate-600: 75 85 99;            /* #4B5563 */
+    --slate-700: 55 65 81;            /* #374151 */
+    --slate-800: 31 41 55;            /* #1F2937 */
+    --slate-900: 17 24 39;            /* #111827 — primary text */
+
+    /* Tinted chip backgrounds and the text that sits on them. Primary is a
+       single indigo (#5B5CEB) used only as an accent. */
+    --brand-50: 238 239 254;          /* #EEEFFE */
+    --brand-600: 74 75 212;           /* #4A4BD4 */
+    --success-50: 236 250 241;
+    --success-700: 21 128 61;
+    --warning-50: 254 248 235;
+    --warning-700: 180 83 9;
+    --error-50: 254 242 242;
+    --error-700: 185 28 28;
+    --accent-50: 238 239 254;         /* fold the old violet into the one accent */
+  }
+
+  /*
+   * Dark. Surfaces are a desaturated navy rather than pure black: against the
+   * brand indigo, pure black smears noticeably while scrolling on OLED panels,
+   * and the slight blue cast keeps the neutrals coherent with the brand.
+   *
+   * The ramp is not a straight numeric inversion of the light values — that
+   * would be too contrasty at the fill end and too dim at the text end. Each
+   * step is chosen so text shades clear WCAG AA against --color-surface
+   * (#131C2E): slate-900 ≈ 15.8:1, slate-500 ≈ 7.4:1, slate-400 ≈ 5.6:1.
+   */
+  .dark:root {
+    --color-canvas: 11 18 32;         /* #0B1220 */
+    --color-surface: 19 28 46;        /* #131C2E — cards sit above the canvas */
+
+    --slate-50: 26 35 55;             /* faintest fill */
+    --slate-100: 31 42 64;
+    --slate-200: 42 55 82;
+    --slate-300: 74 91 124;
+    --slate-400: 139 154 184;         /* muted text / icons */
+    --slate-500: 166 179 205;
+    --slate-600: 190 200 220;
+    --slate-700: 210 218 233;
+    --slate-800: 229 235 245;
+    --slate-900: 241 245 249;         /* strongest text */
+
+    /* Tints become low-luminance washes; their text lightens to stay legible. */
+    --brand-50: 30 42 90;
+    --brand-600: 154 173 255;
+    --success-50: 20 55 38;
+    --success-700: 134 219 170;
+    --warning-50: 66 47 14;
+    --warning-700: 250 200 120;
+    --error-50: 72 27 27;
+    --error-700: 252 165 165;
+    --accent-50: 40 36 92;
+  }
+}

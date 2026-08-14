@@ -24,7 +24,7 @@ AI_medical_scribe/
 backend/_*.mjs
 backend/scripts/_tmp*.ts
 
-# Reference-only: the native MediScribe app whose design the phone UI follows.
-# Not built or deployed from this repo.
-mediscribe-app*/
+# The reference DROP folders stay out of git. `mediscribe-app/` (no suffix) is the
+# real native app and IS tracked — it was copied from the reference verbatim.
+mediscribe-app (*)/
 novascribe-ai*/
