@@ -120,6 +120,16 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
 
+  // Paint the PAGE and fill the dynamic viewport. body is #f8fafc for the web, so
+  // whatever the app does not cover shows as a band of browser-white under the
+  // tab bar — the single thing that most made this read as a web page in a
+  // frame rather than an app. Reverted on unmount; the browser is untouched.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('cb-phone-page');
+    return () => root.classList.remove('cb-phone-page');
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     const [appts, pats, notifs, wait] = await Promise.allSettled([
@@ -169,8 +179,8 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
   const actions = { busyId, onConfirm: confirm, onCancel: cancel, onComplete: complete };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col">
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+    <div className="min-h-[100dvh] bg-[#F6F8FA] font-sans text-slate-900 flex flex-col">
+      <header style={{ paddingTop: 'calc(12px + min(env(safe-area-inset-top), 24px))' }} className="sticky top-0 z-30 bg-[#F6F8FA]/95 backdrop-blur px-4 pb-3 flex items-center justify-between">
         <button onClick={() => setTab('more')} aria-label="More" className="text-slate-500 p-1 -ml-1">
           <MoreHorizontal className="w-5 h-5 rotate-90" />
         </button>
@@ -189,7 +199,7 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-28">
+      <main className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(76px + min(env(safe-area-inset-bottom), 12px))' }}>
         {loading ? (
           <div className="flex items-center justify-center py-24 text-slate-400">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -736,6 +746,8 @@ function PatientsTab({
   return (
     <div className="px-4 pt-4 space-y-4">
       <ScreenTitle>Patients</ScreenTitle>
+
+      {clinicId && <PatientRegistrationQR clinicId={clinicId} />}
 
       <div className="relative">
         <Search className="w-[17px] h-[17px] text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
