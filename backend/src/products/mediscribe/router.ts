@@ -10,10 +10,10 @@ import path from 'path';
 import fs from 'fs';
 
 import express, { Router, type Request, type Response, type NextFunction } from 'express';
-import multer from 'multer';
 import { randomUUID } from 'crypto';
 
 import { bridgeAuth, type AuthedRequest } from './middleware/auth.js';
+import { uploadAudio } from './middleware/upload.js';
 import type { Role } from './contracts/index.js';
 import { currentClinicId } from './context.js';
 import { storage, objectKey, clinicOfKey, signedPath, verifySignature } from '../../core/storage/index.js';
@@ -49,9 +49,8 @@ import {
   type CountableConsultation
 } from './services/doctorAnalytics.js';
 
-// 25 MB ceiling — matches the client-side limit for uploaded audio files.
-const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_AUDIO_BYTES } });
+// Audio uploads go through middleware/upload.ts, never through multer directly —
+// multer drops the tenant context and it has to be restored. See that file.
 
 // Where uploaded audio is persisted for replay. A writable temp dir by default
 // (the prod container's app dir is read-only); override with MEDISCRIBE_AUDIO_DIR.
@@ -210,7 +209,7 @@ mediscribeRouter.delete(/^\/audio\/(.+)$/, async (req: Request, res: Response) =
 });
 
 // ── Transcription (Sarvam STT) ───────────────────────────────
-mediscribeRouter.post('/transcribe', upload.single('audio'), async (req: Request, res: Response) => {
+mediscribeRouter.post('/transcribe', uploadAudio('audio'), async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio file provided' });
 
