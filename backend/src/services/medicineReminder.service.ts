@@ -202,7 +202,10 @@ export const processMedicineReminders = async (): Promise<void> => {
         sessionBody,
         clinicId: r.clinicId
       });
-      console.info(`[MedicineReminder] Sent via ${channel} → ${patientName} (${r.drug})`);
+      // The DRUG is not logged. A medicine name beside a patient name is a
+      // diagnosis in all but wording; the reminder id resolves to both for
+      // anyone entitled to look.
+      console.info(`[MedicineReminder] Sent via ${channel} → reminder ${r.id}`);
     } catch (error) {
       console.error(`[MedicineReminder] Failed reminder ${r.id}:`, error);
     }

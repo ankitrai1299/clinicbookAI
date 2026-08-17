@@ -3,6 +3,7 @@
 // logged to the server console instead of sent — so local dev and tests work
 // without a provider, and a missing key never breaks signup.
 
+import { maskEmail } from '../core/observability/redact.js';
 import { Resend } from 'resend';
 
 import { env } from '../config/env.js';
@@ -38,7 +39,9 @@ interface SendArgs {
 const send = async ({ to, subject, html, text }: SendArgs): Promise<void> => {
   if (!client) {
     // Dev / unconfigured: surface the content so the flow is testable locally.
-    console.info(`[email] (no RESEND_API_KEY) would send to ${to}: ${subject}\n${text}`);
+    // Dev-only path, but it ran with a real address and a real body — including
+    // the signup OTP, which is a credential.
+    console.info(`[email] (no RESEND_API_KEY) would send to ${maskEmail(to)}: ${subject}`);
     return;
   }
   const { error } = await client.emails.send({ from: env.EMAIL_FROM, to, subject, html, text });

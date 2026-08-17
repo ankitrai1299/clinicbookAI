@@ -1,3 +1,4 @@
+import { maskName } from '../../../core/observability/redact.js';
 import { Prisma, WaitlistStatus } from '@prisma/client';
 
 import { prisma } from '../../../config/prisma.js';
@@ -339,7 +340,7 @@ export const autoOfferFreedSlot = async (
   }
 
   if (!delivery.delivered) {
-    console.warn(`[Waitlist] Offer to ${updated.patient?.name} NOT delivered (${delivery.channel}) → rolling to next patient`);
+    console.warn(`[Waitlist] Offer to ${maskName(updated.patient?.name)} NOT delivered (${delivery.channel}) → rolling to next patient`);
     await db.waitlist.update({
       where: { id: updated.id, clinicId },
       data: { status: WaitlistStatus.CANCELLED, offeredDoctorId: null, offeredDate: null, offeredTime: null, offeredExpiresAt: null }
@@ -396,7 +397,7 @@ export const expireStaleOffers = async (now: Date = new Date()): Promise<number>
     // Free the patient's FSM session (no live turn will do it for them).
     if (entry.patient?.phone) await setWaSessionState(entry.patient.phone, clinicId, entry.patientId, 'BOOKED');
     expired += 1;
-    console.info(`[Waitlist] Offer expired for ${entry.patient?.name} (entry ${entry.id}) → rolling to next`);
+    console.info(`[Waitlist] Offer expired (entry ${entry.id}) → rolling to next`);
     if (offeredDoctorId && offeredDate && offeredTime) {
       await autoOfferFreedSlot(clinicId, offeredDoctorId, offeredDate, offeredTime, now);
     }

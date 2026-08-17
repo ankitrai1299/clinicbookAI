@@ -58,6 +58,10 @@ export const AUDIT_ACTIONS = [
 
   // ── Administration ──────────────────────────────────────────────
   'USER_CREATED',
+  // Second factor and session revocation (Phase 3).
+  'MFA_ENABLED',
+  'MFA_DISABLED',
+  'SESSIONS_REVOKED',
   'CLINIC_SETTINGS_UPDATED',
   'API_KEY_CREATED',
   'API_KEY_REVOKED',

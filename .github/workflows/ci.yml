@@ -1,0 +1,80 @@
+# Typecheck, tests, and dependency vulnerability scanning.
+#
+# The scanning half is a compliance control, not a nicety: "reasonable security
+# safeguards" under DPDP and any customer security questionnaire both ask how we
+# learn about a vulnerable dependency, and until now the answer was "somebody
+# notices". This runs on every push and on a weekly schedule, because a
+# dependency does not become vulnerable when we touch the code — it becomes
+# vulnerable when someone publishes an advisory.
+#
+# The audit step does NOT fail the build on low/moderate findings. A gate that
+# goes red for a transitive dev-dependency advisory nobody can act on is a gate
+# people learn to ignore, and an ignored gate is worse than none. High and
+# critical fail; everything else is reported.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so a newly-published advisory against unchanged code is still found.
+    - cron: '0 3 * * 1'
+
+jobs:
+  backend:
+    name: Backend — typecheck and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      # The client is generated, not committed — typecheck fails without it.
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+
+  frontend:
+    name: Frontend — typecheck and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  dependencies:
+    name: Dependency vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Report everything, so the full picture is in the log…
+      - name: Audit (report)
+        run: |
+          echo "── frontend ──"
+          npm audit --audit-level=low || true
+          echo "── backend ──"
+          (cd backend && npm audit --audit-level=low || true)
+
+      # …but only fail on what is worth stopping a deploy for.
+      - name: Audit (fail on high or critical)
+        run: |
+          npm audit --audit-level=high
+          cd backend && npm audit --audit-level=high

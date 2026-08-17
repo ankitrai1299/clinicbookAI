@@ -1,6 +1,6 @@
 export type PageType = 'hub' | 'landing' | 'dashboard' | 'novascribe' | 'novascribe-landing' | 'demo' | 'signup' | 'login' | 'verify-email' | 'welcome' | 'developers';
 
-export type DashboardTab = 'overview' | 'appointments' | 'calendar' | 'waitlist' | 'patients' | 'settings' | 'billing' | 'developers';
+export type DashboardTab = 'overview' | 'appointments' | 'calendar' | 'waitlist' | 'patients' | 'settings' | 'billing' | 'developers' | 'security';
 
 export interface Doctor {
   id: string;

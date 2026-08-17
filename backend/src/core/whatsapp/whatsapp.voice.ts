@@ -9,6 +9,7 @@
 // text stays on the deterministic FSM. Gated to an allowlist of phone numbers
 // (WA_VOICE_TEST_NUMBERS) while the feature is being validated.
 
+import { describeText } from '../observability/redact.js';
 import axios from 'axios';
 import OpenAI, { toFile } from 'openai';
 
@@ -108,7 +109,9 @@ export const transcribeWhatsAppVoice = async (
     });
 
     const text = (result.text ?? '').trim();
-    console.info('[WhatsApp][voice] transcribed', { mediaId, chars: text.length, preview: text.slice(0, 80) });
+    // No preview. Eighty characters of a patient describing their symptoms
+    // identifies both the person and the condition.
+    console.info('[WhatsApp][voice] transcribed', { mediaId, length: describeText(text) });
     return text || null;
   } catch (err) {
     console.error('[WhatsApp][voice] transcription failed:', err instanceof Error ? err.message : err);

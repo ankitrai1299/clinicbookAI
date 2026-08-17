@@ -42,7 +42,19 @@ const UNGATED_BY_DESIGN: Readonly<Record<string, string>> = {
 
   // Meta calls this one, not a person. It is verified by the X-Hub-Signature-256
   // HMAC over the raw body, which is a stronger check than any role could be.
-  'core/whatsapp/whatsapp.routes.ts:/webhook': "Meta's inbound webhook, authenticated by HMAC signature, not by a session"
+  'core/whatsapp/whatsapp.routes.ts:/webhook': "Meta's inbound webhook, authenticated by HMAC signature, not by a session",
+
+  // A user managing their OWN second factor and their OWN sessions. Gating these
+  // on a permission would mean a receptionist could not protect their account,
+  // which is backwards — the point of MFA is that everybody can turn it on.
+  // Each one already proves identity: /verify by the challenge token, the rest
+  // by a live session plus (for enable/disable) a current TOTP code.
+  'core/auth/mfa.routes.ts:/verify': 'the second half of a sign-in; authenticated by the short-lived challenge token',
+  'core/auth/mfa.routes.ts:/setup': 'a user enrolling their own authenticator; changes nothing until confirmed',
+  'core/auth/mfa.routes.ts:/enable': 'a user turning on their own second factor, proven by a current code',
+  'core/auth/mfa.routes.ts:/disable': 'a user turning off their own second factor, proven by a current code',
+  'core/auth/mfa.routes.ts:/': 'tells the caller whether THEIR OWN second factor is on',
+  'core/auth/mfa.routes.ts:/sign-out-everywhere': "ends the caller's own sessions; everyone must be able to do this"
 };
 
 const walk = (dir: string, out: string[] = []): string[] => {

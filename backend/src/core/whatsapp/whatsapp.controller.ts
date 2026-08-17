@@ -1,3 +1,4 @@
+import { maskPhone } from '../observability/redact.js';
 import { Request, Response } from 'express';
 
 import { AppError } from '../../utils/AppError.js';
@@ -155,7 +156,7 @@ export const handleIncomingWebhook = asyncHandler(async (req: Request, res: Resp
           }
         })().catch((err) => console.error('[WhatsApp] Inbound voice handling failed:', err));
       } else {
-        console.info('[WhatsApp] Voice note ignored (voice AI disabled or number not allowed)', { from });
+        console.info('[WhatsApp] Voice note ignored (voice AI disabled or number not allowed)', { from: maskPhone(from) });
       }
     }
   }

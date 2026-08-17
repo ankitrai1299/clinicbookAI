@@ -1,3 +1,4 @@
+import { maskPhone } from '../observability/redact.js';
 import axios, { AxiosResponse } from 'axios';
 
 import { mayMessage } from '../consent/consent.service.js';
@@ -320,7 +321,7 @@ export const sendWhatsAppDocument = async (input: {
   } catch (error) {
     const tokenExpired = isTokenExpiredError(error);
     const detail = describeError(error);
-    console.error(`[WhatsApp] document send to ${input.to} FAILED: ${detail}`);
+    console.error(`[WhatsApp] document send to ${maskPhone(input.to)} FAILED: ${detail}`);
     await logOutbound({
       to: input.to,
       messageType: label,
@@ -486,7 +487,7 @@ export const sendWhatsAppTemplateMessage = async (params: {
   const gate = await checkTemplateSendable(params.clinicId, params.templateName);
   if (!gate.allowed) {
     const detail = `${gate.reason} — "${params.templateName}" is not approved on this clinic's WhatsApp Business Account.`;
-    console.error(`[WhatsApp] template send to ${params.to} BLOCKED: ${detail}`);
+    console.error(`[WhatsApp] template send to ${maskPhone(params.to)} BLOCKED: ${detail}`);
     await logOutbound({
       to: params.to,
       messageType,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, ArrowLeft, ArrowRight, CalendarCheck, Key, Mail, Stethoscope, Eye, EyeOff } from 'lucide-react';
 
-import { loginUser } from '../api/auth';
+import { isMfaChallenge, loginUser, verifyMfaCode } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { PageType } from '../types';
 
@@ -23,12 +23,46 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Second factor. Non-null once the password has been accepted and a code is
+  // owed — the password is NOT kept, so this token is the only thing carrying
+  // the half-finished sign-in forward.
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaToken) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const { user, accessToken } = await verifyMfaCode(mfaToken, mfaCode);
+      setAuth(accessToken, user);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'That code is not valid.');
+      // The challenge is only good for five minutes; if it has expired the
+      // message says so and the user needs the password screen again.
+      setMfaCode('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const { user, accessToken } = await loginUser({ email, password });
+      const result = await loginUser({ email, password });
+
+      // Password accepted, second factor owed. Hold the short-lived challenge
+      // token and ask for the code — nothing is stored as a session yet.
+      if (isMfaChallenge(result)) {
+        setMfaToken(result.mfaToken);
+        setLoading(false);
+        return;
+      }
+
+      const { user, accessToken } = result;
       setAuth(accessToken, user);
       // Do NOT navigate here — the host App routes to the intended product
       // (dashboard or novascribe) once the user is set. USER-BASED access: the
@@ -78,6 +112,47 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
           </div>
         )}
 
+        {/* Second factor. Replaces the password form rather than appearing
+            beside it — the password is already accepted and re-entering it
+            would suggest otherwise. */}
+        {mfaToken ? (
+          <form onSubmit={handleMfaSubmit} className="space-y-4" id="login-mfa-form">
+            <p className="text-sm text-slate-600 text-center">
+              Open your authenticator app and enter the 6-digit code for this account.
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              maxLength={6}
+              required
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              className="w-full text-center tracking-[0.5em] text-lg font-mono px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-sky-500 transition-colors"
+              aria-label="Authentication code"
+            />
+            <button
+              type="submit"
+              disabled={loading || mfaCode.length !== 6}
+              className="w-full py-3 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-400 text-white font-bold rounded-xl text-sm shadow-lg shadow-sky-100 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {loading ? 'Checking…' : 'Verify and sign in'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMfaToken(null);
+                setMfaCode('');
+                setError(null);
+              }}
+              className="w-full text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+            >
+              Use a different account
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4" id="login-form">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
@@ -138,6 +213,7 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
             )}
           </button>
         </form>
+        )}
 
         <div className="mt-6 text-center text-xs text-slate-400">
           Don't have an account?{' '}

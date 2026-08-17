@@ -18,6 +18,7 @@
 // Per-sender serialization is still in-process — see the comment on `queues`
 // below for why that is deliberate and what protects correctness without it.
 
+import { maskPhone } from '../observability/redact.js';
 import { prisma } from '../../config/prisma.js';
 import { handleConsentKeywords, showNoticeIfNeeded } from '../consent/whatsappConsent.js';
 import { claimInboundMessage } from './whatsapp.dedupe.js';
@@ -175,7 +176,9 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
   const patients = dataSourceFor(clinicId).patients;
   const national = nationalKey(phone);
 
-  console.info('[WhatsApp][resolve] lookup', { inboundPhone: phone, nationalKey: national, clinicId });
+  // The number itself is not logged — the masked tail is enough to correlate a
+  // support request with a record the reader may already open.
+  console.info('[WhatsApp][resolve] lookup', { phone: maskPhone(phone), clinicId });
 
   if (national) {
     // Fast path: substring match on the contiguous national digits.
@@ -194,7 +197,7 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
       if (found) {
         console.info('[WhatsApp][resolve] matched via normalized fallback (formatted stored number)', {
           patientId: found.patientCode ?? found.id,
-          storedPhone: found.phone
+          storedPhone: maskPhone(found.phone)
         });
       }
     }
@@ -202,7 +205,7 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
     if (found) {
       console.info('[WhatsApp][resolve] matched existing patient', {
         patientId: found.patientCode ?? found.id,
-        storedPhone: found.phone,
+        storedPhone: maskPhone(found.phone),
         name: found.name,
         source: found.source
       });
@@ -219,7 +222,7 @@ const findOrCreatePatient = async (clinicId: string, phone: string) => {
   });
   console.info('[WhatsApp][resolve] no match — auto-onboarded NEW patient', {
     patientId: created.patientCode ?? created.id,
-    storedPhone: created.phone
+    storedPhone: maskPhone(created.phone)
   });
   return created;
 };
@@ -393,7 +396,7 @@ const processOne = async (
   // after a completed booking). Send nothing — the inbound is still logged above.
   if (reply === null) {
     console.info('[WhatsApp] FSM stayed silent — no reply sent (non-actionable message in a settled state).', {
-      phone: to
+      phone: maskPhone(to)
     });
     return;
   }
@@ -417,7 +420,7 @@ const processOne = async (
         ? await sendWhatsAppTextMessage({ to, body: reply, messageType: 'auto_reply', clinicId })
         : await sendWhatsAppInteractive({ to, reply, messageType: 'auto_reply', clinicId });
     console.info('[WhatsApp] Inbound reply sent', {
-      phone: to,
+      phone: maskPhone(to),
       clinicId,
       patientId: patientCode,
       inboundText: text,

@@ -235,15 +235,30 @@ model WhatsAppPatientBinding {
 }
 
 model User {
-  id              String    @id @default(cuid())
-  clinicId        String
-  name            String
-  email           String    @unique
-  passwordHash    String
-  role            UserRole  @default(CLINIC_ADMIN)
+  id           String   @id @default(cuid())
+  clinicId     String
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(CLINIC_ADMIN)
   // Email verification gate for self-service signup. @default(true) so an additive
   // `db push` backfills EXISTING users as verified (never locks them out); new
   // self-service signups are created with emailVerified:false explicitly.
+  // Bumped to invalidate every token this user holds. Tokens minted before the
+  // bump stop verifying immediately. Starts at 0, and a token with NO version
+  // claim reads as 0 too — so every session issued before this column existed
+  // keeps working, and nobody is logged out by the deploy that adds it.
+  tokenVersion Int      @default(0)
+
+  // TOTP second factor. Null until the user enrols; the secret is stored
+  // base32-encoded. mfaEnabled is separate from mfaSecret because enrolment
+  // has two steps: generate a secret and show the QR, then CONFIRM a code
+  // from the authenticator. A secret with mfaEnabled=false is a half-finished
+  // enrolment that must not lock anyone out.
+  mfaSecret     String?
+  mfaEnabled    Boolean   @default(false)
+  mfaEnrolledAt DateTime?
+
   emailVerified   Boolean   @default(true)
   emailVerifiedAt DateTime?
   createdAt       DateTime  @default(now())
@@ -1003,3 +1018,14 @@ model PatientConsent {
   @@index([clinicId, patientId])
   @@index([clinicId, phoneKey, purpose])
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3 additions to User: session revocation and MFA.
+//
+// These live on User rather than in a sessions table on purpose. A sessions
+// table is the more flexible design, but it puts a database read on EVERY
+// authenticated request; a version integer travels inside the token the request
+// already carries, so revocation costs one comparison. The trade is that we can
+// invalidate ALL of a user's tokens but not one specific device — which is what
+// "sign out everywhere" and "the password just changed" actually need.
+// ---------------------------------------------------------------------------

@@ -3,13 +3,14 @@ import {
   Users, Calendar, Clock, Bell, Settings, CreditCard, Activity,
   Search, Plus, CheckCircle, CheckCheck, XCircle,
   Mail, Phone, Globe, ExternalLink, ArrowRight, ShieldAlert,
-  QrCode, Copy, Check, Key, ArrowLeft
+  QrCode, Copy, Check, Key, ArrowLeft, ShieldCheck
 } from 'lucide-react';
 import AiAssistant from './AiAssistant';
 import { realPhone } from '../utils/phone';
 import DoctorWorkflow from './DoctorWorkflow';
 import ConnectWhatsApp from './ConnectWhatsApp';
 import DeveloperApi from './DeveloperApi';
+import SecuritySettings from './SecuritySettings';
 import { getChannelStatus as getChannelStatusApi } from '../api/whatsapp';
 import { Appointment, Doctor, Patient, ReminderLog, WaitlistPatient, ClinicConfig, DashboardTab } from '../types';
 import {
@@ -124,6 +125,7 @@ const TAB_TITLES: Record<DashboardTab, string> = {
   patients: 'Patients',
   settings: 'Bot Settings',
   developers: 'Developers & API',
+  security: 'Security',
   billing: 'Billing'
 };
 
@@ -160,7 +162,7 @@ export default function ClinicDashboard({
   // blank until /auth/me answers rather than guessing.
   const roleLabel =
     role === 'STAFF' ? 'Clinic Staff' : role === 'ADMIN' ? 'Platform Admin' : role ? 'Clinic Admin' : '';
-  const STAFF_TABS = ['appointments', 'patients', 'calendar', 'waitlist'];
+  const STAFF_TABS = ['appointments', 'patients', 'calendar', 'waitlist', 'security'];
   const canSeeTab = (id: string): boolean => !isStaff || STAFF_TABS.includes(id);
   // Prevent direct access to a restricted tab (e.g. a deep-linked or stale tab):
   // a staff user landing anywhere they can't see is bounced to Appointments.
@@ -576,6 +578,9 @@ export default function ClinicDashboard({
               { id: 'patients', label: 'Clinic Patients', icon: Users },
               { id: 'settings', label: 'Bot Settings', icon: Settings },
               { id: 'developers', label: 'Developers & API', icon: Key },
+              // Everyone sees this one: a receptionist must be able to turn on their
+              // own second factor, and to end their own sessions if a device is lost.
+              { id: 'security', label: 'Security', icon: ShieldCheck },
               { id: 'billing', label: 'Subscription Billing', icon: CreditCard }
             ].filter((tab) => canSeeTab(tab.id)).map((tab) => {
               const TabIcon = tab.icon;
@@ -1225,6 +1230,13 @@ export default function ClinicDashboard({
           {activeTab === 'developers' && (
             <div className="animate-fadeIn text-left" id="developers-tab-view">
               <DeveloperApi />
+            </div>
+          )}
+
+          {/* SECURITY: the user's own second factor and sessions */}
+          {activeTab === 'security' && (
+            <div className="animate-fadeIn text-left" id="security-tab-view">
+              <SecuritySettings />
             </div>
           )}
 

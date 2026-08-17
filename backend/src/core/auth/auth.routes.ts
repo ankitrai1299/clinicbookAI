@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import mfaRouter, { sessionRouter } from './mfa.routes.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requirePermission } from '../authz/requirePermission.js';
 import { authLimiter } from '../../middleware/rateLimiters.js';
@@ -25,5 +26,9 @@ authRouter.post('/partner-login', requirePartnerSecret, validate(loginSchema), l
 authRouter.post('/verify-otp', authLimiter, validate(verifyOtpSchema), verifyOtp);
 authRouter.post('/resend-otp', authLimiter, validate(resendOtpSchema), resendOtp);
 authRouter.get('/me', requireAuth, me);
+
+// Two-factor authentication (opt-in per user) and session revocation.
+authRouter.use('/mfa', mfaRouter);
+authRouter.use(sessionRouter);
 
 export default authRouter;

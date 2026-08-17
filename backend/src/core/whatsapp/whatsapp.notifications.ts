@@ -2,6 +2,7 @@
 // (booking, waitlist). These never block or fail the originating request: they
 // short-circuit when WhatsApp isn't configured and swallow/log any send error.
 
+import { maskName, maskPhone } from '../observability/redact.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { formatDoctorName, normalizeDoctorName } from '../../utils/doctorName.js';
 import { getAvailableSlots } from '../../services/scheduling.service.js';
@@ -218,7 +219,7 @@ export const notifyPatientRegistered = (p: PatientRegisteredParams): void => {
     .then((r) =>
       console.info('[WhatsApp] Registration message dispatched', {
         patientId: p.patientCode,
-        phone: to,
+        phone: maskPhone(to),
         wamid: r.waMessageId ?? null,
         channel: r.channel,
         status: 'sent'
@@ -227,7 +228,7 @@ export const notifyPatientRegistered = (p: PatientRegisteredParams): void => {
     .catch((err) =>
       console.error('[WhatsApp] Registration message failed', {
         patientId: p.patientCode,
-        phone: to,
+        phone: maskPhone(to),
         error: err?.message ?? String(err)
       })
     );
@@ -311,7 +312,7 @@ export const notifyWaitlistSlotOffer = async (p: WaitlistSlotOfferParams): Promi
       clinicId: p.clinicId
     });
     const path = channel === 'session' ? 'session_message' : 'template_message';
-    console.info(`[WhatsApp] Waitlist offer to ${p.patientName} delivered via ${path}.`);
+    console.info(`[WhatsApp] Waitlist offer to ${maskName(p.patientName)} delivered via ${path}.`);
     return { delivered: true, channel: path };
   } catch (err) {
     // Outside the 24h window the template may be unapproved/failing, or the Graph

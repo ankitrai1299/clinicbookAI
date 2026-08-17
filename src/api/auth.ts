@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { API_BASE, ApiError, apiFetch } from './client';
 
 export interface AuthUser {
   id: string;
@@ -33,11 +33,98 @@ export const registerClinic = (body: {
     body: JSON.stringify(body),
   });
 
-export const loginUser = (body: { email: string; password: string }) =>
-  apiFetch<AuthResult>('/api/auth/login', {
+/**
+ * Sign-in stopped halfway: the password was right, a second factor is owed.
+ *
+ * `mfaToken` proves the password and nothing else. It is short-lived and the
+ * only thing that accepts it is the code-verification endpoint.
+ */
+export interface MfaChallenge {
+  mfaRequired: true;
+  mfaToken: string;
+  message: string;
+}
+
+export const isMfaChallenge = (r: AuthResult | MfaChallenge): r is MfaChallenge =>
+  (r as MfaChallenge).mfaRequired === true;
+
+/**
+ * Sign in.
+ *
+ * Not written on apiFetch, which throws on any non-2xx and keeps only `data` —
+ * the MFA challenge arrives as a 401 WITH a body we need (`mfaToken`), and
+ * apiFetch would discard it and report a failed login. The 401 is deliberate on
+ * the server side too: a client that knows nothing about MFA must treat this as
+ * a failure rather than as a session.
+ */
+export const loginUser = async (body: { email: string; password: string }): Promise<AuthResult | MfaChallenge> => {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "Can't reach the server. Check your internet connection — the server may also be down or restarting.",
+    );
+  }
+
+  const json = (await res.json().catch(() => ({}))) as {
+    data?: AuthResult;
+    message?: string;
+    mfaRequired?: boolean;
+    mfaToken?: string;
+  };
+
+  if (json.mfaRequired && json.mfaToken) {
+    return { mfaRequired: true, mfaToken: json.mfaToken, message: json.message ?? '' };
+  }
+  if (!res.ok || !json.data) {
+    throw new ApiError(res.status, json.message ?? res.statusText);
+  }
+  return json.data;
+};
+
+/** Second half of an MFA sign-in: the challenge token plus a code from the app. */
+export const verifyMfaCode = async (mfaToken: string, code: string): Promise<AuthResult> => {
+  const res = await fetch(`${API_BASE}/api/auth/mfa/verify`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mfaToken}` },
+    body: JSON.stringify({ code }),
   });
+  const json = (await res.json().catch(() => ({}))) as { data?: AuthResult; message?: string };
+  if (!res.ok || !json.data) throw new ApiError(res.status, json.message ?? 'That code is not valid.');
+  return json.data;
+};
+
+// ── Managing your own second factor ─────────────────────────────────────────
+
+export const getMfaStatus = () =>
+  apiFetch<{ mfaEnabled: boolean; enrolledAt: string | null }>('/api/auth/mfa');
+
+/** Start enrolment. Returns the secret and the otpauth:// URI to render as a QR. */
+export const setupMfa = () =>
+  apiFetch<{ secret: string; otpauthUrl: string }>('/api/auth/mfa/setup', { method: 'POST' });
+
+/** Confirm a code from the authenticator — only this actually switches it on. */
+export const enableMfa = (code: string) =>
+  apiFetch<{ mfaEnabled: boolean }>('/api/auth/mfa/enable', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+
+export const disableMfa = (code: string) =>
+  apiFetch<{ mfaEnabled: boolean }>('/api/auth/mfa/disable', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+
+/** End every session this account has, including this one. */
+export const signOutEverywhere = () =>
+  apiFetch<{ tokenVersion: number }>('/api/auth/sign-out-everywhere', { method: 'POST' });
 
 // Verify the signup OTP → returns the verified session (token + user).
 export const verifyOtp = (body: { email: string; code: string }) =>

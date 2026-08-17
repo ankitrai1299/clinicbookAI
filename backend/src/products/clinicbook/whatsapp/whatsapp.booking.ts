@@ -30,6 +30,7 @@
 // deterministically.
 // ===========================================================================
 
+import { maskPhone } from '../../../core/observability/redact.js';
 import { forClinic } from '../../../config/tenantPrisma.js';
 import { dataSourceFor } from '../../../core/datasource/index.js';
 import { env } from '../../../config/env.js';
@@ -1289,7 +1290,7 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotR
   }
 
   console.info('[FSM] ▶ turn start', {
-    phone: params.phone,
+    phone: maskPhone(params.phone),
     currentState: state,
     patientMessage: params.message.trim(),
     tappedReplyId: params.replyId ?? null
@@ -1377,7 +1378,7 @@ export const handleWhatsAppMessage = async (params: BookingParams): Promise<BotR
   const { state: nextState } = await loadSession(params.clinicId, params.phone);
   const u = params.understanding;
   console.info('[FSM] ◀ transition', {
-    phone: params.phone,
+    phone: maskPhone(params.phone),
     currentState: state,
     patientMessage: t,
     nextState,

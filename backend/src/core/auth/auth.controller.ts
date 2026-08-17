@@ -4,7 +4,14 @@ import { AppError } from '../../utils/AppError.js';
 import { record, recordFromRequest } from '../audit/audit.service.js';
 import { toNativeAppUser, withNativeAppAuth } from './nativeAppCompat.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { getAuthenticatedUser, loginUser, resendEmailOtp, signupUser, verifyEmailOtp } from './auth.service.js';
+import {
+  MfaRequiredError,
+  getAuthenticatedUser,
+  loginUser,
+  resendEmailOtp,
+  signupUser,
+  verifyEmailOtp
+} from './auth.service.js';
 import { LoginInput, ResendOtpInput, SignupInput, VerifyOtpInput } from './auth.schemas.js';
 
 export const signup = asyncHandler(async (req: Request, res: Response) => {
@@ -35,6 +42,23 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   try {
     result = await loginUser(req.body as LoginInput);
   } catch (err) {
+    // Password correct, second factor still owed. Not a failed login, so it is
+    // not audited as one; the LOGIN row is written when the code is verified.
+    //
+    // Sent as 401 with the challenge token in the body: a client that knows
+    // about MFA reads `mfaToken` and asks for a code, and one that does not (the
+    // native app, which cannot be changed) sees a failed sign-in with a message
+    // telling the user what to do — rather than storing an undefined token.
+    if (err instanceof MfaRequiredError) {
+      res.status(401).json({
+        success: false,
+        message: err.message,
+        mfaRequired: true,
+        mfaToken: err.mfaToken
+      });
+      return;
+    }
+
     // A failed sign-in is the single most useful row in the trail — repeated
     // failures against one email are what a brute-force attempt looks like from
     // the inside. There is no clinic yet (the credentials did not resolve to a

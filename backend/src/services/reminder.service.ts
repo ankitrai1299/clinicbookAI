@@ -169,7 +169,7 @@ export const processReminders = async (): Promise<void> => {
             existingReminderId: existing?.id
           });
           if (channel !== 'skipped') {
-            console.info(`[ReminderService] Sent 24h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
+            console.info(`[ReminderService] Sent 24h reminder via ${channel} → appointment ${appt.id}`);
           }
         }
       }
@@ -189,7 +189,7 @@ export const processReminders = async (): Promise<void> => {
             existingReminderId: existing?.id
           });
           if (channel !== 'skipped') {
-            console.info(`[ReminderService] Sent 1h reminder via ${channel} → appointment ${appt.id} (${patientName})`);
+            console.info(`[ReminderService] Sent 1h reminder via ${channel} → appointment ${appt.id}`);
           }
         }
       }
