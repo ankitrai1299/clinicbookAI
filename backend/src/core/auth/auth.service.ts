@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { signAccessToken, signMfaChallengeToken } from '../../config/jwt.js';
 import { verifyTotp } from './totp.js';
+import { resolveAppPassword } from './appPassword.service.js';
 import { AppError } from '../../utils/AppError.js';
 import { issueOtp, verifyOtp } from './otp.service.js';
 import { LoginInput, SignupInput } from './auth.schemas.js';
@@ -117,10 +118,23 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
     throw new AppError('Invalid email or password', 401);
   }
 
-  const isPasswordValid = await bcrypt.compare(input.password, userRecord.passwordHash);
+  // An app password is a DEVICE credential, not the account password, so it is
+  // checked separately and never against the bcrypt hash. It is recognised by
+  // its `msk_` prefix, which keeps this to one indexed lookup and means a normal
+  // password never touches this path at all.
+  //
+  // It must belong to THIS user: a valid app password for a different account
+  // is not a way into this one, and it must read as an ordinary wrong password
+  // rather than as a different kind of failure.
+  const appPassword = await resolveAppPassword(input.password);
+  const usingAppPassword = appPassword?.userId === userRecord.id;
 
-  if (!isPasswordValid) {
-    throw new AppError('Invalid email or password', 401);
+  if (!usingAppPassword) {
+    const isPasswordValid = await bcrypt.compare(input.password, userRecord.passwordHash);
+
+    if (!isPasswordValid) {
+      throw new AppError('Invalid email or password', 401);
+    }
   }
 
   // Hard gate: an unverified account cannot log in. Re-issue an OTP (cooldown-
@@ -136,7 +150,13 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
   // Second factor, if this user turned it on. The token issued here proves the
   // PASSWORD only (scope 'mfa'); requireAuth refuses it, and the only route that
   // accepts it is the verification one.
-  if (mfaEnabled) {
+  //
+  // An app password SKIPS this, which is the entire point of one: the device it
+  // was made for cannot ask for a code. That is a real reduction in strength for
+  // that device and it is stated on the model, in the UI, and here — the gain is
+  // that MFA can be switched on at all, rather than being permanently off
+  // because one client cannot support it.
+  if (mfaEnabled && !usingAppPassword) {
     throw new MfaRequiredError(signMfaChallengeToken(tokenClaims(user)));
   }
 

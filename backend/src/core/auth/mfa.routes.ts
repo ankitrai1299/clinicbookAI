@@ -29,6 +29,7 @@ import { AppError } from '../../utils/AppError.js';
 import { record, recordFromRequest } from '../audit/audit.service.js';
 import { completeMfaLogin } from './auth.service.js';
 import { revokeAllSessions } from './session.service.js';
+import { issueAppPassword, listAppPasswords, revokeAppPassword } from './appPassword.service.js';
 import { generateTotpSecret, totpUri, verifyTotp } from './totp.js';
 
 const mfaRouter = Router();
@@ -202,6 +203,82 @@ export default mfaRouter;
 export const sessionRouter = Router();
 
 sessionRouter.use(requireAuth);
+
+// ── App passwords ───────────────────────────────────────────────────────────
+//
+// One credential per device, for clients that cannot ask for a code. See
+// appPassword.service.ts for what this trades away and why it is still the
+// right call.
+
+const namedDeviceSchema = z.object({ name: z.string().trim().min(1, 'Give the device a name').max(60) });
+
+/** GET /api/auth/app-passwords — this user's devices. Never the secret. */
+sessionRouter.get(
+  '/app-passwords',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json({ success: true, data: await listAppPasswords(req.user!.userId) });
+  })
+);
+
+/**
+ * POST /api/auth/app-passwords — mint one.
+ *
+ * The plaintext is in THIS response and nowhere else, ever. The UI has to make
+ * the user copy it before the dialog closes, exactly like the API-key flow.
+ */
+sessionRouter.post(
+  '/app-passwords',
+  validate(namedDeviceSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { name } = req.body as z.infer<typeof namedDeviceSchema>;
+    let issued;
+    try {
+      issued = await issueAppPassword(req.user!.userId, req.user!.clinicId, name);
+    } catch (e) {
+      // The only thing issueAppPassword throws for is the per-user cap, and its
+      // message already says what to do about it.
+      throw new AppError(e instanceof Error ? e.message : 'Could not create the device password', 400);
+    }
+
+    recordFromRequest(req, {
+      action: 'APP_PASSWORD_CREATED',
+      resourceType: 'app_password',
+      resourceId: issued.id,
+      // The name and prefix identify the device; the secret never appears.
+      metadata: { device: issued.name, prefix: issued.prefix }
+    });
+
+    res.status(201).json({ success: true, data: issued });
+  })
+);
+
+/**
+ * DELETE /api/auth/app-passwords/:id — revoke one device.
+ *
+ * Revoking also ends every SESSION this account holds. That is stronger than
+ * strictly necessary and it is the right default: someone revoking a device
+ * password is almost always doing it because that device was lost, and leaving
+ * its already-issued token alive for another seven days would defeat the point.
+ * The cost is that their other devices ask them to sign in again once.
+ */
+sessionRouter.delete(
+  '/app-passwords/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const revoked = await revokeAppPassword(req.user!.userId, req.params.id);
+    if (!revoked) throw new AppError('Device password not found', 404);
+
+    const version = await revokeAllSessions(req.user!.userId);
+
+    recordFromRequest(req, {
+      action: 'APP_PASSWORD_REVOKED',
+      resourceType: 'app_password',
+      resourceId: req.params.id,
+      metadata: { alsoEndedSessions: true, newTokenVersion: version }
+    });
+
+    res.json({ success: true, data: { id: req.params.id, revoked: true, sessionsEnded: true } });
+  })
+);
 
 /**
  * POST /api/auth/sign-out-everywhere — invalidate every token this user holds.

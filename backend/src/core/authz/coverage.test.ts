@@ -54,7 +54,11 @@ const UNGATED_BY_DESIGN: Readonly<Record<string, string>> = {
   'core/auth/mfa.routes.ts:/enable': 'a user turning on their own second factor, proven by a current code',
   'core/auth/mfa.routes.ts:/disable': 'a user turning off their own second factor, proven by a current code',
   'core/auth/mfa.routes.ts:/': 'tells the caller whether THEIR OWN second factor is on',
-  'core/auth/mfa.routes.ts:/sign-out-everywhere': "ends the caller's own sessions; everyone must be able to do this"
+  'core/auth/mfa.routes.ts:/sign-out-everywhere': "ends the caller's own sessions; everyone must be able to do this",
+  'core/auth/mfa.routes.ts:/app-passwords':
+    "a user listing or creating a credential for THEIR OWN device; scoped to req.user, never another account",
+  'core/auth/mfa.routes.ts:/app-passwords/:id':
+    'revoking one of the caller\'s own device credentials; the service scopes the update to the owner'
 };
 
 const walk = (dir: string, out: string[] = []): string[] => {

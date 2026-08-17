@@ -267,6 +267,7 @@ model User {
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   aiConversations AiConversation[]
   emailOtp        EmailOtp?
+  appPasswords    AppPassword[]
 
   @@index([clinicId])
   @@index([role])
@@ -1029,3 +1030,55 @@ model PatientConsent {
 // invalidate ALL of a user's tokens but not one specific device — which is what
 // "sign out everywhere" and "the password just changed" actually need.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// App passwords — a per-device credential for clients that cannot ask for a
+// second factor.
+//
+// The MediScribe Android app is reproduced byte-for-byte from its reference and
+// its sign-in screen has no field for a 6-digit code. Without this, turning MFA
+// on would lock every doctor out of that app, so MFA would simply never be
+// turned on — which is the worst of both outcomes.
+//
+// So: the user generates a long random password for one device in the web
+// Security tab and types THAT into the app. It signs in without a second factor.
+// Be honest about what that costs — an app password bypasses MFA, so an account
+// with one is only as strong as that secret. What makes it a net gain is that
+// the secret is 160 bits of randomness rather than something a human chose, it
+// is scoped to one named device, it can be revoked on its own, and it is never
+// reused anywhere else. Google and Apple solved this the same way.
+//
+// Only the sha256 HASH is stored, like ApiKey and for the same reason: the
+// credential is high-entropy random, so bcrypt's deliberate slowness buys
+// nothing, and a hash lookup keeps sign-in to one indexed query instead of a
+// bcrypt compare per stored password.
+// ---------------------------------------------------------------------------
+model AppPassword {
+  id       String @id @default(cuid())
+  userId   String
+  clinicId String
+
+  /**
+   * What device this is for, in the user's own words. "Dr Rao's phone".
+   */
+  name String
+
+  /**
+   * sha256 of the plaintext. The plaintext is shown ONCE and never stored.
+   */
+  hash String @unique
+
+  /**
+   * The first few characters, so the list can identify one without revealing it.
+   */
+  prefix String
+
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([clinicId])
+}

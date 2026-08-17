@@ -1,7 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { Shield, ShieldCheck, LogOut, AlertCircle, Copy, Check } from 'lucide-react';
+import { Shield, ShieldCheck, LogOut, AlertCircle, Copy, Check, Smartphone } from 'lucide-react';
 
-import { disableMfa, enableMfa, getMfaStatus, setupMfa, signOutEverywhere } from '../api/auth';
+import {
+  createAppPassword,
+  disableMfa,
+  enableMfa,
+  getMfaStatus,
+  listAppPasswords,
+  revokeAppPassword,
+  setupMfa,
+  signOutEverywhere,
+  type AppPasswordRow,
+} from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 
 // The "Security" tab: two-factor authentication, and ending every session.
@@ -32,10 +42,18 @@ export default function SecuritySettings({ onSignedOut }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Device passwords, for the app that cannot ask for a code.
+  const [devices, setDevices] = useState<AppPasswordRow[]>([]);
+  const [deviceName, setDeviceName] = useState('');
+  const [issued, setIssued] = useState<{ plaintext: string } | null>(null);
+
   useEffect(() => {
     getMfaStatus()
       .then((s) => setEnabled(s.mfaEnabled))
       .catch(() => setEnabled(false));
+    listAppPasswords()
+      .then(setDevices)
+      .catch(() => setDevices([]));
   }, []);
 
   const run = async (fn: () => Promise<void>) => {
@@ -65,6 +83,24 @@ export default function SecuritySettings({ onSignedOut }: Props) {
       await disableMfa(code);
       setEnabled(false);
       setCode('');
+    });
+
+  const createDevice = () =>
+    run(async () => {
+      const created = await createAppPassword(deviceName);
+      // Held in state ONLY so it can be copied — it is never fetched again.
+      setIssued({ plaintext: created.plaintext });
+      setDeviceName('');
+      setDevices(await listAppPasswords());
+    });
+
+  const revokeDevice = (id: string) =>
+    run(async () => {
+      await revokeAppPassword(id);
+      // The server ends every session on revoke, so this one is already dead —
+      // clearing locally means the login screen instead of a wall of 401s.
+      logout();
+      onSignedOut?.();
     });
 
   const endAllSessions = () =>
@@ -201,8 +237,105 @@ export default function SecuritySettings({ onSignedOut }: Props) {
         )}
 
         <p className="text-xs text-slate-400 mt-4">
-          Note: the MediScribe Android app cannot ask for a code yet. If you sign in there, leave this off
-          until it can.
+          The MediScribe Android app cannot ask for a code. To keep using it with two-factor on, create a
+          device password below and sign in there with that.
+        </p>
+      </section>
+
+      {/* ── App passwords ── */}
+      <section className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center">
+            <Smartphone className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-slate-900">Device passwords</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              For the MediScribe Android app, which cannot ask for a 6-digit code. Sign in there with your
+              email and the device password instead of your real one.
+            </p>
+            <p className="text-xs text-slate-400 mt-2">
+              A device password skips the second factor, so treat it like a key to that one phone: give
+              each device its own, and revoke it the moment the device is lost.
+            </p>
+          </div>
+        </div>
+
+        {/* The plaintext exists only in the response that created it. */}
+        {issued && (
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <p className="text-sm font-semibold text-amber-900">Copy this now — it is not shown again.</p>
+            <div className="flex items-center gap-2 mt-2">
+              <code className="flex-1 px-3 py-2.5 bg-white border border-amber-200 rounded-lg text-sm font-mono break-all">
+                {issued.plaintext}
+              </code>
+              <button
+                onClick={() => {
+                  void navigator.clipboard?.writeText(issued.plaintext);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+                className="px-3 py-2.5 border border-amber-200 rounded-lg text-amber-700 hover:bg-amber-100 cursor-pointer"
+                aria-label="Copy the device password"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+            <button
+              onClick={() => setIssued(null)}
+              className="mt-3 text-xs font-semibold text-amber-800 hover:text-amber-900 cursor-pointer"
+            >
+              I have copied it
+            </button>
+          </div>
+        )}
+
+        <div className="mt-4 flex gap-2">
+          <input
+            value={deviceName}
+            onChange={(e) => setDeviceName(e.target.value)}
+            placeholder="Which device? e.g. Dr Rao's phone"
+            maxLength={60}
+            className="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-sky-500"
+            aria-label="Device name"
+          />
+          <button
+            onClick={createDevice}
+            disabled={busy || !deviceName.trim()}
+            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-semibold rounded-xl text-sm cursor-pointer whitespace-nowrap"
+          >
+            Create
+          </button>
+        </div>
+
+        {devices.length > 0 && (
+          <ul className="mt-4 divide-y divide-slate-100 border border-slate-100 rounded-xl">
+            {devices.map((d) => (
+              <li key={d.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{d.name}</p>
+                  <p className="text-xs text-slate-400 font-mono">
+                    {d.prefix}…{' '}
+                    <span className="font-sans">
+                      {d.lastUsedAt ? `last used ${new Date(d.lastUsedAt).toLocaleDateString()}` : 'never used'}
+                    </span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => revokeDevice(d.id)}
+                  disabled={busy}
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-50 cursor-pointer"
+                >
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <p className="text-xs text-slate-400 mt-3">
+          Revoking a device also signs this account out everywhere — someone revoking a device is usually
+          doing it because it was lost, and leaving its existing session alive would defeat the point.
         </p>
       </section>
 

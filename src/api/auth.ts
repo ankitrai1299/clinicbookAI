@@ -126,6 +126,32 @@ export const disableMfa = (code: string) =>
 export const signOutEverywhere = () =>
   apiFetch<{ tokenVersion: number }>('/api/auth/sign-out-everywhere', { method: 'POST' });
 
+// ── App passwords: one credential per device ────────────────────────────────
+
+export interface AppPasswordRow {
+  id: string;
+  name: string;
+  prefix: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export const listAppPasswords = () => apiFetch<AppPasswordRow[]>('/api/auth/app-passwords');
+
+/**
+ * Mint one. `plaintext` is in THIS response and nowhere else, ever — the UI has
+ * to make the user copy it before the panel closes.
+ */
+export const createAppPassword = (name: string) =>
+  apiFetch<{ id: string; name: string; prefix: string; plaintext: string }>('/api/auth/app-passwords', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+
+/** Revoke a device. Also ends every session on the account — see the server route. */
+export const revokeAppPassword = (id: string) =>
+  apiFetch<{ id: string; revoked: boolean }>(`/api/auth/app-passwords/${id}`, { method: 'DELETE' });
+
 // Verify the signup OTP → returns the verified session (token + user).
 export const verifyOtp = (body: { email: string; code: string }) =>
   apiFetch<AuthResult>('/api/auth/verify-otp', {
