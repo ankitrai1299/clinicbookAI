@@ -55,6 +55,8 @@ export const TENANT_MODELS = new Set<string>([
   // across clinics with the raw client and re-scopes per row, like the others.
   'PatientEvent',
   'MedicineReminder',
+  // Consent state, per clinic + patient + purpose.
+  'PatientConsent',
   // Per-clinic template approval state on the clinic's own WABA.
   'WhatsAppTemplateStatus',
   // The compliance audit trail. Scoped so a clinic admin reading their own audit

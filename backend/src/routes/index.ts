@@ -3,6 +3,7 @@ import { Router } from 'express';
 import aiRouter from '../core/ai/ai.routes.js';
 import analyticsRouter from '../core/analytics/analytics.routes.js';
 import auditRouter from '../core/audit/audit.routes.js';
+import consentRouter from '../core/consent/consent.routes.js';
 import apiKeyRouter from '../core/apikeys/apiKey.routes.js';
 import appointmentRouter from '../core/appointments/appointment.routes.js';
 import authRouter from '../core/auth/auth.routes.js';
@@ -65,6 +66,8 @@ apiRouter.use('/api/analytics', analyticsRouter);
 // The compliance audit trail. READ-ONLY by construction — the router defines no
 // write verb, and the only writer is core/audit/audit.service.ts.
 apiRouter.use('/api/audit', auditRouter);
+// Consent: what a patient agreed to, and what they withdrew.
+apiRouter.use('/api/consent', consentRouter);
 // Patient 360 — one patient id/code → their complete cross-product record.
 apiRouter.use('/api/patient-record', patient360Router);
 

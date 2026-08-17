@@ -1,9 +1,13 @@
 // MediScribe API — the reference app's Express server ported to a Router mounted
 // on the main ClinicBook backend at /api/mediscribe. Every request is
 // authenticated by ClinicBook's requireAuth (applied at the mount) and then
-// bridged (req.auth + tenant clinicId) here, so all data is per-clinic. Audio
-// files are served UNPROTECTED via a static route (see app.ts) because <audio>
-// elements can't send an auth header.
+// bridged (req.auth + tenant clinicId) here, so all data is per-clinic.
+//
+// Consultation audio is NOT public. It is served from GET /audio/* behind the
+// same authentication as everything else, gated on `recording.read`, checked
+// against the caller's clinic, and audited — with a short-lived signature as a
+// second lock. The web client fetches it with its token and plays from an object
+// URL, because an <audio> element cannot send a header.
 
 import os from 'os';
 import path from 'path';
@@ -16,6 +20,7 @@ import { bridgeAuth, type AuthedRequest } from './middleware/auth.js';
 import { uploadAudio } from './middleware/upload.js';
 import { requirePermission } from './middleware/authz.js';
 import { recordFromRequest } from '../../core/audit/audit.service.js';
+import { requireRecordingConsent } from '../../core/consent/recordingConsent.js';
 import { recordAiDraft, diffAgainstDraft, contentHash } from './services/aiAuditTrail.js';
 import type { Role } from './contracts/index.js';
 import { currentClinicId } from './context.js';
@@ -243,6 +248,11 @@ mediscribeRouter.post('/transcribe', requirePermission('consultation.write'), up
     const { accepted } = checkAudioFile(req.file.originalname, req.file.mimetype);
     if (!accepted) return res.status(400).json({ error: 'Please upload a valid audio file.' });
     if (req.file.size < 2000) return res.status(400).json({ error: 'Audio file too small or empty' });
+
+    // Consent to be recorded, checked on the SERVER before the audio is sent to
+    // a transcription vendor. Off by default per clinic — see
+    // core/consent/recordingConsent.ts for why that rollout is staged.
+    await requireRecordingConsent(currentClinicId(), req.body?.patientId ? String(req.body.patientId) : null);
 
     const { transcribeAudio } = await import('./services/sarvamStt.js');
     const text = await transcribeAudio(req.file.buffer, req.file.mimetype, req.body?.language);

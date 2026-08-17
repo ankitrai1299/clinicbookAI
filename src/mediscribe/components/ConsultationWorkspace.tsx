@@ -38,6 +38,7 @@ import {
   deleteConsultationAudio,
   labelSpeakers,
   sendPrescriptionToPatient,
+  recordPatientConsent,
 } from '../services/api';
 import {
   REPORT_SECTIONS,
@@ -1006,10 +1007,52 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     recorder.stop();
   };
 
-  // Dispatchers: prefer the live Web Speech path, fall back to Whisper batch.
-  const startRecording = () => {
+  // Consent to record, asked once per consultation.
+  //
+  // The doctor is the only person who can truthfully answer it — they are the
+  // one in the room — so this is a confirmation, not a checkbox buried in
+  // settings. It gates the mic on the CLIENT for the doctor's benefit; the
+  // server has its own gate, because a UI confirmation is not a control.
+  //
+  // Asked per consultation rather than once per patient: consent to record last
+  // month's visit is not consent to record today's.
+  const [consentAsked, setConsentAsked] = useState(false);
+  const [consentPrompt, setConsentPrompt] = useState(false);
+  const [consentError, setConsentError] = useState('');
+
+  const beginRecording = () => {
     if (liveSupported) startLiveRecording();
     else startWhisperRecording();
+  };
+
+  const confirmConsentAndRecord = async () => {
+    setConsentError('');
+    try {
+      if (consultation.patientId) {
+        await recordPatientConsent(
+          consultation.patientId,
+          'consultation_recording',
+          'doctor confirmed the patient was informed',
+        );
+      }
+      setConsentAsked(true);
+      setConsentPrompt(false);
+      beginRecording();
+    } catch (e) {
+      // Do NOT start recording when the consent could not be stored. Recording
+      // anyway would leave us with audio and no record of permission for it,
+      // which is the exact situation this phase exists to prevent.
+      setConsentError((e as Error).message || 'Could not save the consent. Please try again.');
+    }
+  };
+
+  // Dispatchers: prefer the live Web Speech path, fall back to Whisper batch.
+  const startRecording = () => {
+    if (!consentAsked) {
+      setConsentPrompt(true);
+      return;
+    }
+    beginRecording();
   };
 
   const stopRecording = () => {
@@ -1084,6 +1127,9 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     try {
       const result = await uploadConsultationAudio(file, {
         consultationId: consultation.id,
+        // Lets the server check recording consent for this patient before the
+        // audio is handed to a transcription vendor.
+        patientId: consultation.patientId,
         // STT auto-detects the spoken language for accuracy; conversion into the
         // selected output language happens afterwards via toOutputLanguage.
         language: 'auto',
@@ -2176,6 +2222,50 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
 
   return (
     <>
+      {/* Consent to record, asked before the mic ever opens. Rendered above
+          everything (including the phone takeover) so it is the same step on a
+          desktop and on a phone — a doctor should not be asked on one and not
+          the other. */}
+      {consentPrompt && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900">Before you record</h3>
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+              Tell {consultation.patientName || 'the patient'} that this consultation will be recorded to
+              write their notes, and that AI helps write them. Confirm only if they have agreed.
+            </p>
+            <p className="text-xs text-slate-400 mt-3">
+              We store your confirmation, not a copy of what you said. The patient can ask for the
+              recording to be deleted at any time.
+            </p>
+
+            {consentError && (
+              <p className="text-sm text-red-600 mt-3" role="alert">
+                {consentError}
+              </p>
+            )}
+
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => {
+                  setConsentPrompt(false);
+                  setConsentError('');
+                }}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmConsentAndRecord}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm"
+              >
+                Patient has agreed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* While recording, the phone app shows the native full-screen takeover
           OVER this workspace. The workspace keeps owning the session — the same
           audio, transcript and report — so stopping here is the same stop. */}

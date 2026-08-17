@@ -19,6 +19,7 @@
 // below for why that is deliberate and what protects correctness without it.
 
 import { prisma } from '../../config/prisma.js';
+import { handleConsentKeywords, showNoticeIfNeeded } from '../consent/whatsappConsent.js';
 import { claimInboundMessage } from './whatsapp.dedupe.js';
 import { dataSourceFor } from '../datasource/index.js';
 import { env } from '../../config/env.js';
@@ -261,6 +262,30 @@ const processOne = async (
     if (clinicId) {
       const patient = await findOrCreatePatient(clinicId, from);
       patientCode = patient.patientCode;
+
+      // CONSENT, before anything else looks at the message.
+      //
+      // STOP has to be read as STOP, not as a menu selection. A patient trying
+      // to leave must not be walked one step further into a booking flow, so
+      // when this handles the turn we return here and the FSM never runs.
+      const consentTurn = await handleConsentKeywords({
+        clinicId,
+        patientId: patient.id,
+        phone: to,
+        text,
+        patientLanguage: patient.language
+      });
+      if (consentTurn.handled) return;
+
+      // Then the notice, once per patient per version, as its own message ahead
+      // of the reply. Awaited so it arrives FIRST — a disclosure that lands after
+      // the answer is not a disclosure at the point of collection.
+      await showNoticeIfNeeded({
+        clinicId,
+        patientId: patient.id,
+        phone: to,
+        patientLanguage: patient.language
+      });
 
       // MULTILINGUAL (gated, strangler-fig): reply in whatever language the patient
       // wrote in. Detect the script of a free-text message; translate it INTO

@@ -948,3 +948,58 @@ model AuditLog {
   @@index([clinicId, actorId, createdAt])
   @@index([createdAt])
 }
+
+// ---------------------------------------------------------------------------
+// Consent (Phase 1 — compliance).
+//
+// One row per (clinic, patient, purpose) holding the CURRENT state. The history
+// — who granted or withdrew what, and when — lives in AuditLog as
+// CONSENT_GRANTED / CONSENT_WITHDRAWN, which is append-only and hash-chained.
+// Current state belongs where it can be read cheaply on every send; history
+// belongs where it cannot be edited. Keeping both in one table would have meant
+// choosing one of those properties.
+//
+// `phoneKey` is the last 10 digits of the patient's number, the same
+// normalisation the inbound resolver uses. The outbound send path knows a phone
+// number, not a patient id, and a withdrawal that only half-works is worse than
+// none — so the key the enforcement check uses is stored directly rather than
+// derived through a join that could miss on formatting.
+// ---------------------------------------------------------------------------
+model PatientConsent {
+  id       String @id @default(cuid())
+  clinicId String
+
+  // The patient this is about. Present for every real consent; the row is still
+  // keyed by phone for enforcement (see above).
+  patientId String
+  phoneKey  String?
+
+  // 'whatsapp_messaging' | 'consultation_recording' | 'ai_processing' |
+  // 'privacy_notice' (the last records that the notice was SHOWN, not agreed).
+  purpose String
+
+  // 'granted' | 'withdrawn' | 'notified'
+  status String @default("granted")
+
+  // Which version of the notice the patient saw. A consent given against an old
+  // notice is not consent to something the new one added, so this must be
+  // stored, not inferred from a date.
+  noticeVersion String
+
+  // Where it came from: whatsapp | web | app | staff | migration
+  channel String
+
+  // Short, non-clinical note on HOW it was obtained ("replied YES", "doctor
+  // confirmed patient was informed"). Never free clinical text.
+  evidence String?
+
+  grantedAt   DateTime?
+  withdrawnAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clinicId, patientId, purpose])
+  @@index([clinicId, patientId])
+  @@index([clinicId, phoneKey, purpose])
+}

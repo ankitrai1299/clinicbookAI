@@ -117,6 +117,33 @@ export async function transcribeAudio(
 // (API_ROOT), so the stored relative path must be prefixed; in dev the Vite
 // proxy makes the relative path work as-is.
 /**
+ * Record that a patient consented to something.
+ *
+ * Used before recording starts: the doctor confirms they told the patient, and
+ * that confirmation becomes a row the server can later be asked about. It is an
+ * upsert, so calling it again for the same patient and purpose is harmless.
+ *
+ * Deliberately NOT silent about failure — if the consent cannot be stored, the
+ * caller must decide whether to proceed, rather than recording a visit while
+ * believing consent was captured.
+ */
+export async function recordPatientConsent(
+  patientId: string,
+  purpose: 'consultation_recording' | 'ai_processing' | 'whatsapp_messaging',
+  evidence?: string,
+): Promise<void> {
+  const res = await fetch(`${API_ROOT}/api/consent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ patientId, purpose, evidence }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(detail || `Could not record consent (${res.status})`);
+  }
+}
+
+/**
  * Fetch consultation audio as a blob the browser can play.
  *
  * An `<audio src="…">` element cannot send an Authorization header, and the
@@ -151,6 +178,8 @@ export function uploadConsultationAudio(
   file: File,
   options: {
     consultationId: string;
+    /** Sent so the server can check recording consent for this patient. */
+    patientId?: string;
     language?: string;
     onProgress?: (percent: number) => void;
   },
@@ -160,6 +189,7 @@ export function uploadConsultationAudio(
     form.append('audio', file, file.name);
     form.append('language', options.language || 'Auto Detect');
     form.append('consultationId', options.consultationId);
+    if (options.patientId) form.append('patientId', options.patientId);
     // Tell the server to keep the file on disk and return a real audioUrl.
     form.append('persist', 'true');
 

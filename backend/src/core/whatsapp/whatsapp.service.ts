@@ -1,5 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 
+import { mayMessage } from '../consent/consent.service.js';
 import { prisma } from '../../config/prisma.js';
 import { forClinic } from '../../config/tenantPrisma.js';
 import { AppError } from '../../utils/AppError.js';
@@ -44,6 +45,30 @@ const interceptSend = (label: string): AxiosResponse<WhatsAppSendMessageResponse
   }
   console.info(`[WhatsApp][test] WA_TEST_NO_SEND — synthetic ${label} success (no Graph call)`);
   return { data: { messages: [{ id: `TEST_${label}` }] } } as AxiosResponse<WhatsAppSendMessageResponse>;
+};
+
+// A patient who replied STOP is never messaged again. Like the sandbox guard,
+// this has to live at the LAST fork before the Graph call, because every path
+// converges here — the booking FSM, reminders, waitlist offers, prescription
+// delivery — and several of them (the reminder cron especially) sweep across
+// clinics with no per-patient gate of their own.
+//
+// Two messages must still get through, and they are the exception this function
+// carves out: the confirmation that the opt-out worked, and the confirmation
+// that opting back in worked. A silent STOP reads as a broken system, and the
+// patient would have no way to tell whether it took effect.
+const OPT_OUT_EXEMPT_TYPES = new Set(['optout_confirmation', 'optin_confirmation']);
+
+const optOutIntercept = async (
+  clinicId: string | null | undefined,
+  to: string,
+  messageType: string | undefined,
+  label: string
+): Promise<AxiosResponse<WhatsAppSendMessageResponse> | null> => {
+  if (messageType && OPT_OUT_EXEMPT_TYPES.has(messageType)) return null;
+  if (await mayMessage(clinicId, to)) return null;
+  console.info(`[WhatsApp][consent] suppressed ${label} — this number opted out (clinic ${clinicId})`);
+  return { data: { messages: [{ id: `OPTED_OUT_${label}` }] } } as AxiosResponse<WhatsAppSendMessageResponse>;
 };
 
 // Sandbox clinics must never message a real phone. This is the ONE place that can
@@ -125,6 +150,9 @@ export const sendWhatsAppTextMessage = async (
 ): Promise<AxiosResponse<WhatsAppSendMessageResponse>> => {
   const intercepted = interceptSend('text');
   if (intercepted) return intercepted;
+
+  const optedOut = await optOutIntercept(input.clinicId, input.to, input.messageType, 'text');
+  if (optedOut) return optedOut;
 
   const suppressed = await sandboxIntercept(input.clinicId, 'text');
   if (suppressed) return suppressed;
@@ -240,6 +268,7 @@ export const sendWhatsAppDocument = async (input: {
   const label = input.messageType ?? 'document';
   const intercepted = interceptSend(label);
   if (intercepted) return true;
+  if (await optOutIntercept(input.clinicId, input.to, input.messageType, label)) return true;
   const suppressed = await sandboxIntercept(input.clinicId, label);
   if (suppressed) return true;
   if (await dailyCapIntercept(input.clinicId, label)) return true;
@@ -361,6 +390,9 @@ export const sendWhatsAppInteractive = async (input: {
   // NOTE: this path has no interceptSend() — WA_TEST_NO_SEND never covered it.
   // The sandbox guard must not inherit that gap: a sandbox booking replies with
   // interactive buttons, so this is a live send path like any other.
+  const optedOut = await optOutIntercept(input.clinicId, input.to, input.messageType, 'interactive');
+  if (optedOut) return optedOut;
+
   const suppressed = await sandboxIntercept(input.clinicId, 'interactive');
   if (suppressed) return suppressed;
 
@@ -435,6 +467,9 @@ export const sendWhatsAppTemplateMessage = async (params: {
   // isWhatsAppConfigured() guard in whatsapp.notifications), and its appointment
   // scan is cross-tenant. Without this line a sandbox appointment sends a real
   // T-1h reminder to whatever phone number the partner typed into their test.
+  const optedOut = await optOutIntercept(params.clinicId, params.to, undefined, 'template');
+  if (optedOut) return optedOut;
+
   const suppressed = await sandboxIntercept(params.clinicId, 'template');
   if (suppressed) return suppressed;
 
