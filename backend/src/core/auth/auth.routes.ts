@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { requireAuth } from '../../middleware/auth.js';
+import { requirePermission } from '../authz/requirePermission.js';
 import { authLimiter } from '../../middleware/rateLimiters.js';
 import { requirePartnerSecret } from '../../middleware/partnerSso.js';
 import { validate } from '../../middleware/validate.js';
@@ -11,7 +12,9 @@ const authRouter = Router();
 
 // Creating a staff account requires an authenticated clinic admin; the new
 // user is bound to that admin's clinic (clinicId comes from the JWT, never the body).
-authRouter.post('/signup', requireAuth, validate(signupSchema), signup);
+// Creating a colleague's account is an owner action — a receptionist must not be
+// able to mint themselves a second login, and a doctor has no reason to.
+authRouter.post('/signup', requireAuth, requirePermission('users.manage'), validate(signupSchema), signup);
 authRouter.post('/login', authLimiter, validate(loginSchema), login);
 // Cross-system SSO: a trusted partner backend (e.g. the external NovaScribe)
 // verifies a clinic's ClinicBook email+password here with a shared secret, so the

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 
 import { requireAuth } from '../../middleware/auth.js';
+import { requirePermission } from '../authz/requirePermission.js';
 import { authLimiter } from '../../middleware/rateLimiters.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -15,7 +16,14 @@ const clinicRouter = Router();
 
 clinicRouter.post('/register', authLimiter, validate(registerClinicSchema), registerClinicHandler);
 clinicRouter.get('/me', requireAuth, getMyClinicHandler);
-clinicRouter.patch('/me', requireAuth, validate(updateClinicSchema), updateMyClinicHandler);
+// Changing clinic settings is an owner action, not a front-desk one.
+clinicRouter.patch(
+  '/me',
+  requireAuth,
+  requirePermission('clinic.settings.manage'),
+  validate(updateClinicSchema),
+  updateMyClinicHandler
+);
 
 // The clinic's shareable WhatsApp join link + code. Patients scan the QR / open
 // the link on the shared platform number and are routed to THIS clinic — zero

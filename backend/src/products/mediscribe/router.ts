@@ -14,6 +14,9 @@ import { randomUUID } from 'crypto';
 
 import { bridgeAuth, type AuthedRequest } from './middleware/auth.js';
 import { uploadAudio } from './middleware/upload.js';
+import { requirePermission } from './middleware/authz.js';
+import { recordFromRequest } from '../../core/audit/audit.service.js';
+import { recordAiDraft, diffAgainstDraft, contentHash } from './services/aiAuditTrail.js';
 import type { Role } from './contracts/index.js';
 import { currentClinicId } from './context.js';
 import { storage, objectKey, clinicOfKey, signedPath, verifySignature } from '../../core/storage/index.js';
@@ -165,7 +168,7 @@ mediscribeRouter.get('/config-test', (_req, res) =>
 // have to pass: the signature must be ours and unexpired, and the key must
 // belong to the clinic making the request — a valid signature for one clinic's
 // recording is still refused inside another's session.
-mediscribeRouter.get(/^\/audio\/(.+)$/, async (req: Request, res: Response) => {
+mediscribeRouter.get(/^\/audio\/(.+)$/, requirePermission('recording.read'), async (req: Request, res: Response) => {
   const key = decodeURI(String((req.params as unknown as string[])[0] || ''));
   const check = verifySignature(key, req.query.e as string, req.query.s as string);
   if (check !== 'ok') {
@@ -180,6 +183,17 @@ mediscribeRouter.get(/^\/audio\/(.+)$/, async (req: Request, res: Response) => {
   try {
     const obj = await storage().get(key);
     if (!obj) return res.status(404).json({ error: 'Recording not found. It may have been deleted.' });
+
+    // Listening to a recording of a patient's visit is a patient-data access and
+    // is audited as one. Recorded on the SUCCESSFUL read only — a 404 or a bad
+    // signature is not an access.
+    recordFromRequest(req, {
+      action: 'RECORDING_ACCESSED',
+      resourceType: 'recording',
+      resourceId: key,
+      metadata: { bytes: obj.body.length }
+    });
+
     res.setHeader('Content-Type', obj.contentType);
     res.setHeader('Content-Length', String(obj.body.length));
     // Private: this is patient audio, so no shared cache may keep a copy.
@@ -194,22 +208,35 @@ mediscribeRouter.get(/^\/audio\/(.+)$/, async (req: Request, res: Response) => {
 
 // Delete a stored recording (best-effort). Scoped to the caller's clinic, so a
 // filename alone is not enough to destroy another clinic's audio.
-mediscribeRouter.delete(/^\/audio\/(.+)$/, async (req: Request, res: Response) => {
+mediscribeRouter.delete(
+  /^\/audio\/(.+)$/,
+  requirePermission('recording.delete'),
+  async (req: Request, res: Response) => {
   const key = decodeURI(String((req.params as unknown as string[])[0] || ''));
   if (!key || clinicOfKey(key) !== currentClinicId()) {
     return res.status(404).json({ error: 'Not found' });
   }
   try {
     await storage().delete(key);
+    // Destroying evidence of a consultation is exactly the kind of action an
+    // audit trail exists for.
+    recordFromRequest(req, {
+      action: 'RECORDING_DELETED',
+      resourceType: 'recording',
+      resourceId: key
+    });
     return res.json({ ok: true });
   } catch (error) {
     console.error('[mediscribe:audio:delete]', error);
     return res.json({ ok: false });
   }
-});
+  }
+);
 
 // ── Transcription (Sarvam STT) ───────────────────────────────
-mediscribeRouter.post('/transcribe', uploadAudio('audio'), async (req: Request, res: Response) => {
+// The permission check runs BEFORE multer, so a caller who may not record never
+// gets to upload 25 MB first and be refused afterwards.
+mediscribeRouter.post('/transcribe', requirePermission('consultation.write'), uploadAudio('audio'), async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No audio file provided' });
 
@@ -231,7 +258,30 @@ mediscribeRouter.post('/transcribe', uploadAudio('audio'), async (req: Request, 
       const key = objectKey(currentClinicId(), 'consultations', fileName);
       await storage().put(key, req.file.buffer, req.file.mimetype || 'application/octet-stream');
       audioUrl = signedPath(key);
+
+      recordFromRequest(req, {
+        action: 'RECORDING_UPLOADED',
+        resourceType: 'recording',
+        resourceId: key,
+        metadata: { bytes: req.file.size, consultationId: String(req.body?.consultationId || '') }
+      });
     }
+
+    // The transcript TEXT is what the patient said about their health, so only
+    // its length is recorded here. The text itself is stored in the clinical
+    // record like every other clinical document.
+    recordFromRequest(req, {
+      action: 'AI_TRANSCRIPT_GENERATED',
+      actorType: 'ai',
+      actorName: 'sarvam-stt',
+      resourceType: 'transcript',
+      resourceId: String(req.body?.consultationId || '') || null,
+      metadata: {
+        chars: text.length,
+        language: String(req.body?.language || ''),
+        audioBytes: req.file.size
+      }
+    });
 
     logUsage({ type: 'stt', consultationId: req.body?.consultationId || '', language: req.body?.language || '', bytes: req.file.size, success: true });
     return res.json({ rawText: text, transcript: text, audioUrl });
@@ -279,12 +329,23 @@ mediscribeRouter.post('/label-speakers', async (req: Request, res: Response) => 
 });
 
 // ── Report generation (Sarvam) ───────────────────────────────
-mediscribeRouter.post('/generate-report', async (req: Request, res: Response) => {
+mediscribeRouter.post('/generate-report', requirePermission('consultation.write'), async (req: Request, res: Response) => {
   try {
     const { transcript } = req.body;
     if (!transcript) return res.status(400).json({ error: 'Transcript is required' });
     const { generateMedicalReport } = await import('./services/report.js');
     const report = await generateMedicalReport(transcript);
+
+    // Keep what the AI proposed, BEFORE any doctor touches it — this is the
+    // "before" half of the review trail. Awaited (not fire-and-forget) so the
+    // draft is on disk before the doctor can possibly finalise; it never throws.
+    await recordAiDraft({
+      clinicId: currentClinicId(),
+      transcript: String(transcript),
+      report,
+      model: process.env.SARVAM_MODEL || 'sarvam-105b'
+    });
+
     logUsage({ type: 'ai_report', success: true });
     return res.json(report);
   } catch (error: any) {
@@ -531,7 +592,7 @@ mediscribeRouter.post(['/ask', '/chat'], async (req: AuthedRequest, res: Respons
 // doctor's explicit instruction. The automatic send on finalize stays as it is;
 // this exists because the doctor previously had no way to see whether it went, no
 // way to retry a failure, and no way to send it again when the patient asks.
-mediscribeRouter.post('/consultations/:id/send-prescription', async (req: AuthedRequest, res: Response) => {
+mediscribeRouter.post('/consultations/:id/send-prescription', requirePermission('prescription.send'), async (req: AuthedRequest, res: Response) => {
   try {
     const consultation = (await consultationsRepo.findById(req.params.id)) as { doctorId?: string } | null;
     if (!consultation) return res.status(404).json({ error: 'Consultation not found' });
@@ -543,6 +604,19 @@ mediscribeRouter.post('/consultations/:id/send-prescription', async (req: Authed
     }
 
     const result = await deliverPrescription(currentClinicId(), consultation, { force: true });
+
+    // Audited whether or not anything went out: "the doctor pressed Send and
+    // nothing was sent because the patient has no phone" is a fact worth having.
+    recordFromRequest(req, {
+      action: 'PRESCRIPTION_SENT',
+      resourceType: 'consultation',
+      resourceId: req.params.id,
+      patientId: (consultation as { patientId?: string })?.patientId ?? null,
+      outcome: result.sent ? 'success' : 'failure',
+      reason: result.sent ? null : (result.reason ?? 'not-sent'),
+      metadata: { channel: result.channel ?? '', pdf: Boolean(result.pdfSent), manual: true }
+    });
+
     return res.json(result);
   } catch (error) {
     console.error('[mediscribe:send-prescription]', error);
@@ -613,7 +687,7 @@ mediscribeRouter.post('/consultations/:id/follow-up', async (req: AuthedRequest,
   }
 });
 
-mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Response) => {
+mediscribeRouter.post('/save-consultation', requirePermission('consultation.write'), async (req: AuthedRequest, res: Response) => {
   try {
     const consultation = req.body;
     if (!consultation?.id) return res.status(400).json({ error: 'consultation.id is required' });
@@ -664,6 +738,41 @@ mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Resp
         refId: String(consultation.id)
       });
 
+      // THE APPROVAL ROW.
+      //
+      // Setting a note to Completed IS the doctor's approval — it is the act
+      // that unlocks delivery (deliverPrescription refuses anything that is not
+      // Completed). So this is where the review trail closes: which AI draft it
+      // came from, which top-level fields the doctor altered, how many medicines
+      // they added, removed or changed, and a hash of the exact version approved.
+      //
+      // actorType is 'user' and the actor is the signed-in doctor. No AI path can
+      // reach this line: it runs inside an authenticated request handler, and the
+      // matrix grants prescription.approve to doctors and clinic owners only.
+      void diffAgainstDraft(currentClinicId(), consultation)
+        .then((diff) => {
+          recordFromRequest(req, {
+            action: 'PRESCRIPTION_APPROVED',
+            resourceType: 'consultation',
+            resourceId: String(consultation.id),
+            patientId: String(consultation.patientId),
+            actorName: consultation.doctorName ? String(consultation.doctorName) : undefined,
+            metadata: {
+              draftId: diff.draftId ?? '',
+              // False means the transcript changed after generation, so the
+              // draft could not be matched — stated rather than hidden.
+              draftLinked: diff.draftLinked,
+              changedFields: diff.changedFields.join(','),
+              medicinesAdded: diff.medicinesAdded,
+              medicinesRemoved: diff.medicinesRemoved,
+              medicinesModified: diff.medicinesModified,
+              finalHash: diff.finalHash,
+              draftHash: diff.draftHash ?? ''
+            }
+          });
+        })
+        .catch((e) => console.error('[mediscribe:ai-audit] approval diff failed:', e));
+
       // Close the ClinicBook appointment this visit belongs to, so staff never
       // have to click "Mark Completed" on the roster after the doctor is done.
       // Fire-and-forget: the roster must never block (or fail) the doctor's save.
@@ -677,9 +786,25 @@ mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Resp
       console.error('[mediscribe:save-consultation] reminder sync failed:', e)
     );
     // Send the finalized prescription to the patient's WhatsApp (once, best-effort).
-    void sendPrescriptionOnFinalize(currentClinicId(), consultation).catch((e) =>
-      console.error('[mediscribe:save-consultation] prescription send failed:', e)
-    );
+    //
+    // The automatic path still has a human behind it — it only fires because the
+    // doctor finalised the note — so the audit row names that doctor as the
+    // actor, with `manual: false` to distinguish it from pressing Send. A row is
+    // written only when something was actually delivered; the routine no-ops
+    // (draft re-save, already-sent) are not events.
+    void sendPrescriptionOnFinalize(currentClinicId(), consultation)
+      .then((sent) => {
+        if (!sent) return;
+        recordFromRequest(req, {
+          action: 'PRESCRIPTION_SENT',
+          resourceType: 'consultation',
+          resourceId: String(consultation.id),
+          patientId: consultation.patientId ? String(consultation.patientId) : null,
+          actorName: consultation.doctorName ? String(consultation.doctorName) : undefined,
+          metadata: { manual: false, finalHash: contentHash(consultation.report ?? null) }
+        });
+      })
+      .catch((e) => console.error('[mediscribe:save-consultation] prescription send failed:', e));
     return res.json({ success: true });
   } catch (error) {
     console.error('[mediscribe:save-consultation]', error);
@@ -689,7 +814,11 @@ mediscribeRouter.post('/save-consultation', async (req: AuthedRequest, res: Resp
 
 // ── Generic collections: reports, prescriptions, transcripts ─
 function registerCollection(name: string, repo: typeof reportsRepo) {
-  mediscribeRouter.get(`/${name}`, async (req: AuthedRequest, res: Response) => {
+  // These three collections ARE the clinical record — reading them needs
+  // consultation.read, writing them consultation.write. A receptionist holds
+  // neither, which is the intended change: front-desk staff book visits, they do
+  // not read reports.
+  mediscribeRouter.get(`/${name}`, requirePermission('consultation.read'), async (req: AuthedRequest, res: Response) => {
     try {
       const items = await repo.findAll();
       const me = await resolvePrincipal(req);
@@ -702,11 +831,22 @@ function registerCollection(name: string, repo: typeof reportsRepo) {
       );
     } catch (error) { console.error(`[mediscribe:${name}]`, error); return res.json([]); }
   });
-  mediscribeRouter.post(`/${name}`, async (req: Request, res: Response) => {
+  mediscribeRouter.post(`/${name}`, requirePermission('consultation.write'), async (req: Request, res: Response) => {
     try {
       const doc = req.body;
       if (!doc?.id) return res.status(400).json({ error: 'id is required' });
       await repo.upsert(doc);
+      // Editing a saved prescription after the fact is a clinical change and is
+      // audited as one — by id and content hash, never by content.
+      if (name === 'prescriptions') {
+        recordFromRequest(req, {
+          action: 'PRESCRIPTION_UPDATED',
+          resourceType: 'prescription',
+          resourceId: String(doc.id),
+          patientId: doc.patientId ? String(doc.patientId) : null,
+          metadata: { hash: contentHash(doc), consultationId: String(doc.consultationId ?? '') }
+        });
+      }
       return res.json({ success: true });
     } catch (error) {
       console.error(`[mediscribe:save-${name}]`, error);
@@ -735,7 +875,7 @@ mediscribeRouter.get('/stats', async (_req: Request, res: Response) => {
 // The client posts the SAME report/transcript HTML it prints; headless Chrome
 // renders it to a real, selectable-text PDF (identical layout to the print preview).
 // Larger JSON body limit (reports can be a few hundred KB of HTML).
-mediscribeRouter.post('/render-pdf', express.json({ limit: '8mb' }), async (req: Request, res: Response) => {
+mediscribeRouter.post('/render-pdf', requirePermission('document.download'), express.json({ limit: '8mb' }), async (req: Request, res: Response) => {
   try {
     const html = req.body?.html;
     if (typeof html !== 'string' || !html.trim()) {
@@ -745,6 +885,17 @@ mediscribeRouter.post('/render-pdf', express.json({ limit: '8mb' }), async (req:
     const pdf = await renderHtmlToPdf(html);
     const raw = typeof req.body?.filename === 'string' ? req.body.filename : 'report.pdf';
     const filename = raw.replace(/[^a-z0-9._-]/gi, '_') || 'report.pdf';
+    // A clinical document leaving the system as a file. The HTML that produced
+    // it is the report text itself, so only its size and the file name are
+    // recorded.
+    recordFromRequest(req, {
+      action: 'DOCUMENT_DOWNLOADED',
+      resourceType: 'document',
+      resourceId: String(req.body?.consultationId ?? '') || null,
+      patientId: req.body?.patientId ? String(req.body.patientId) : null,
+      metadata: { filename, bytes: pdf.length, kind: String(req.body?.kind ?? 'report') }
+    });
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', String(pdf.length));

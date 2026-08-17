@@ -46,11 +46,11 @@ enum ReminderType {
 }
 
 model Clinic {
-  id               String        @id @default(cuid())
+  id               String     @id @default(cuid())
   name             String
-  email            String        @unique
-  phone            String        @unique
-  plan             ClinicPlan    @default(STARTER)
+  email            String     @unique
+  phone            String     @unique
+  plan             ClinicPlan @default(STARTER)
   // WHICH products this clinic bought — a different axis from `plan`, which is
   // the tier (how much they pay). A clinic can be on GROWTH with only the scribe.
   // Values: "clinicbook", "mediscribe".
@@ -58,13 +58,13 @@ model Clinic {
   // The default grants BOTH, so every existing clinic keeps exactly what it has
   // today and the column can be added without changing anyone's behaviour.
   // Selling one product alone means writing a shorter list, never a migration.
-  products         String[]      @default(["clinicbook", "mediscribe"])
-  stripeCustomerId String?       @unique
+  products         String[]   @default(["clinicbook", "mediscribe"])
+  stripeCustomerId String?    @unique
   // Short human-friendly code a patient sends (or a QR pre-fills) to reach THIS
   // clinic on the shared platform WhatsApp number. Lets every clinic onboard with
   // zero Meta setup — they just share their code/QR. Unique across clinics.
-  joinCode         String?       @unique
-  createdAt        DateTime      @default(now())
+  joinCode         String?    @unique
+  createdAt        DateTime   @default(now())
 
   // A SANDBOX clinic is a throwaway twin of a real one, created the first time
   // that clinic mints a TEST api key. Partners' developers book against it. It is
@@ -72,21 +72,21 @@ model Clinic {
   // and the webhook outbox then isolate it for free. The ONE thing that must be
   // special-cased is outbound WhatsApp — see isSandboxClinic() in sandbox.service,
   // which suppresses sends so a test booking can never message a real person.
-  isSandbox        Boolean       @default(false)
-  sandboxOfId      String?       @unique
-  sandboxOf        Clinic?       @relation("ClinicSandbox", fields: [sandboxOfId], references: [id], onDelete: Cascade)
-  sandbox          Clinic?       @relation("ClinicSandbox")
+  isSandbox   Boolean @default(false)
+  sandboxOfId String? @unique
+  sandboxOf   Clinic? @relation("ClinicSandbox", fields: [sandboxOfId], references: [id], onDelete: Cascade)
+  sandbox     Clinic? @relation("ClinicSandbox")
 
-  users            User[]
-  patients         Patient[]
-  doctors          Doctor[]
-  appointments     Appointment[]
-  waitlists        Waitlist[]
-  aiConversations  AiConversation[]
-  whatsAppLogs     WhatsAppLog[]
-  notifications    Notification[]
-  whatsAppChannels WhatsAppChannel[]
-  whatsAppBindings WhatsAppPatientBinding[]
+  users             User[]
+  patients          Patient[]
+  doctors           Doctor[]
+  appointments      Appointment[]
+  waitlists         Waitlist[]
+  aiConversations   AiConversation[]
+  whatsAppLogs      WhatsAppLog[]
+  notifications     Notification[]
+  whatsAppChannels  WhatsAppChannel[]
+  whatsAppBindings  WhatsAppPatientBinding[]
   whatsAppTemplates WhatsAppTemplateStatus[]
 
   @@index([plan])
@@ -100,20 +100,20 @@ model Clinic {
 // clinic messages from its own number. Tokens are stored encrypted-at-rest when
 // WA_CHANNEL_ENC_KEY is set (AES-256-GCM), else as plaintext (dev/back-compat).
 model WhatsAppChannel {
-  id                 String   @id @default(cuid())
+  id                 String    @id @default(cuid())
   clinicId           String
   // Meta Cloud API identifiers. phoneNumberId is the inbound routing key.
-  phoneNumberId      String   @unique
+  phoneNumberId      String    @unique
   wabaId             String?
   // Owning Meta Business id (resolved from the WABA during Embedded Signup).
   businessId         String?
   displayPhoneNumber String?
   // Long-lived access token (encrypted when WA_CHANNEL_ENC_KEY is configured).
-  accessToken        String   @db.Text
+  accessToken        String    @db.Text
   // Per-channel webhook verification + HMAC secret (optional; falls back to env).
   appSecret          String?
   verifyToken        String?
-  status             String   @default("ACTIVE") // ACTIVE | DISABLED
+  status             String    @default("ACTIVE") // ACTIVE | DISABLED
   // Display metadata from Meta, refreshed on every (re)connect.
   verifiedName       String?
   qualityRating      String?
@@ -122,7 +122,7 @@ model WhatsAppChannel {
   // with error 133010 until POST /{phoneNumberId}/register succeeds. We do that
   // during onboarding and record the outcome here so the dashboard can show
   // "number not activated" instead of a cryptic Meta error.
-  registered         Boolean  @default(false)
+  registered         Boolean   @default(false)
   registeredAt       DateTime?
   // The 6-digit two-step-verification PIN we set during registration, encrypted
   // at rest with WA_CHANNEL_ENC_KEY (same helper as accessToken). Required to
@@ -130,8 +130,8 @@ model WhatsAppChannel {
   registrationPin    String?
   // Last successful template sync against THIS clinic's WABA.
   templatesSyncedAt  DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
@@ -235,19 +235,19 @@ model WhatsAppPatientBinding {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  clinicId     String
-  name         String
-  email        String    @unique
-  passwordHash String
-  role         UserRole  @default(CLINIC_ADMIN)
+  id              String    @id @default(cuid())
+  clinicId        String
+  name            String
+  email           String    @unique
+  passwordHash    String
+  role            UserRole  @default(CLINIC_ADMIN)
   // Email verification gate for self-service signup. @default(true) so an additive
   // `db push` backfills EXISTING users as verified (never locks them out); new
   // self-service signups are created with emailVerified:false explicitly.
   emailVerified   Boolean   @default(true)
   emailVerifiedAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   aiConversations AiConversation[]
@@ -261,14 +261,14 @@ model User {
 // email-verification gate. Short-lived (TTL) with an attempt cap and a resend
 // cooldown enforced in otp.service.ts.
 model EmailOtp {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  codeHash  String
-  expiresAt DateTime
-  attempts  Int      @default(0)
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
   lastSentAt DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -291,29 +291,29 @@ model Patient {
   waitlistEntry   Waitlist?
   aiConversations AiConversation[]
 
-  @@index([clinicId])
   @@unique([clinicId, phone])
+  @@index([clinicId])
 }
 
 model Doctor {
-  id           String   @id @default(cuid())
-  clinicId     String
-  name         String
-  speciality   String
+  id              String  @id @default(cuid())
+  clinicId        String
+  name            String
+  speciality      String
   experienceYears Int?
-  email        String?
-  phone        String?
+  email           String?
+  phone           String?
   // Set when the doctor self-registers on the Doctor Portal. Null for doctors
   // created by an admin who haven't claimed a login yet.
-  passwordHash String?
+  passwordHash    String?
 
-  clinic        Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointments  Appointment[]
-  schedules     DoctorSchedule[]
-  leaves        DoctorLeave[]
+  clinic       Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  schedules    DoctorSchedule[]
+  leaves       DoctorLeave[]
 
-  @@index([clinicId])
   @@unique([clinicId, name])
+  @@index([clinicId])
 }
 
 // Recurring weekly availability for a doctor. One row per active weekday.
@@ -322,11 +322,11 @@ model DoctorSchedule {
   id          String  @id @default(cuid())
   clinicId    String
   doctorId    String
-  dayOfWeek   Int      // 0 = Sunday … 6 = Saturday
-  startTime   String   // "09:00" (24h, clinic local)
-  endTime     String   // "17:00"
-  slotMinutes Int      @default(30)
-  isActive    Boolean  @default(true)
+  dayOfWeek   Int // 0 = Sunday … 6 = Saturday
+  startTime   String // "09:00" (24h, clinic local)
+  endTime     String // "17:00"
+  slotMinutes Int     @default(30)
+  isActive    Boolean @default(true)
 
   doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
@@ -363,10 +363,14 @@ model Appointment {
   completedAt     DateTime?
   completedBy     String?
 
-  clinic   Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  doctor   Doctor   @relation(fields: [doctorId], references: [id])
-  patient  Patient  @relation(fields: [patientId], references: [id])
+  clinic    Clinic     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor    Doctor     @relation(fields: [doctorId], references: [id])
+  patient   Patient    @relation(fields: [patientId], references: [id])
   reminders Reminder[]
+  // NOTE: a PARTIAL unique index "Appointment_active_slot_key" enforces one active
+  // booking per (clinicId, doctorId, appointmentDate, appointmentTime) WHERE
+  // status <> 'CANCELLED'. Prisma's schema language can't express the WHERE clause,
+  // so it is created by scripts/applySlotUniqueIndex.ts (run after `prisma db push`).
 
   @@index([clinicId])
   @@index([doctorId])
@@ -374,10 +378,6 @@ model Appointment {
   @@index([appointmentDate])
   @@index([status])
   @@index([clinicId, appointmentDate, appointmentTime])
-  // NOTE: a PARTIAL unique index "Appointment_active_slot_key" enforces one active
-  // booking per (clinicId, doctorId, appointmentDate, appointmentTime) WHERE
-  // status <> 'CANCELLED'. Prisma's schema language can't express the WHERE clause,
-  // so it is created by scripts/applySlotUniqueIndex.ts (run after `prisma db push`).
 }
 
 enum NotificationType {
@@ -411,11 +411,11 @@ model Notification {
 }
 
 model Waitlist {
-  id       String         @id @default(cuid())
-  clinicId String
-  patientId String        @unique
-  priority Int            @default(0)
-  status   WaitlistStatus @default(WAITING)
+  id        String         @id @default(cuid())
+  clinicId  String
+  patientId String         @unique
+  priority  Int            @default(0)
+  status    WaitlistStatus @default(WAITING)
 
   // What the patient was trying to book when no slot was available. Used to match
   // a freed slot to the right waiting patient (prefer same doctor / date).
@@ -425,9 +425,9 @@ model Waitlist {
 
   // When a freed slot is auto-offered to this entry (status OFFERED), the exact
   // slot is parked here so a patient's "YES" reply can be booked automatically.
-  offeredDoctorId String?
-  offeredDate     DateTime? @db.Date
-  offeredTime     String?
+  offeredDoctorId  String?
+  offeredDate      DateTime? @db.Date
+  offeredTime      String?
   // The 15-minute hold expiry for the current OFFER. A cron sweep moves an
   // expired offer on to the next waiting patient.
   offeredExpiresAt DateTime?
@@ -442,10 +442,10 @@ model Waitlist {
 }
 
 model Reminder {
-  id           String       @id @default(cuid())
+  id            String       @id @default(cuid())
   appointmentId String
-  type         ReminderType
-  sent         Boolean      @default(false)
+  type          ReminderType
+  sent          Boolean      @default(false)
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
@@ -514,13 +514,13 @@ enum AiMessageRole {
 }
 
 model AiConversation {
-  id        String      @id @default(cuid())
+  id        String   @id @default(cuid())
   clinicId  String
   userId    String?
   patientId String?
-  channel   String      @default("dashboard") // 'dashboard' (staff) | 'whatsapp' (patient)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  channel   String   @default("dashboard") // 'dashboard' (staff) | 'whatsapp' (patient)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   clinic   Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   user     User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -662,11 +662,11 @@ model ConversationSession {
 
 enum ConsultationNoteStatus {
   AWAITING_AUDIO // opened (manually or on appointment.completed); no audio yet
-  PROCESSING     // audio received; STT + AI pipeline running (async job)
-  DRAFTED        // AI produced a SOAP + prescription draft from the transcript
-  REVIEWED       // doctor edited the draft
-  FINALIZED      // doctor approved & locked it (immutable)
-  FAILED         // pipeline failed; see errorMessage (doctor can retry)
+  PROCESSING // audio received; STT + AI pipeline running (async job)
+  DRAFTED // AI produced a SOAP + prescription draft from the transcript
+  REVIEWED // doctor edited the draft
+  FINALIZED // doctor approved & locked it (immutable)
+  FAILED // pipeline failed; see errorMessage (doctor can retry)
 }
 
 // ─── NovaScribe v2 generic document store ────────────────────────────────────
@@ -690,7 +690,7 @@ model NovaDoc {
 }
 
 model ConsultationNote {
-  id            String                 @id @default(cuid())
+  id            String  @id @default(cuid())
   clinicId      String
   appointmentId String?
   patientId     String?
@@ -698,37 +698,37 @@ model ConsultationNote {
   patientName   String?
   doctorName    String?
 
-  status        ConsultationNoteStatus @default(AWAITING_AUDIO)
+  status ConsultationNoteStatus @default(AWAITING_AUDIO)
 
   // --- Audio + STT pipeline -------------------------------------------------
   // Where the consultation audio is stored (storage-backend-relative key) and
   // the detected/declared language. errorMessage is set when status = FAILED.
-  audioPath     String?
-  language      String?
-  durationSec   Int?
-  errorMessage  String?                @db.Text
+  audioPath    String?
+  language     String?
+  durationSec  Int?
+  errorMessage String? @db.Text
 
-  transcript    String?                @db.Text
+  transcript String? @db.Text
   // Diarized transcript segments: [{ speaker, text, startSec, endSec, confidence }].
-  segments      Json?
+  segments   Json?
 
   // Structured SOAP note (drafted by AI, editable by the doctor).
-  subjective    String?                @db.Text
-  objective     String?                @db.Text
-  assessment    String?                @db.Text
-  plan          String?                @db.Text
+  subjective   String? @db.Text
+  objective    String? @db.Text
+  assessment   String? @db.Text
+  plan         String? @db.Text
   // Prescription draft: array of { drug, dose, frequency, duration, notes, flagged }.
-  prescription  Json?
+  prescription Json?
   // Per-fact evidence/grounding spans for anti-hallucination review UI:
   // { field -> [{ quote, startSec?, confidence }] }. Lets the doctor see WHERE
   // in the transcript each generated fact came from.
-  evidence      Json?
+  evidence     Json?
 
-  reviewedBy    String?
-  reviewedAt    DateTime?
+  reviewedBy String?
+  reviewedAt DateTime?
 
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([clinicId])
   @@index([clinicId, status])
@@ -872,4 +872,79 @@ model WebhookDelivery {
   // The cron scans across ALL clinics for what is due — this index is that query.
   @@index([status, nextAttemptAt])
   @@index([clinicId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Audit log (Phase 2 — compliance).
+//
+// One row per sensitive action: WHO did WHAT to WHICH resource, WHEN, and with
+// what OUTCOME. Written by core/audit only; there is deliberately no API that
+// can update or delete a row, and none should ever be added.
+//
+// `clinicId` is NULLABLE because the two most security-interesting events —
+// FAILED_LOGIN and a login for an unknown email — happen BEFORE any clinic is
+// known. Those rows have no owner and no clinic may see them (see
+// SCOPED_DESPITE_NULLABLE in config/tenantScope.ts); they are read from the
+// server, not from a dashboard.
+//
+// NO clinical free text lives here. Transcripts, reports and prescription text
+// stay in the clinical store; the audit row carries ids and a content hash so an
+// investigator can prove WHICH version was involved without this table becoming
+// a second, less-protected copy of the medical record.
+//
+// `prevHash`/`hash` chain each clinic's rows: `hash` covers the row's own content
+// AND the hash of the row before it. Editing a row's content therefore breaks
+// every row after it, and deleting one leaves a dangling reference — which is
+// what makes tampering DETECTABLE. It does not make it impossible: anyone with
+// direct write access to this table could rewrite the chain forward. The
+// structural control is that the application exposes no way to write here except
+// through the audit service.
+// ---------------------------------------------------------------------------
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Null only for events that happen before a clinic is resolved.
+  clinicId String?
+
+  // WHO. actorId is a User id for 'user', an ApiKey id for 'api_key', absent for
+  // 'system' (cron) and 'ai'. actorRole is the platform role at the time of the
+  // action — stored, not joined, because a later role change must not rewrite
+  // history.
+  actorId   String?
+  actorType String  @default("user") // user | system | ai | api_key | patient | anonymous
+  actorRole String?
+  actorName String?
+
+  // WHAT
+  action       String
+  resourceType String?
+  resourceId   String?
+  // Denormalised so "show me everything that touched this patient" is one index
+  // scan rather than a join across every resource table.
+  patientId    String?
+
+  // RESULT
+  outcome String  @default("success") // success | failure | denied
+  reason  String?
+
+  // WHERE FROM. Kept for breach investigation (DPDP Rules) — not for analytics.
+  ip        String?
+  userAgent String?
+  requestId String?
+
+  // Safe, non-clinical detail only. Sanitised by audit.redact.ts before it gets
+  // here: primitives only, keys on an allowlist, values length-capped.
+  metadata Json?
+
+  // Tamper-evidence chain (see the note above).
+  prevHash String?
+  hash     String
+
+  createdAt DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+  @@index([clinicId, patientId, createdAt])
+  @@index([clinicId, action, createdAt])
+  @@index([clinicId, actorId, createdAt])
+  @@index([createdAt])
 }

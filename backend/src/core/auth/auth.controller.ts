@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 
 import { AppError } from '../../utils/AppError.js';
+import { record, recordFromRequest } from '../audit/audit.service.js';
 import { toNativeAppUser, withNativeAppAuth } from './nativeAppCompat.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getAuthenticatedUser, loginUser, resendEmailOtp, signupUser, verifyEmailOtp } from './auth.service.js';
@@ -15,6 +16,13 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await signupUser(req.body as SignupInput, clinicId);
 
+  recordFromRequest(req, {
+    action: 'USER_CREATED',
+    resourceType: 'user',
+    resourceId: result.user.id,
+    metadata: { role: result.user.role, email: result.user.email }
+  });
+
   res.status(201).json({
     success: true,
     message: 'Account created successfully',
@@ -23,7 +31,42 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
-  const result = await loginUser(req.body as LoginInput);
+  let result: Awaited<ReturnType<typeof loginUser>>;
+  try {
+    result = await loginUser(req.body as LoginInput);
+  } catch (err) {
+    // A failed sign-in is the single most useful row in the trail — repeated
+    // failures against one email are what a brute-force attempt looks like from
+    // the inside. There is no clinic yet (the credentials did not resolve to a
+    // user), so this row has a null clinicId and is read server-side.
+    //
+    // The EMAIL is stored because without it the row cannot be correlated at
+    // all; the password never is, and `reason` is our own stable code, never the
+    // library's message.
+    record({
+      action: 'FAILED_LOGIN',
+      actorType: 'anonymous',
+      outcome: 'failure',
+      reason: err instanceof AppError ? err.message : 'error',
+      ip: req.ip ?? null,
+      userAgent: (req.headers['user-agent'] || '').toString().slice(0, 300) || null,
+      requestId: req.requestId ?? null,
+      metadata: { email: String((req.body as LoginInput)?.email ?? '') }
+    });
+    throw err;
+  }
+
+  record({
+    action: 'LOGIN',
+    clinicId: result.user.clinicId,
+    actorId: result.user.id,
+    actorType: 'user',
+    actorRole: result.user.role,
+    actorName: result.user.name,
+    ip: req.ip ?? null,
+    userAgent: (req.headers['user-agent'] || '').toString().slice(0, 300) || null,
+    requestId: req.requestId ?? null
+  });
 
   // The native MediScribe app reads { token, user } from the top level; the web
   // reads `data`. Both are sent — see nativeAppCompat.

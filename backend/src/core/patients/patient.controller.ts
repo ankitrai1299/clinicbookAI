@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { recordFromRequest } from '../audit/audit.service.js';
 import { createPatient, deletePatient, getPatients, getSinglePatient, updatePatient } from './patient.service.js';
 import { CreatePatientInput, PatientIdParams, UpdatePatientInput } from './patient.schemas.js';
 
@@ -31,6 +32,16 @@ export const createPatientHandler = asyncHandler(async (req: Request, res: Respo
   const clinicId = getClinicId(req);
   const patient = await createPatient(clinicId, req.body as CreatePatientInput);
 
+  // Audited AFTER the write, so a row exists only for what actually happened.
+  // The patient's name and phone are deliberately absent — the id identifies the
+  // record, and the record already holds the details.
+  recordFromRequest(req, {
+    action: 'PATIENT_CREATED',
+    resourceType: 'patient',
+    resourceId: patient.id,
+    patientId: patient.id
+  });
+
   res.status(201).json({
     success: true,
     message: 'Patient created successfully',
@@ -44,9 +55,20 @@ export const getPatientsHandler = asyncHandler(async (req: Request, res: Respons
 
   // The ClinicBook dashboard lists WhatsApp/booking patients only — scribe-created
   // walk-ins with no phone stay in MediScribe, not here.
+  const visible = patients.filter((p) => hasRealPhone(p.phone));
+
+  // A list read is audited as one row with a count, not one row per patient: the
+  // question this answers is "who pulled the patient list, and how much of it",
+  // and a row per patient would bury every other event in the trail.
+  recordFromRequest(req, {
+    action: 'PATIENT_LIST_VIEWED',
+    resourceType: 'patient',
+    metadata: { count: visible.length }
+  });
+
   res.status(200).json({
     success: true,
-    data: patients.filter((p) => hasRealPhone(p.phone))
+    data: visible
   });
 });
 
@@ -54,6 +76,13 @@ export const getSinglePatientHandler = asyncHandler(async (req: Request, res: Re
   const clinicId = getClinicId(req);
   const { id } = req.params as PatientIdParams;
   const patient = await getSinglePatient(clinicId, id);
+
+  recordFromRequest(req, {
+    action: 'PATIENT_VIEWED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id
+  });
 
   res.status(200).json({
     success: true,
@@ -65,6 +94,16 @@ export const updatePatientHandler = asyncHandler(async (req: Request, res: Respo
   const clinicId = getClinicId(req);
   const { id } = req.params as PatientIdParams;
   const patient = await updatePatient(clinicId, id, req.body as UpdatePatientInput);
+
+  // WHICH fields changed, never the values — "phone was edited" is the auditable
+  // fact; the new phone number belongs in the patient record, not here.
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id,
+    metadata: { fields: Object.keys((req.body ?? {}) as Record<string, unknown>).join(',') }
+  });
 
   res.status(200).json({
     success: true,
@@ -78,6 +117,15 @@ export const deletePatientHandler = asyncHandler(async (req: Request, res: Respo
   const { id } = req.params as PatientIdParams;
 
   await deletePatient(clinicId, id);
+
+  // The one action in this file that destroys a record. It is also the one the
+  // audit trail existed to make answerable.
+  recordFromRequest(req, {
+    action: 'PATIENT_DELETED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id
+  });
 
   res.status(200).json({
     success: true,

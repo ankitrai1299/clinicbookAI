@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { requirePermission } from '../authz/requirePermission.js';
 import { requireAuth } from '../../middleware/auth.js';
 import {
   listNotificationsHandler,
@@ -15,6 +16,8 @@ const notificationRouter = Router();
 notificationRouter.get('/stream', notificationStreamHandler);
 
 notificationRouter.use(requireAuth);
+// Clinic notifications are about bookings — the same audience as the roster.
+notificationRouter.use(requirePermission('appointment.read'));
 
 notificationRouter.get('/', listNotificationsHandler);
 notificationRouter.patch('/read-all', markAllNotificationsReadHandler);

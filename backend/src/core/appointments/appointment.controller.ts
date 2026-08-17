@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { recordFromRequest } from '../audit/audit.service.js';
 import {
   cancelAppointment,
   completeAppointment,
@@ -52,6 +53,14 @@ const applyStatusAction = async (clinicId: string, id: string, userId: string, s
 export const createAppointmentHandler = asyncHandler(async (req: Request, res: Response) => {
   const clinicId = getClinicId(req);
   const appointment = await createAppointment(clinicId, req.body as CreateAppointmentInput);
+
+  recordFromRequest(req, {
+    action: 'APPOINTMENT_CREATED',
+    resourceType: 'appointment',
+    resourceId: appointment.id,
+    patientId: appointment.patientId ?? null,
+    metadata: { date: String(appointment.appointmentDate ?? ''), time: String(appointment.appointmentTime ?? '') }
+  });
 
   res.status(201).json({
     success: true,
@@ -109,6 +118,13 @@ export const completeAppointmentHandler = asyncHandler(async (req: Request, res:
   const { id } = req.params as AppointmentIdParams;
   const appointment = await completeAppointment(clinicId, id, userId);
 
+  recordFromRequest(req, {
+    action: 'APPOINTMENT_COMPLETED',
+    resourceType: 'appointment',
+    resourceId: id,
+    patientId: appointment.patientId ?? null
+  });
+
   res.status(200).json({
     success: true,
     message: 'Appointment marked completed',
@@ -124,6 +140,24 @@ export const patchAppointmentHandler = asyncHandler(async (req: Request, res: Re
 
   const statusResult = await applyStatusAction(clinicId, id, userId, input.status);
 
+  // A status-only PATCH is the SAME event as the dedicated cancel/complete
+  // routes, so it is audited under the same action. Otherwise "who cancelled
+  // this booking?" would depend on which endpoint the UI happened to call.
+  if (statusResult) {
+    recordFromRequest(req, {
+      action:
+        input.status === 'CANCELLED'
+          ? 'APPOINTMENT_CANCELLED'
+          : input.status === 'COMPLETED'
+            ? 'APPOINTMENT_COMPLETED'
+            : 'APPOINTMENT_UPDATED',
+      resourceType: 'appointment',
+      resourceId: id,
+      patientId: (statusResult as { patientId?: string | null })?.patientId ?? null,
+      metadata: { status: String(input.status ?? '') }
+    });
+  }
+
   if (statusResult && Object.keys(input).length === 1) {
     res.status(200).json({
       success: true,
@@ -134,6 +168,14 @@ export const patchAppointmentHandler = asyncHandler(async (req: Request, res: Re
   }
 
   const appointment = await updateAppointment(clinicId, id, input);
+
+  recordFromRequest(req, {
+    action: 'APPOINTMENT_UPDATED',
+    resourceType: 'appointment',
+    resourceId: id,
+    patientId: appointment.patientId ?? null,
+    metadata: { fields: Object.keys(input ?? {}).join(',') }
+  });
 
   res.status(200).json({
     success: true,
@@ -146,6 +188,13 @@ export const deleteAppointmentHandler = asyncHandler(async (req: Request, res: R
   const clinicId = getClinicId(req);
   const { id } = req.params as AppointmentIdParams;
   const appointment = await cancelAppointment(clinicId, id);
+
+  recordFromRequest(req, {
+    action: 'APPOINTMENT_CANCELLED',
+    resourceType: 'appointment',
+    resourceId: id,
+    patientId: appointment.patientId ?? null
+  });
 
   res.status(200).json({
     success: true,

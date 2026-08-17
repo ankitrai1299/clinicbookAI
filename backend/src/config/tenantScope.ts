@@ -56,7 +56,11 @@ export const TENANT_MODELS = new Set<string>([
   'PatientEvent',
   'MedicineReminder',
   // Per-clinic template approval state on the clinic's own WABA.
-  'WhatsAppTemplateStatus'
+  'WhatsAppTemplateStatus',
+  // The compliance audit trail. Scoped so a clinic admin reading their own audit
+  // can never see another clinic's — the audit view would otherwise be the one
+  // screen that leaks every tenant at once.
+  'AuditLog'
 ]);
 
 /**
@@ -86,7 +90,12 @@ export const UNSCOPED_BY_DESIGN: Readonly<Record<string, string>> = {
 export const SCOPED_DESPITE_NULLABLE: Readonly<Record<string, string>> = {
   WhatsAppLog:
     'a send logged before a clinic is resolved has no owner, so no clinic should ' +
-    'see it in its own message log; writes through forClinic always carry one'
+    'see it in its own message log; writes through forClinic always carry one',
+  AuditLog:
+    'FAILED_LOGIN and a login for an unknown email are recorded BEFORE a clinic ' +
+    'is known, and hiding those ownerless rows from every clinic dashboard is ' +
+    'correct — they are read server-side, not from a tenant view; the audit ' +
+    'writer uses the raw client and supplies clinicId whenever one is known'
 };
 
 // Operations whose `where` we constrain with clinicId.

@@ -116,6 +116,28 @@ export async function transcribeAudio(
 // the browser can load. In production the backend lives on a different origin
 // (API_ROOT), so the stored relative path must be prefixed; in dev the Vite
 // proxy makes the relative path work as-is.
+/**
+ * Fetch consultation audio as a blob the browser can play.
+ *
+ * An `<audio src="…">` element cannot send an Authorization header, and the
+ * recording route sits behind the same authentication as every other endpoint —
+ * so pointing the element straight at the URL gets a 401. The signed URL is a
+ * second lock, not a replacement for the first.
+ *
+ * Fetching it here and playing from an object URL is what makes playback work
+ * while the recording stays authenticated, permission-checked (`recording.read`)
+ * and audited (RECORDING_ACCESSED) on the server. Do not "simplify" this back
+ * into a bare src.
+ */
+export async function fetchMediaBlob(audioPath: string): Promise<Blob> {
+  const res = await fetch(resolveMediaUrl(audioPath), { headers: authHeader() });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(detail || `Could not load the recording (${res.status})`);
+  }
+  return res.blob();
+}
+
 export function resolveMediaUrl(audioPath: string): string {
   if (!audioPath) return '';
   if (/^https?:\/\//i.test(audioPath)) return audioPath;

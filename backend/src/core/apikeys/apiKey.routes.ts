@@ -12,6 +12,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { ApiKeyMode } from '@prisma/client';
 
+import { requirePermission } from '../authz/requirePermission.js';
+import { recordFromRequest } from '../audit/audit.service.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -21,6 +23,10 @@ import { findSandboxClinic } from './sandbox.service.js';
 const apiKeyRouter = Router();
 
 apiKeyRouter.use(requireAuth);
+// Minting a key hands out programmatic access to the clinic's whole dataset, so
+// the whole router is an owner-level surface — including the list, which reveals
+// how many keys exist and when they were last used.
+apiKeyRouter.use(requirePermission('apikey.manage'));
 
 const createKeySchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(60),
@@ -55,6 +61,14 @@ apiKeyRouter.post(
   asyncHandler(async (req, res) => {
     const { name, mode, scopes } = req.body as z.infer<typeof createKeySchema>;
     const issued = await issueApiKey(req.user!.clinicId, name, { mode, scopes });
+    // The key itself is never audited — only that one was minted, by whom, and
+    // with what reach.
+    recordFromRequest(req, {
+      action: 'API_KEY_CREATED',
+      resourceType: 'api_key',
+      resourceId: (issued as { id?: string })?.id ?? null,
+      metadata: { name, mode: String(mode), scopes: scopes.join(',') }
+    });
     res.status(201).json({ success: true, data: issued });
   })
 );
@@ -65,6 +79,11 @@ apiKeyRouter.delete(
   validate(keyIdParamsSchema, 'params'),
   asyncHandler(async (req, res) => {
     await revokeApiKey(req.user!.clinicId, req.params.id);
+    recordFromRequest(req, {
+      action: 'API_KEY_REVOKED',
+      resourceType: 'api_key',
+      resourceId: req.params.id
+    });
     res.status(200).json({ success: true, data: { id: req.params.id, revoked: true } });
   })
 );

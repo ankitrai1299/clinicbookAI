@@ -2,6 +2,8 @@ import React from 'react';
 import { useRef, useState, useEffect } from 'react';
 import { FileText, Play, Pause, MoreVertical, Download, Gauge, Trash2, Check, Volume2, VolumeX } from 'lucide-react';
 
+import { fetchMediaBlob } from '../services/api';
+
 // Custom player for the uploaded session audio. Uses a hidden native <audio>
 // element for actual playback, but renders our own transport + a single
 // three-dot (⋮) dropdown so Download / Playback speed / Remove audio all live
@@ -34,6 +36,37 @@ export default function UploadedAudioPlayer({ src, onRemove }: Props) {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [speedOpen, setSpeedOpen] = useState(false);
+
+  // The recording is behind the same auth as everything else, and an <audio>
+  // element cannot send a header — so it is fetched with one and played from an
+  // object URL. See fetchMediaBlob.
+  const [objectUrl, setObjectUrl] = useState('');
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    if (!src) return;
+    let revoked = false;
+    let url = '';
+
+    setLoadError('');
+    fetchMediaBlob(src)
+      .then((blob) => {
+        if (revoked) return;
+        url = URL.createObjectURL(blob);
+        setObjectUrl(url);
+      })
+      .catch((e: Error) => {
+        if (!revoked) setLoadError(e.message || 'Could not load the recording.');
+      });
+
+    return () => {
+      revoked = true;
+      // Object URLs are held by the document until revoked; a doctor moving
+      // between consultations would otherwise leak one recording per visit.
+      if (url) URL.revokeObjectURL(url);
+      setObjectUrl('');
+    };
+  }, [src]);
 
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
@@ -85,24 +118,25 @@ export default function UploadedAudioPlayer({ src, onRemove }: Props) {
     setMenuOpen(false);
   };
 
-  // Download the audio. Fetch as a blob so it downloads even when the file is
-  // served from a different origin (prod backend); falls back to opening it.
+  // Download the audio. Reuses the blob already fetched for playback, so the
+  // recording is pulled from the server once per consultation rather than again
+  // on every download — and so the download carries the same auth header the
+  // playback fetch did.
   const handleDownload = async () => {
     setMenuOpen(false);
     const fileName = (src.split('/').pop() || 'audio').split('?')[0] || 'audio';
     try {
-      const res = await fetch(src);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const url = objectUrl || URL.createObjectURL(await fetchMediaBlob(src));
       const a = document.createElement('a');
       a.href = url;
       a.download = fileName;
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      // Only revoke a URL created here; the playback one is owned by the effect.
+      if (url !== objectUrl) URL.revokeObjectURL(url);
     } catch {
-      window.open(src, '_blank');
+      setLoadError('Could not download the recording.');
     }
   };
 
@@ -125,7 +159,7 @@ export default function UploadedAudioPlayer({ src, onRemove }: Props) {
       {/* Hidden native element drives playback; we render custom controls. */}
       <audio
         ref={audioRef}
-        src={src}
+        src={objectUrl}
         className="hidden"
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
@@ -145,7 +179,9 @@ export default function UploadedAudioPlayer({ src, onRemove }: Props) {
         </button>
 
         <span className="text-xs font-mono tabular-nums text-slate-700 flex-shrink-0">
-          {formatTime(current)} / {formatTime(duration)}
+          {/* A recording that will not load must say so. Silently showing 0:00
+              taught the doctor nothing about whether the visit was captured. */}
+          {loadError ? loadError : objectUrl ? `${formatTime(current)} / ${formatTime(duration)}` : 'Loading…'}
         </span>
 
         <input

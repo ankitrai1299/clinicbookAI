@@ -11,26 +11,25 @@
 // does not know about, so nothing there changes; the app reads the top level and
 // never sees the envelope. Additive only — no existing field is moved or renamed.
 
+import { platformRoleOf } from '../authz/roles.js';
+
 /**
  * ClinicBook's roles in the vocabulary the scribe products use.
  *
- * Deliberately duplicated here rather than imported from products/mediscribe:
- * core must not depend on a product (see architecture.test.ts), and this is a
- * three-line pure map. A parity test asserts the two never drift, which is the
- * risk duplication actually carries.
+ * The map itself now lives in core/authz/roles.ts, which is the one place the
+ * platform decides what a role means — authorization and this display mapping
+ * must never disagree about who someone is.
+ *
+ * The fallback differs on purpose. `platformRoleOf` returns null for an
+ * unrecognised role because AUTHORIZATION must fail closed. This function is not
+ * authorization: it fills in the `user.role` field the native app renders its
+ * menu from, and returning null there would leave the app with no role at all.
+ * A parity test pins it to the product's own mapping, which has always defaulted
+ * to hospital_admin. Nothing is granted by this value — every permission is
+ * checked server-side against the matrix.
  */
-export const toScribeRole = (role: string | undefined): string => {
-  switch ((role || '').toUpperCase()) {
-    case 'ADMIN':
-      return 'superadmin';
-    case 'CLINIC_ADMIN':
-      return 'hospital_admin';
-    case 'STAFF':
-      return 'receptionist';
-    default:
-      return 'hospital_admin';
-  }
-};
+export const toScribeRole = (role: string | undefined): string =>
+  platformRoleOf(role) ?? 'hospital_admin';
 
 interface ClinicBookUser {
   id: string;

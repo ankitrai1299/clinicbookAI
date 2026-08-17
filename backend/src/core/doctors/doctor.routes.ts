@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { requirePermission } from '../authz/requirePermission.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import {
@@ -28,24 +29,36 @@ const doctorRouter = Router();
 
 doctorRouter.use(requireAuth);
 
-doctorRouter.get('/', getDoctorsHandler);
-doctorRouter.post('/', validate(createDoctorSchema), createDoctorHandler);
-doctorRouter.patch('/:id', validate(updateDoctorSchema), updateDoctorHandler);
-doctorRouter.delete('/:id', deleteDoctorHandler);
+// Everyone who books needs to SEE doctors; only an owner may add, edit, remove
+// or hand one an app login.
+doctorRouter.get('/', requirePermission('doctor.read'), getDoctorsHandler);
+doctorRouter.post('/', requirePermission('doctor.manage'), validate(createDoctorSchema), createDoctorHandler);
+doctorRouter.patch('/:id', requirePermission('doctor.manage'), validate(updateDoctorSchema), updateDoctorHandler);
+doctorRouter.delete('/:id', requirePermission('doctor.manage'), deleteDoctorHandler);
 
 // Admin gives this doctor an app login (sets a password on their row).
-doctorRouter.post('/:id/credentials', validate(setDoctorCredentialsSchema), setDoctorCredentialsHandler);
+doctorRouter.post(
+  '/:id/credentials',
+  requirePermission('doctor.manage'),
+  validate(setDoctorCredentialsSchema),
+  setDoctorCredentialsHandler
+);
 
 // Weekly schedule
-doctorRouter.get('/:id/schedule', getDoctorScheduleHandler);
-doctorRouter.put('/:id/schedule', validate(setScheduleSchema), setDoctorScheduleHandler);
+doctorRouter.get('/:id/schedule', requirePermission('doctor.read'), getDoctorScheduleHandler);
+doctorRouter.put('/:id/schedule', requirePermission('doctor.manage'), validate(setScheduleSchema), setDoctorScheduleHandler);
 
 // Leaves
-doctorRouter.get('/:id/leaves', getDoctorLeavesHandler);
-doctorRouter.post('/:id/leaves', validate(createLeaveSchema), addDoctorLeaveHandler);
-doctorRouter.delete('/:id/leaves/:leaveId', validate(leaveIdParamsSchema, 'params'), deleteDoctorLeaveHandler);
+doctorRouter.get('/:id/leaves', requirePermission('doctor.read'), getDoctorLeavesHandler);
+doctorRouter.post('/:id/leaves', requirePermission('doctor.manage'), validate(createLeaveSchema), addDoctorLeaveHandler);
+doctorRouter.delete(
+  '/:id/leaves/:leaveId',
+  requirePermission('doctor.manage'),
+  validate(leaveIdParamsSchema, 'params'),
+  deleteDoctorLeaveHandler
+);
 
 // Appointments for a doctor
-doctorRouter.get('/:id/appointments', getDoctorAppointmentsHandler);
+doctorRouter.get('/:id/appointments', requirePermission('appointment.read'), getDoctorAppointmentsHandler);
 
 export default doctorRouter;
