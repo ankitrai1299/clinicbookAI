@@ -1154,3 +1154,76 @@ model SecurityAlert {
   @@index([acknowledgedAt])
   @@index([severity, createdAt])
 }
+
+// ---------------------------------------------------------------------------
+// Patient rights requests (Phase 4 — DPDP §11 access, §12 correction/erasure,
+// §13 grievance).
+//
+// The product has no patient login by design — patients are reached on WhatsApp
+// — so rights had no route in and no route out. An email address in a privacy
+// policy is not a mechanism: it cannot be verified, cannot be evidenced, and has
+// no clock.
+//
+// A request from the patient's OWN WhatsApp number is different: Meta has
+// already verified that number, and it is the same number the clinic knows them
+// by. That is a reasonable identity check for a request about that number's own
+// record, and it is the only one available to a patient with no account.
+//
+// ERASURE IS RECORDED, NOT EXECUTED. Indian medical-record rules require a
+// clinic to keep records for years, and DPDP's erasure right yields to that.
+// Which records, and for how long, is a legal question that is still open (see
+// INDIA_COMPLIANCE_AUDIT.md §8). Automatically deleting a record a clinic is
+// legally required to hold would be a worse failure than not deleting it, so
+// this table carries the request, the clock, and the human decision — and the
+// deletion job that would act on it belongs to the rest of Phase 4, after the
+// retention schedule exists.
+// ---------------------------------------------------------------------------
+model PatientRightsRequest {
+  id       String @id @default(cuid())
+  clinicId String
+
+  patientId String
+  /**
+   * Last 10 digits, as everywhere else. The channel the request arrived on.
+   */
+  phoneKey  String?
+
+  /**
+   * 'access' | 'correction' | 'erasure' | 'grievance'
+   */
+  kind String
+
+  /**
+   * 'whatsapp' | 'staff' | 'web'
+   */
+  channel String @default("whatsapp")
+
+  /**
+   * What the patient actually asked, in their words. Capped, never clinical.
+   */
+  message String? @db.Text
+
+  /**
+   * 'open' | 'fulfilled' | 'refused'
+   */
+  status String @default("open")
+
+  /**
+   * When a reply is owed. Set on creation so the clock is visible from the
+   * first moment rather than reconstructed later.
+   */
+  dueAt DateTime
+
+  fulfilledAt DateTime?
+  fulfilledBy String?
+  /**
+   * What was done, or why it was refused. Answers "you were asked; what happened?"
+   */
+  outcome     String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, status, dueAt])
+  @@index([clinicId, patientId])
+}

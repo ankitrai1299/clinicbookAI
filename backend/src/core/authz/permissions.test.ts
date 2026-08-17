@@ -51,6 +51,9 @@ describe('the permission matrix', () => {
   it('does not let a receptionist delete a patient, or manage the tenant', () => {
     for (const permission of [
       'patient.delete',
+      // Looking a patient up to book them is not the same act as exporting
+      // every consultation, message and recording reference they have.
+      'patient.export',
       'users.manage',
       'clinic.settings.manage',
       'apikey.manage',
@@ -68,6 +71,9 @@ describe('the permission matrix', () => {
       'apikey.manage',
       'whatsapp.manage',
       'patient.delete',
+      // A doctor owns the clinical record; producing a legal data export against
+      // a DPDP deadline is the tenant's obligation, not theirs.
+      'patient.export',
       'audit.read'
     ] as const) {
       expect(hasPermission('doctor', permission), permission).toBe(false);

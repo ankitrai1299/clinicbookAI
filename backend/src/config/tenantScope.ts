@@ -61,6 +61,8 @@ export const TENANT_MODELS = new Set<string>([
   // Detected security patterns. Scoped so a clinic admin reviewing their own
   // alerts can never see another clinic's.
   'SecurityAlert',
+  // Patient rights requests — clinic-scoped like the records they are about.
+  'PatientRightsRequest',
   // Consent state, per clinic + patient + purpose.
   'PatientConsent',
   // Per-clinic template approval state on the clinic's own WABA.

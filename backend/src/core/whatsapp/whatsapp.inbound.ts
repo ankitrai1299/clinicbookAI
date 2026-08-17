@@ -21,6 +21,7 @@
 import { maskPhone } from '../observability/redact.js';
 import { prisma } from '../../config/prisma.js';
 import { handleConsentKeywords, showNoticeIfNeeded } from '../consent/whatsappConsent.js';
+import { handleRightsRequest } from '../rights/whatsappRights.js';
 import { claimInboundMessage } from './whatsapp.dedupe.js';
 import { dataSourceFor } from '../datasource/index.js';
 import { env } from '../../config/env.js';
@@ -279,6 +280,18 @@ const processOne = async (
         patientLanguage: patient.language
       });
       if (consentTurn.handled) return;
+
+      // Then the data rights: "what do you have about me", "delete my data".
+      // Also before the FSM — a patient asking about their record must not have
+      // it read as a booking menu selection.
+      const rightsTurn = await handleRightsRequest({
+        clinicId,
+        patientId: patient.id,
+        phone: to,
+        text,
+        patientLanguage: patient.language
+      });
+      if (rightsTurn.handled) return;
 
       // Then the notice, once per patient per version, as its own message ahead
       // of the reply. Awaited so it arrives FIRST — a disclosure that lands after

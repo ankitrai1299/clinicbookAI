@@ -15,6 +15,11 @@ export const PERMISSIONS = [
   'patient.create',
   'patient.update',
   'patient.delete',
+  // Pulling one patient's ENTIRE record into a single file, for a DPDP access
+  // request. Separate from patient.read on purpose: looking someone up to book
+  // them is not the same act as exporting every consultation, message and
+  // recording reference they have.
+  'patient.export',
 
   // Appointments
   'appointment.read',

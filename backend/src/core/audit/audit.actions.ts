@@ -56,6 +56,14 @@ export const AUDIT_ACTIONS = [
   'CONSENT_GRANTED',
   'CONSENT_WITHDRAWN',
 
+  // ── Patient rights (DPDP §11 access, §12 correction/erasure, §13 grievance) ──
+  // The request is recorded when it arrives and closed when a HUMAN decides.
+  // Erasure is never executed automatically: medical-record retention law
+  // outranks it, and that carve-out is still an open legal question.
+  'RIGHTS_REQUEST_RECEIVED',
+  'RIGHTS_REQUEST_FULFILLED',
+  'PATIENT_DATA_EXPORTED',
+
   // ── Administration ──────────────────────────────────────────────
   'USER_CREATED',
   // Second factor and session revocation (Phase 3).
