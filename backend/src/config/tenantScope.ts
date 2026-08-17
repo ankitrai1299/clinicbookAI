@@ -58,6 +58,9 @@ export const TENANT_MODELS = new Set<string>([
   // Per-device sign-in credentials. Clinic-scoped so one clinic's admin can
   // never list or revoke another clinic's.
   'AppPassword',
+  // Detected security patterns. Scoped so a clinic admin reviewing their own
+  // alerts can never see another clinic's.
+  'SecurityAlert',
   // Consent state, per clinic + patient + purpose.
   'PatientConsent',
   // Per-clinic template approval state on the clinic's own WABA.
@@ -96,6 +99,10 @@ export const SCOPED_DESPITE_NULLABLE: Readonly<Record<string, string>> = {
   WhatsAppLog:
     'a send logged before a clinic is resolved has no owner, so no clinic should ' +
     'see it in its own message log; writes through forClinic always carry one',
+  SecurityAlert:
+    'a failed-sign-in burst is detected BEFORE any clinic is known, so those rows ' +
+    'have no owner and no clinic dashboard should show them; they are reviewed ' +
+    'server-side during an investigation, like the audit rows they come from',
   AuditLog:
     'FAILED_LOGIN and a login for an unknown email are recorded BEFORE a clinic ' +
     'is known, and hiding those ownerless rows from every clinic dashboard is ' +

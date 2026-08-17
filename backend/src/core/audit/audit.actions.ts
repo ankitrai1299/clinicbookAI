@@ -67,7 +67,9 @@ export const AUDIT_ACTIONS = [
   'CLINIC_SETTINGS_UPDATED',
   'API_KEY_CREATED',
   'API_KEY_REVOKED',
-  'AUDIT_LOG_VIEWED'
+  'AUDIT_LOG_VIEWED',
+  // Someone looked at a security alert and wrote down what they concluded.
+  'SECURITY_ALERT_ACKNOWLEDGED'
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

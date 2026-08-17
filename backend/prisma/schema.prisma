@@ -1082,3 +1082,75 @@ model AppPassword {
   @@index([userId])
   @@index([clinicId])
 }
+
+// ---------------------------------------------------------------------------
+// Security alerts (Phase 5 — incident readiness).
+//
+// One row per detected pattern per window. This table is the raw feed behind
+// the breach register: when something turns out to be real, the CERT-In report
+// and the DPDP notification are both written from these rows plus the audit
+// trail they point at.
+//
+// `dedupeKey` is rule + subject + window, uniquely indexed, so a burst that
+// spans two scans alerts ONCE. An alerting system that repeats itself is an
+// alerting system people filter into a folder they never open.
+//
+// NO clinical or personal content. `subject` is an email, an actor id or an IP —
+// the thing an investigator needs to pivot on — and `detail` holds counts.
+// ---------------------------------------------------------------------------
+model SecurityAlert {
+  id String @id @default(cuid())
+
+  /**
+   * Null for events that happen before a clinic is known (failed sign-ins).
+   */
+  clinicId String?
+
+  rule     String
+  severity String @default("medium")
+
+  /**
+   * Who or what this is about: an email, an actor id, an IP.
+   */
+  subject String
+
+  /**
+   * How many occurrences in the window.
+   */
+  count Int
+
+  /**
+   * One actionable sentence. Never clinical.
+   */
+  summary String @db.Text
+
+  /**
+   * Counts only — see audit.redact for the shape rule this follows.
+   */
+  detail Json?
+
+  windowStart DateTime
+  windowEnd   DateTime
+
+  /**
+   * Set when someone looked and decided. Unacknowledged = still open.
+   */
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
+  /**
+   * What they concluded. Free text from staff, never from a patient record.
+   */
+  resolution     String?   @db.Text
+
+  /**
+   * Set when the alert email went out, so a delivery failure is visible.
+   */
+  notifiedAt DateTime?
+
+  dedupeKey String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+  @@index([acknowledgedAt])
+  @@index([severity, createdAt])
+}

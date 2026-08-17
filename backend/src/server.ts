@@ -8,6 +8,7 @@ import { startMedicineReminderCron } from './cron/medicineReminder.cron.js';
 import { startAutoCompleteVisitsCron } from './cron/autoCompleteVisits.cron.js';
 import { startWaitlistCron } from './cron/waitlist.cron.js';
 import { startWebhookCron } from './cron/webhook.cron.js';
+import { startSecurityScanCron } from './cron/securityScan.cron.js';
 import { logWhatsAppStartupInfo } from './core/whatsapp/whatsapp.diagnostics.js';
 import { logEmailStartupInfo } from './services/email.service.js';
 
@@ -56,6 +57,7 @@ const startServer = async () => {
   startAutoCompleteVisitsCron();
   startWaitlistCron();
   startWebhookCron();
+  startSecurityScanCron();
 
   // Catch what escapes the fire-and-forget work scattered through the app (every
   // `void send().catch()`). Without these an unhandled rejection restarts the

@@ -4,6 +4,7 @@ import aiRouter from '../core/ai/ai.routes.js';
 import analyticsRouter from '../core/analytics/analytics.routes.js';
 import auditRouter from '../core/audit/audit.routes.js';
 import consentRouter from '../core/consent/consent.routes.js';
+import securityRouter from '../core/security/security.routes.js';
 import apiKeyRouter from '../core/apikeys/apiKey.routes.js';
 import appointmentRouter from '../core/appointments/appointment.routes.js';
 import authRouter from '../core/auth/auth.routes.js';
@@ -68,6 +69,8 @@ apiRouter.use('/api/analytics', analyticsRouter);
 apiRouter.use('/api/audit', auditRouter);
 // Consent: what a patient agreed to, and what they withdrew.
 apiRouter.use('/api/consent', consentRouter);
+// Detected security patterns. Alerts can be closed with a reason, never deleted.
+apiRouter.use('/api/security', securityRouter);
 // Patient 360 — one patient id/code → their complete cross-product record.
 apiRouter.use('/api/patient-record', patient360Router);
 
