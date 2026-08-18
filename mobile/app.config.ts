@@ -28,8 +28,20 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const flavor = resolveFlavor(process.env.EXPO_PUBLIC_APP_FLAVOR);
   const base = config as ExpoConfig;
 
+  // google-services.json is NOT committed — this repository is public, and EAS
+  // Build only uploads git-tracked files, so a gitignored config file simply is
+  // not there when the build runs. (That is exactly how the first FCM build
+  // failed.)
+  //
+  // It is provided instead as an EAS FILE environment variable, which the
+  // builder materialises at a temporary path and hands over in this variable.
+  // Locally the variable is unset and the developer's own copy is used.
+  const googleServicesFile = process.env.GOOGLE_SERVICES_JSON || './google-services.json';
+
   // MediScribe is the base app.json as-is — nothing to override.
-  if (flavor === 'mediscribe') return base;
+  if (flavor === 'mediscribe') {
+    return { ...base, android: { ...base.android, googleServicesFile } };
+  }
 
   const bundleId = 'com.nextdot.clinicbookai';
   const splashPlugin = (base.plugins ?? []).find(
@@ -52,6 +64,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       ...base.android,
       package: bundleId,
+      googleServicesFile,
       // The booking desk never records, so the scribe's microphone permissions
       // are dropped — but this list REPLACES the base one rather than adding to
       // it, so anything the ClinicBook build genuinely needs has to be named

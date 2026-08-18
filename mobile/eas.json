@@ -11,50 +11,66 @@
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
         "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "mediscribe"
-      }
+      },
+      "environment": "preview"
     },
-
     "apk-mediscribe": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
         "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "mediscribe"
-      }
+      },
+      "environment": "preview"
     },
     "apk-clinicbook": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
         "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "clinicbook"
-      }
+      },
+      "environment": "preview"
     },
-
     "production-mediscribe": {
       "autoIncrement": true,
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
         "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "mediscribe"
-      }
+      },
+      "environment": "preview"
     },
     "production-clinicbook": {
       "autoIncrement": true,
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
         "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "clinicbook"
-      }
+      },
+      "environment": "preview"
     },
-
-    "preview": { "extends": "apk-mediscribe" },
-    "apk": { "extends": "apk-mediscribe" },
-    "production": { "extends": "production-mediscribe" }
+    "preview": {
+      "extends": "apk-mediscribe"
+    },
+    "apk": {
+      "extends": "apk-mediscribe"
+    },
+    "production": {
+      "extends": "production-mediscribe"
+    }
   },
   "submit": {
     "production": {}

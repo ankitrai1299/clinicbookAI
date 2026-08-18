@@ -38,7 +38,16 @@ preserving.
 | `src/context/Auth.tsx` | One import; `void registerForPush()` at the end of `adoptSession`; `await unregisterFromPush()` at the top of `clearSession`. |
 | `package.json` | `expo-notifications`, `expo-device` — both installed via `npx expo install`, so they match SDK 54 and no other version moved. |
 | `app.json` | `android.permissions` gains `android.permission.POST_NOTIFICATIONS`. |
+| `app.config.js` | **New file.** Resolves `googleServicesFile` from an EAS file environment variable. Every other value still comes from `app.json`, untouched. |
 | — | Nothing else. No screen, no navigation, no report code was touched. |
+
+**Why `app.config.js` exists at all:** this repository is public, so the Firebase
+config is not committed — and EAS Build uploads only git-tracked files, so a
+gitignored file is simply absent when the build runs. That is how the first FCM
+build failed. The file is supplied as an EAS **file** environment variable
+(`GOOGLE_SERVICES_JSON`), which the builder writes to a temporary path; the
+config reads that path. Locally the variable is unset and a developer's own copy
+is used.
 
 **Why `adoptSession` and `clearSession` specifically:** every route into a
 session (login, register, password reset, and the on-mount restore) passes
