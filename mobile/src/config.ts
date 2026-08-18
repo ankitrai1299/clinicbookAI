@@ -38,7 +38,10 @@ export const isApiConfigured = (): boolean => API_ROOT.length > 0;
 // The phone app is a thin shell around the SAME web NovaScribe the browser uses,
 // so it's feature-for-feature identical and always in sync. Point this at the
 // deployed frontend (Vercel). Override per-build with EXPO_PUBLIC_WEB_URL.
-const WEB_URL_FALLBACK = 'https://clinicbook-ai-yj2d.vercel.app';
+// The clinic's own domain, not the vercel.app one. The app is shown to people
+// in the field, and it must not stop working the day that deployment URL is
+// retired 2014 a custom domain is the only address here that is actually ours.
+const WEB_URL_FALLBACK = 'https://clinicbookai.nextdoc.in';
 export const WEB_ROOT = (process.env.EXPO_PUBLIC_WEB_URL || WEB_URL_FALLBACK || '').replace(/\/+$/, '');
 
 // Which of the two apps THIS build is. Must match the flavour app.config.ts

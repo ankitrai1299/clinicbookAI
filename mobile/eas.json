@@ -9,7 +9,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
-        "EXPO_PUBLIC_WEB_URL": "https://clinicbook-ai-yj2d.vercel.app",
+        "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "mediscribe"
       }
     },
@@ -19,7 +19,7 @@
       "android": { "buildType": "apk" },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
-        "EXPO_PUBLIC_WEB_URL": "https://clinicbook-ai-yj2d.vercel.app",
+        "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "mediscribe"
       }
     },
@@ -28,7 +28,7 @@
       "android": { "buildType": "apk" },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
-        "EXPO_PUBLIC_WEB_URL": "https://clinicbook-ai-yj2d.vercel.app",
+        "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "clinicbook"
       }
     },
@@ -38,7 +38,7 @@
       "android": { "buildType": "apk" },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
-        "EXPO_PUBLIC_WEB_URL": "https://clinicbook-ai-yj2d.vercel.app",
+        "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "mediscribe"
       }
     },
@@ -47,7 +47,7 @@
       "android": { "buildType": "apk" },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://clinicbookai-production.up.railway.app",
-        "EXPO_PUBLIC_WEB_URL": "https://clinicbook-ai-yj2d.vercel.app",
+        "EXPO_PUBLIC_WEB_URL": "https://clinicbookai.nextdoc.in",
         "EXPO_PUBLIC_APP_FLAVOR": "clinicbook"
       }
     },
