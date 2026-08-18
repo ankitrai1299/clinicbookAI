@@ -1127,7 +1127,10 @@ const doPrescription = async (params: BookingParams): Promise<BotReply> => {
   try {
     const reply = await deliverPrescriptionToPatient({
       clinicId: params.clinicId,
-      phone: params.phone
+      phone: params.phone,
+      // The FSM knows the patient too, and for anyone who came through booking
+      // this id is the only link to their consultations.
+      patientId: params.patientId
     });
     why(params, 'menu option 5 → sent last prescription, back to MENU');
     return `${reply}\n\nReply MENU for options.`;

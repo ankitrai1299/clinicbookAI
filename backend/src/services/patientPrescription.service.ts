@@ -69,8 +69,17 @@ export const buildPrescriptionReply = (params: {
 export const deliverPrescriptionToPatient = async (params: {
   clinicId: string;
   phone: string;
+  /**
+   * The ClinicBook patient id, when the caller knows it.
+   *
+   * Optional only because one caller genuinely may not: a walk-in recorded in
+   * the scribe with no ClinicBook record still resolves by phone. Everyone who
+   * arrived through booking or WhatsApp has one, and for them it is the ONLY
+   * link that works — their consultations carry this id, not a MediScribe one.
+   */
+  patientId?: string | null;
 }): Promise<string> => {
-  const consult = await latestScribeConsultation(params.clinicId, params.phone);
+  const consult = await latestScribeConsultation(params.clinicId, params.phone, params.patientId);
   if (!consult) return NO_PRESCRIPTION_REPLY;
 
   const medicines = Array.isArray(consult.report.prescribedMedications)

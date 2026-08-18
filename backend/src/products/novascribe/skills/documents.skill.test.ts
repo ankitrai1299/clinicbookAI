@@ -39,10 +39,15 @@ describe('novascribe.documents skill', () => {
     expect(String(res.reply)).toContain('Rest; Fluids');
   });
 
-  it('scopes the lookup to the clinic + the patient\'s phone', async () => {
+  it('scopes the lookup to the clinic, and passes BOTH the phone and the patient id', async () => {
+    // The patient id is what actually finds the consultation. MediScribe shares
+    // ClinicBook's patient table, so a patient who arrived through booking has no
+    // row in the scribe's own patients collection — looking them up by phone alone
+    // returned nothing, and they were told they had no report while it sat in the
+    // app. The phone stays as the fallback for scribe-only walk-ins.
     latestScribeConsultation.mockResolvedValue(null);
     await run();
-    expect(latestScribeConsultation).toHaveBeenCalledWith('c1', '919000009002');
+    expect(latestScribeConsultation).toHaveBeenCalledWith('c1', '919000009002', 'p1');
   });
 
   it('handles no report gracefully', async () => {

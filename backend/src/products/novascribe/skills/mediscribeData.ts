@@ -35,14 +35,38 @@ export interface ScribeConsultation {
 }
 
 /**
- * The patient's most recent MediScribe consultation that carries a generated
- * report, linked from their WhatsApp `phone`. Returns null when the patient has
- * no MediScribe record or no report yet.
+ * The patient's most recent FINALIZED MediScribe consultation, found by their
+ * ClinicBook patient id when we have one and by phone otherwise.
+ *
+ * TWO THINGS WERE WRONG HERE, both invisible from the outside:
+ *
+ * 1. It only ever looked the patient up by PHONE, inside MediScribe's own
+ *    'patients' collection. Since the scribe started sharing ClinicBook's
+ *    patient table, a patient who arrives through booking or WhatsApp has no row
+ *    there at all — their consultations are linked by the CLINICBOOK patient id.
+ *    So the lookup returned null on the first step and the patient was told
+ *    "aapke naam pe koi document nahi hai" while their report sat in the app.
+ *
+ * 2. It did not require the note to be FINALIZED, so a doctor's unreviewed
+ *    draft could reach a patient on WhatsApp. The rule everywhere else in this
+ *    system is that nothing reaches a patient until a doctor marks the note
+ *    Completed; this path quietly did not honour it.
+ *
+ * The phone path is kept as a FALLBACK for scribe-only walk-ins, who genuinely
+ * have no ClinicBook record.
  */
 export async function latestScribeConsultation(
   clinicId: string,
-  phone: string | undefined | null
+  phone: string | undefined | null,
+  patientId?: string | null
 ): Promise<ScribeConsultation | null> {
+  // The direct link, when the caller knows who this is. This is the path that
+  // works for every patient who came through booking or WhatsApp.
+  if (patientId) {
+    const direct = await finalizedScribeForPatient(clinicId, patientId);
+    if (direct) return direct;
+  }
+
   const want = last10(phone);
   if (!want) return null;
 
@@ -61,8 +85,9 @@ export async function latestScribeConsultation(
     select: { data: true }
   });
   for (const r of rows) {
-    const d = r.data as Record<string, unknown> & { report?: ScribeReport };
-    if (d?.report) {
+    const d = r.data as Record<string, unknown> & { report?: ScribeReport; status?: string };
+    // Finalized only. A draft is the doctor's working copy, not the patient's.
+    if (d?.status === 'Completed' && d?.report) {
       return {
         report: d.report,
         patientName: d.patientName as string | undefined,

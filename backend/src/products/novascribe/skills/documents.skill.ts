@@ -18,7 +18,10 @@ const documentsSkill: Skill = {
   handle: async (ctx: McpContext) => {
     if (!ctx.actor.patientId) return { reply: null, done: true };
 
-    const consult = await latestScribeConsultation(ctx.clinicId, phoneOf(ctx));
+    // The brain already knows WHO this is — pass it, so the lookup does not
+    // depend on the patient also existing in MediScribe's own patients
+    // collection, which they do not when they came through ClinicBook.
+    const consult = await latestScribeConsultation(ctx.clinicId, phoneOf(ctx), ctx.actor.patientId);
     if (!consult) {
       return {
         reply:

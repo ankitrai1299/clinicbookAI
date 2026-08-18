@@ -114,9 +114,26 @@ describe('the AI has no route to approval', () => {
   });
 
   it('only ever lets a patient read a FINALIZED note over WhatsApp', () => {
-    // The other way a prescription reaches a patient: they ask the WhatsApp bot
-    // for it. That path filters on status 'Completed' too, and must keep doing so.
+    // This test used to check that the FILE contained "status === 'Completed'"
+    // — and it did, in a different function. The one the patient actually
+    // reaches (latestScribeConsultation) had no such check, so a doctor's
+    // unreviewed draft could be sent on WhatsApp while this test stayed green.
+    //
+    // It now reads the patient-facing function itself. Checking that a string
+    // appears somewhere in a file proves nothing about the path that runs.
     const data = fs.readFileSync(path.join(SRC, 'products/novascribe/skills/mediscribeData.ts'), 'utf8');
-    expect(data).toContain("d?.status === 'Completed'");
+
+    const fnStart = data.indexOf('export async function latestScribeConsultation');
+    expect(fnStart, 'latestScribeConsultation not found').toBeGreaterThan(-1);
+    const next = data.indexOf('export async function', fnStart + 10);
+    const body = data.slice(fnStart, next === -1 ? undefined : next);
+
+    expect(body, 'the patient-facing lookup must require a finalized note').toContain(
+      "d?.status === 'Completed'"
+    );
+
+    // And the finalized-by-patient-id lookup it delegates to.
+    const byId = data.slice(data.indexOf('export async function finalizedScribeForPatient'));
+    expect(byId).toContain("d?.status === 'Completed'");
   });
 });

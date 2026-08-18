@@ -24,7 +24,14 @@ const prescriptionSkill: Skill = {
     const phone = phoneOf(ctx);
     if (!phone) return { reply: null, done: true };
 
-    return { reply: await deliverPrescriptionToPatient({ clinicId: ctx.clinicId, phone }), done: true };
+    return {
+      reply: await deliverPrescriptionToPatient({
+        clinicId: ctx.clinicId,
+        phone,
+        patientId: ctx.actor.patientId
+      }),
+      done: true
+    };
   }
 };
 
