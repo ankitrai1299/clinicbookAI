@@ -63,6 +63,9 @@ export const TENANT_MODELS = new Set<string>([
   'SecurityAlert',
   // Patient rights requests — clinic-scoped like the records they are about.
   'PatientRightsRequest',
+  // Device push tokens — clinic-scoped so one clinic can never enumerate or
+  // push to another clinic's staff devices.
+  'DevicePushToken',
   // Consent state, per clinic + patient + purpose.
   'PatientConsent',
   // Per-clinic template approval state on the clinic's own WABA.

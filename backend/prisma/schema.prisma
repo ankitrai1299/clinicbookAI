@@ -1227,3 +1227,59 @@ model PatientRightsRequest {
   @@index([clinicId, status, dueAt])
   @@index([clinicId, patientId])
 }
+
+// ---------------------------------------------------------------------------
+// Device push tokens — the phone-level notifications, the ones that appear on
+// the lock screen.
+//
+// The in-app bell (Notification) and the SSE stream only reach a dashboard that
+// is already OPEN. A clinic does not sit staring at the app: a patient books on
+// WhatsApp at 9pm and nobody knows until someone opens it the next morning.
+// That is what this table is for.
+//
+// One row per DEVICE, not per user — a doctor with a phone and a tablet gets
+// both, and revoking one leaves the other working. `product` records which app
+// the token came from so a scribe-only event never buzzes the front desk's
+// phone, and vice versa.
+//
+// The token is Expo's (`ExponentPushToken[...]`), not a secret in the usual
+// sense: it identifies a device's delivery channel and is useless without our
+// Expo project. It is stored plainly for that reason, and deleted the moment
+// Expo reports the device is gone (DeviceNotRegistered) — a dead token that
+// keeps being retried is how a push queue silently rots.
+// ---------------------------------------------------------------------------
+model DevicePushToken {
+  id       String @id @default(cuid())
+  clinicId String
+  userId   String
+
+  /**
+   * Expo push token. Unique: one row per device, re-registering updates it.
+   */
+  token String @unique
+
+  /**
+   * 'clinicbook' | 'mediscribe' — which app this device is running.
+   */
+  product String
+
+  /**
+   * 'android' | 'ios'
+   */
+  platform String @default("android")
+
+  /**
+   * Set on every successful send, so dead devices are visible.
+   */
+  lastUsedAt DateTime?
+  /**
+   * Set when Expo reports the token is no longer deliverable.
+   */
+  failedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, product])
+  @@index([userId])
+}

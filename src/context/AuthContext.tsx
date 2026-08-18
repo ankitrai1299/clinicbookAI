@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { initNativePush, unregisterNativePush } from '../utils/nativePush';
 
 import { AuthUser, getMe } from '../api/auth';
 
@@ -35,6 +36,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then((u) => {
         setUser(u);
         setToken(stored);
+        // Returning to the app with a session already stored — the sign-in path
+        // never runs, so this is the only place the device gets registered.
+        // Idempotent: it re-posts nothing if this token is already registered.
+        initNativePush();
       })
       .catch(() => {
         localStorage.removeItem('auth_token');
@@ -46,9 +51,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('auth_token', t);
     setToken(t);
     setUser(u);
+    // Now that there IS a session, the phone's push token can be bound to it.
+    // The token usually arrives before anyone signs in, so this is the moment
+    // registration becomes possible rather than the moment it is offered.
+    initNativePush();
   };
 
   const logout = () => {
+    // Before the token goes: a shared clinic phone must stop buzzing for
+    // whoever signed in previously.
+    unregisterNativePush();
     localStorage.removeItem('auth_token');
     setToken(null);
     setUser(null);

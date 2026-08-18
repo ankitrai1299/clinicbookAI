@@ -2,6 +2,7 @@ import { NotificationType } from '@prisma/client';
 
 import { forClinic } from '../../config/tenantPrisma.js';
 import { publishClinicEvent } from './notification.realtime.js';
+import { pushToClinic } from './push.service.js';
 
 // Dashboard notification feed (the bell / notification center). The automation
 // engine writes here whenever something happens that staff should see —

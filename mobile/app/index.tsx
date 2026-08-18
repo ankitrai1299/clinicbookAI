@@ -16,6 +16,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { WEB_APP_URL, APP_LABEL } from '../src/config';
+import { getPushToken, injectPushToken } from '../src/push';
 import { colors } from '../src/theme';
 
 // ─────────────────────────────────────────────────────────────
@@ -79,10 +80,27 @@ export default function App() {
       // "microphone access is required" message when a recording is attempted.
     });
   }, []);
+  // Ask for notification permission and fetch this device's push token.
+  //
+  // Deliberately NOT gated on being signed in: the permission prompt is better
+  // asked once at launch than in the middle of a consultation, and the token is
+  // useless to anyone until the page registers it against a session.
+  useEffect(() => {
+    void getPushToken().then((token) => {
+      if (!token) return;
+      pushToken.current = token;
+      // The page may already be up; if it is not, onLoadEnd injects it.
+      webRef.current?.injectJavaScript(injectPushToken(token));
+    });
+  }, []);
+
   const canGoBack = useRef(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // This device's Expo push token, once Expo has given us one. Held so it can be
+  // re-injected after a reload — the page loses it on every navigation.
+  const pushToken = useRef<string | null>(null);
 
   // Cache-bust the initial document each launch (and on Retry) so the app always
   // loads the LATEST deployed web — never a stale WebView-cached page. Hashed JS
@@ -174,7 +192,16 @@ export default function App() {
               canGoBack.current = nav.canGoBack;
             }}
             onMessage={onMessage}
-            onLoadEnd={() => setLoading(false)}
+            onLoadEnd={() => {
+              setLoading(false);
+              // Re-inject on EVERY load. The page loses window state on each
+              // navigation and reload, so injecting only once works on a warm
+              // start and silently fails on a cold one — the exact bug class
+              // that makes push look flaky rather than broken.
+              if (pushToken.current) {
+                webRef.current?.injectJavaScript(injectPushToken(pushToken.current));
+              }
+            }}
             onError={() => {
               setLoading(false);
               setFailed(true);
