@@ -30,7 +30,8 @@
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "package": "com.nextdot.novascribeai"
+      "package": "com.nextdot.novascribeai",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",

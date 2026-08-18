@@ -52,7 +52,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       ...base.android,
       package: bundleId,
-      permissions: [],
+      // The booking desk never records, so the scribe's microphone permissions
+      // are dropped — but this list REPLACES the base one rather than adding to
+      // it, so anything the ClinicBook build genuinely needs has to be named
+      // here. POST_NOTIFICATIONS is one: without it in the manifest, Android 13+
+      // will not even let the app raise the permission prompt, and push would
+      // fail silently on exactly the phones most clinics are using.
+      permissions: ['android.permission.POST_NOTIFICATIONS'],
       adaptiveIcon: {
         ...(base.android?.adaptiveIcon ?? {}),
         backgroundColor: '#047857' // emerald, matches ClinicBook
