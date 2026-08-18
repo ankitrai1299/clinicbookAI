@@ -28,3 +28,16 @@ backend/scripts/_tmp*.ts
 # real native app and IS tracked — it was copied from the reference verbatim.
 mediscribe-app (*)/
 novascribe-ai*/
+
+# Firebase / FCM credentials.
+#
+# The SERVICE ACCOUNT key is a real secret: anyone holding it can send push
+# notifications as us. It is uploaded to EAS and must never sit in the repo.
+#
+# google-services.json is NOT secret (it ships inside every Android app), but it
+# is per-Firebase-project config that differs between environments, so it is
+# kept out of git too and placed by whoever builds.
+**/google-services.json
+**/GoogleService-Info.plist
+**/*service-account*.json
+**/firebase-adminsdk-*.json
