@@ -13,6 +13,7 @@ import { getChannelStatus } from '../api/whatsapp';
 import ConnectWhatsApp from './ConnectWhatsApp';
 import PatientRegistrationQR from './PatientRegistrationQR';
 import AddPatientSheet from './AddPatientSheet';
+import PatientRecordModal from './PatientRecordModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A phone-first ClinicBook dashboard for the mobile app (and mobile browsers via
@@ -119,6 +120,10 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
   const [busyId, setBusyId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Which patient's full record is open. The same modal the web dashboard uses,
+  // so "View Record" means the same thing on both.
+  const [recordFor, setRecordFor] = useState<string | null>(null);
 
   // Paint the PAGE and fill the dynamic viewport. body is #f8fafc for the web, so
   // whatever the app does not cover shows as a band of browser-white under the
@@ -135,6 +140,18 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
     const [appts, pats, notifs, wait] = await Promise.allSettled([
       getAppointments(), getPatients(), getNotifications(), getWaitlist('WAITING')
     ]);
+
+    // A failed load used to be indistinguishable from an empty clinic: the list
+    // stayed blank and said "No patients here." Whatever went wrong — expired
+    // session, no signal — the app claimed the clinic had no patients, which is
+    // the one thing it must never say when it does not know.
+    const failed = [appts, pats, notifs].filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    setLoadError(
+      failed.length
+        ? (failed[0].reason instanceof Error ? failed[0].reason.message : 'Could not load your clinic data.')
+        : null
+    );
+
     if (appts.status === 'fulfilled') setAppointments(appts.value);
     if (pats.status === 'fulfilled') setPatients(pats.value);
     if (notifs.status === 'fulfilled') setNotifications(notifs.value);
@@ -148,6 +165,20 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Reload when the app comes back to the foreground.
+  //
+  // A patient who self-registers by scanning the QR lands in the database, not
+  // in this already-rendered list — so the app showed a stale list until it was
+  // force-closed and reopened, which reads as "the registration did not work".
+  // A phone app is expected to be current when you look at it.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [load]);
 
   const today = todayKey();
   const todays = useMemo(
@@ -206,6 +237,21 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
           </div>
         ) : (
           <>
+            {/* Say what went wrong, and offer the one action that fixes most of
+                it. Silence here is what made a failed load look like an empty
+                clinic. */}
+            {loadError && (
+              <div className="mx-4 mt-4 flex items-start gap-2.5 px-4 py-3 bg-rose-50 border border-rose-200 rounded-2xl">
+                <div className="flex-1 min-w-0 text-[13px] text-rose-800 leading-snug">{loadError}</div>
+                <button
+                  onClick={() => void load()}
+                  className="shrink-0 text-[12.5px] font-bold text-rose-700 active:text-rose-900"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
             {tab === 'home' && (
               <HomeTab
                 clinicName={clinicName}
@@ -222,6 +268,7 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
             {tab === 'appointments' && <AppointmentsTab appointments={appointments} {...actions} />}
             {tab === 'patients' && (
               <PatientsTab
+                onOpenRecord={setRecordFor}
                 patients={patients}
                 appointments={appointments}
                 search={search}
@@ -283,6 +330,10 @@ export default function MobileDashboard({ clinicName, userName, clinicId, onLogo
           }}
         />
       )}
+
+      {/* The SAME record view the web dashboard opens, so "View Record" means
+          one thing across both. */}
+      {recordFor && <PatientRecordModal patientId={recordFor} onClose={() => setRecordFor(null)} />}
     </div>
   );
 }
@@ -685,9 +736,10 @@ type PatientFilter = 'all' | 'new' | 'followup' | 'inactive';
 const INACTIVE_DAYS = 90;
 
 function PatientsTab({
-  patients, appointments, search, setSearch, clinicId,
+  patients, appointments, search, setSearch, clinicId, onOpenRecord,
 }: {
   patients: ApiPatient[]; appointments: ApiAppointment[]; search: string; setSearch: (s: string) => void;
+  onOpenRecord: (patientId: string) => void;
   clinicId?: string;
 }) {
   const [filter, setFilter] = useState<PatientFilter>('all');
@@ -787,24 +839,53 @@ function PatientsTab({
             const tag = tagOf(p);
             const last = lastVisit.get(p.id);
             return (
-              <Card key={p.id} className="p-4 flex items-center gap-3">
-                <Avatar name={p.name} tone="slate" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-slate-900 text-[15px] truncate">{p.name}</div>
-                  <div className="text-[12.5px] text-slate-400 truncate">{p.phone}</div>
-                  <div className="text-[11.5px] text-slate-400 mt-0.5">
-                    {last ? `Last visit: ${prettyDate(last)}` : 'No visit yet'}
+              // The same facts the web table shows — age/gender, reason for
+              // visit, language — not a reduced version of it. A clinic reading
+              // the phone should not have to open a laptop to see why someone
+              // came in.
+              <Card key={p.id} className="p-4">
+                <div className="flex items-start gap-3">
+                  <Avatar name={p.name} tone="slate" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-900 text-[15px] truncate">{p.name}</div>
+                    <div className="text-[12.5px] text-slate-400 truncate">{p.phone}</div>
+                    <div className="text-[11.5px] text-slate-400 mt-0.5">
+                      {[
+                        p.age ? `${p.age} yrs` : null,
+                        p.gender || null,
+                        p.language || null
+                      ].filter(Boolean).join(' · ') || 'Details not recorded'}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg ${tag.cls}`}>{tag.text}</span>
+                    <a
+                      href={`tel:${p.phone}`}
+                      aria-label={`Call ${p.name}`}
+                      className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center active:bg-emerald-100 transition-colors"
+                    >
+                      <Phone className="w-4 h-4" />
+                    </a>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                  <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg ${tag.cls}`}>{tag.text}</span>
-                  <a
-                    href={`tel:${p.phone}`}
-                    aria-label={`Call ${p.name}`}
-                    className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center active:bg-emerald-100 transition-colors"
+
+                {p.healthConcern && (
+                  <p className="text-[12.5px] text-slate-600 mt-2.5 pt-2.5 border-t border-slate-100">
+                    <span className="text-slate-400">Reason for visit: </span>
+                    {p.healthConcern}
+                  </p>
+                )}
+
+                <div className="flex items-center justify-between gap-3 mt-2.5">
+                  <span className="text-[11.5px] text-slate-400">
+                    {last ? `Last visit: ${prettyDate(last)}` : 'No visit yet'}
+                  </span>
+                  <button
+                    onClick={() => onOpenRecord(p.id)}
+                    className="text-[12.5px] font-semibold text-emerald-700 active:text-emerald-800"
                   >
-                    <Phone className="w-4 h-4" />
-                  </a>
+                    View Record
+                  </button>
                 </div>
               </Card>
             );
