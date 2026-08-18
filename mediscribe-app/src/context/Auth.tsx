@@ -19,6 +19,7 @@ import {
 } from '../services/api';
 import { setSettingsScope, syncProfileFromUser } from '../services/storage';
 import { setChatScope } from '../services/chatHistory';
+import { registerForPush, unregisterFromPush } from '../services/push';
 
 // Token persistence key.
 //
@@ -56,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /** Drop the session everywhere: state, storage and the API module. */
   const clearSession = useCallback(async () => {
+    // DIVERGENCE (see services/push.ts): a clinic phone is shared, so this
+    // device must stop receiving the signed-out doctor's notifications. Runs
+    // FIRST — it needs the session that is about to be cleared.
+    await unregisterFromPush();
     await AsyncStorage.multiRemove([TOKEN_KEY, LEGACY_TOKEN_KEY]).catch(() => {});
     setSessionToken(null);
     // Stop reading the signed-out doctor's settings. Their stored copy is left
@@ -126,6 +131,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await syncProfileFromUser(newUser);
     setToken(newToken);
     setUser(newUser);
+    // DIVERGENCE (see services/push.ts): bind this device to the doctor who has
+    // just signed in. Every session — login, register, reset, and the on-mount
+    // restore — comes through here, so this is the one place it belongs.
+    // Not awaited: a permission prompt must not delay the dashboard.
+    void registerForPush();
     return newUser;
   }, []);
 
