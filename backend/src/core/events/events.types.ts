@@ -9,6 +9,21 @@
 // multi-tenant and must scope their work to the originating clinic.
 
 export interface DomainEventPayloads {
+  // Emitted whenever a patient record is CREATED, by any route — the QR
+  // self-registration page, the front desk, or their first WhatsApp message.
+  // Emitted from the data source rather than from each caller, because "a new
+  // producer forgets to announce it" is exactly how the clinic stops hearing
+  // about half their new patients.
+  'patient.registered': {
+    clinicId: string;
+    patientId: string;
+    patientName?: string;
+    patientCode?: string | null;
+    phone?: string | null;
+    /** 'staff' | 'public' | 'whatsapp' — how they arrived. */
+    source?: string | null;
+  };
+
   // Emitted by ClinicBook when a NEW appointment is booked (any channel: staff
   // dashboard, WhatsApp, waitlist promotion). Reminder/Analytics/Notification/
   // Calendar subscribers react — no path calls them directly.

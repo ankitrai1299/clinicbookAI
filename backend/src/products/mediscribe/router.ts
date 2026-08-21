@@ -20,6 +20,7 @@ import { bridgeAuth, type AuthedRequest } from './middleware/auth.js';
 import { uploadAudio } from './middleware/upload.js';
 import { requirePermission } from './middleware/authz.js';
 import { recordFromRequest } from '../../core/audit/audit.service.js';
+import { eventBus } from '../../core/events/eventBus.js';
 import { requireRecordingConsent } from '../../core/consent/recordingConsent.js';
 import { recordAiDraft, diffAgainstDraft, contentHash } from './services/aiAuditTrail.js';
 import type { Role } from './contracts/index.js';
@@ -759,6 +760,14 @@ mediscribeRouter.post('/save-consultation', requirePermission('consultation.writ
       // actorType is 'user' and the actor is the signed-in doctor. No AI path can
       // reach this line: it runs inside an authenticated request handler, and the
       // matrix grants prescription.approve to doctors and clinic owners only.
+      // Announce it. The notification feed subscribes; the event itself was
+      // declared in the catalogue long ago and never actually fired.
+      eventBus.emit('consultation.finalized', {
+        clinicId: currentClinicId(),
+        consultationNoteId: String(consultation.id),
+        patientId: consultation.patientId ? String(consultation.patientId) : undefined
+      });
+
       void diffAgainstDraft(currentClinicId(), consultation)
         .then((diff) => {
           recordFromRequest(req, {
@@ -805,6 +814,11 @@ mediscribeRouter.post('/save-consultation', requirePermission('consultation.writ
     void sendPrescriptionOnFinalize(currentClinicId(), consultation)
       .then((sent) => {
         if (!sent) return;
+        eventBus.emit('prescription.generated', {
+          clinicId: currentClinicId(),
+          prescriptionId: String(consultation.id),
+          patientId: consultation.patientId ? String(consultation.patientId) : undefined
+        });
         recordFromRequest(req, {
           action: 'PRESCRIPTION_SENT',
           resourceType: 'consultation',

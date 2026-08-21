@@ -13,6 +13,7 @@ import { notFoundHandler } from './middleware/notFound.js';
 import { registerProducts } from './products/register.js';
 import { registerEmrIntegration } from './integrations/emr/index.js';
 import { registerWebhookSubscriptions } from './core/webhooks/webhook.subscriptions.js';
+import { registerNotificationSubscriptions } from './core/notifications/notification.subscriptions.js';
 import { setIntentClassifier } from './core/mcp/index.js';
 import { mcpIntentClassifier } from './core/ai/mcp.classifier.js';
 
@@ -37,6 +38,9 @@ export const createApp = () => {
   // Bridge domain events to the outbound-webhook outbox. The handler only writes
   // a delivery row; webhook.cron owns the HTTP, retries and giving up.
   registerWebhookSubscriptions();
+  // Domain events → the clinic's notification feed → their phones. New
+  // patients, finalised notes and sent prescriptions were all silent before.
+  registerNotificationSubscriptions();
   // Plug external-EMR data sources into the resolver (config-gated via
   // EMR_MOCK_CLINICS; blank → every clinic stays native). Dependency inversion:
   // core/datasource never imports integrations.

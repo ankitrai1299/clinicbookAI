@@ -402,6 +402,14 @@ enum NotificationType {
   APPOINTMENT_CANCELLED
   APPOINTMENT_RESCHEDULED
   APPOINTMENT_COMPLETED
+  // A new patient exists — self-registered by QR, onboarded by their first
+  // WhatsApp message, or added at the desk. The clinic wants to know the moment
+  // someone joins their list, not the next time they open the dashboard.
+  PATIENT_REGISTERED
+  // A doctor finalised a consultation note (the scribe's Save).
+  CONSULTATION_COMPLETED
+  // A prescription actually reached the patient.
+  PRESCRIPTION_SENT
   // Operational/system alert surfaced to clinic admins (e.g. WhatsApp sending is
   // failing or the access token has expired so patients aren't getting replies).
   SYSTEM_ALERT

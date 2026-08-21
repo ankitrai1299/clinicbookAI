@@ -6,6 +6,7 @@
 // clinic swaps this for an adapter that resolves patients from the HMIS.
 
 import { randomInt } from 'crypto';
+import { eventBus } from '../../events/eventBus.js';
 
 import { Prisma } from '@prisma/client';
 
@@ -32,6 +33,29 @@ const normalizePhone = (phone: string) => phone.trim();
 
 export const nativePatients = (clinicId: string): PatientPort => {
   const db = forClinic(clinicId);
+
+  /**
+   * Tell the rest of the system a patient now exists.
+   *
+   * Emitted HERE rather than from each caller because there are four routes in
+   * (front desk, the public QR page, booking's find-or-create, and a first
+   * WhatsApp message) and "the newest one forgot to announce it" is exactly how
+   * a clinic stops hearing about half their new patients.
+   *
+   * Fire-and-forget by contract — the event bus never throws to its emitter, so
+   * a subscriber failing cannot fail the registration.
+   */
+  const announce = (patient: PatientRecord): PatientRecord => {
+    eventBus.emit('patient.registered', {
+      clinicId,
+      patientId: patient.id,
+      patientName: patient.name,
+      patientCode: patient.patientCode ?? null,
+      phone: patient.phone ?? null,
+      source: patient.source ?? null
+    });
+    return patient;
+  };
 
   // Creates a patient with a guaranteed-unique patientCode. The DB unique
   // constraint is the source of truth: on the rare patientCode collision (P2002)
@@ -92,7 +116,7 @@ export const nativePatients = (clinicId: string): PatientPort => {
         ...(data.gender !== undefined ? { gender: data.gender } : {}),
         ...(data.healthConcern !== undefined ? { healthConcern: data.healthConcern } : {}),
         ...(data.source !== undefined ? { source: data.source } : {})
-      }),
+      }).then(announce),
 
     onboard: (data: { name: string; phone: string; language: string; source: string }) =>
       db.patient.create({
@@ -104,7 +128,7 @@ export const nativePatients = (clinicId: string): PatientPort => {
           source: data.source
         },
         include: patientInclude
-      }),
+      }).then(announce),
 
     update: async (id: string, data: PatientUpdateData): Promise<PatientRecord> => {
       const existing = await db.patient.findFirst({ where: { id, clinicId }, select: { id: true } });
