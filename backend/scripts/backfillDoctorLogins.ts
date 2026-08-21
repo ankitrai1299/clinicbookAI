@@ -21,14 +21,44 @@
  * so putting one back is a single update.
  */
 
-import { prisma } from '../src/config/prisma.js';
+import { PrismaClient } from '@prisma/client';
+
 import { clinicBookRoleOf } from '../src/core/authz/index.js';
 
 const APPLY = process.argv.includes('--apply');
 
+/**
+ * WHICH database this runs against — stated explicitly, never inherited.
+ *
+ * The app's env loader reads `.env.local` with `override: true`, so it beats
+ * even a real environment variable. A script importing the shared client would
+ * therefore hit whatever `.env.local` points at — a local dev database — while
+ * everything on screen looked correct. That is exactly what happened the first
+ * time this was run: it reported "0 accounts to promote" against the wrong
+ * database, which is the most dangerous possible answer, because it looks like
+ * good news.
+ *
+ * So this builds its own client from a URL it is GIVEN, and refuses to guess.
+ */
+const url = process.env.BACKFILL_DATABASE_URL;
+if (!url) {
+  console.error(
+    '\nBACKFILL_DATABASE_URL is required — this script will not guess which database to touch.\n\n' +
+      '  BACKFILL_DATABASE_URL="postgresql://..." npm run doctors:backfill\n\n' +
+      'Use the DIRECT (non-pooled) URL. Add `-- --apply` once the dry run looks right.\n'
+  );
+  process.exit(1);
+}
+
+const prisma = new PrismaClient({ datasourceUrl: url });
+
 type Row = { clinicId: string; userId: string; email: string; was: string };
 
 const main = async () => {
+  // Say WHERE, before anything else. A run against the wrong database is the
+  // failure this preamble exists to prevent, and showing the operator where they
+  // are pointed is the only real defence.
+  console.log(`\ndatabase: ${url.replace(/:\/\/[^@]*@/, '://***@')}`);
   console.log(APPLY ? '\n=== APPLYING ===\n' : '\n=== DRY RUN — nothing will be changed ===\n');
 
   // ── 1. Which accounts are really doctors? ──────────────────────────────────
