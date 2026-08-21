@@ -54,7 +54,7 @@ export const NOT_PATIENT_DATA: Readonly<Record<string, string>> = {
   User: 'clinic staff accounts',
   EmailOtp: 'a staff signup code',
   AppPassword: 'a staff device credential',
-  DevicePushToken: 'a staff device2019s notification channel, holding no patient information',
+  DevicePushToken: 'a staff device’s notification channel, holding no patient information',
   Doctor: 'a doctor, who is a clinic resource rather than a patient',
   DoctorSchedule: 'a doctor’s working hours',
   DoctorLeave: 'a doctor’s leave',
