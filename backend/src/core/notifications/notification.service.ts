@@ -42,6 +42,29 @@ export const createNotification = async (input: CreateNotificationInput) => {
     at: notification.createdAt.toISOString()
   });
 
+  // …and to the PHONES, which is the half that matters when nobody has the
+  // dashboard open. Hooked here rather than at each call site so every producer
+  // — the booking service, approvals, the waitlist, the WhatsApp alerts — gets
+  // it without being touched, and a new one cannot forget.
+  //
+  // The body is the notification's own text, already written for a human and
+  // already free of clinical detail. It renders on a LOCKED screen, so that is
+  // not a cosmetic constraint.
+  pushToClinic(
+    input.clinicId,
+    {
+      title: notification.title,
+      body: notification.body,
+      data: {
+        type: String(notification.type),
+        ...(notification.appointmentId ? { appointmentId: notification.appointmentId } : {})
+      }
+    },
+    // An appointment concerns the front desk AND the doctor who will see the
+    // patient, so both apps get it.
+    ['clinicbook', 'mediscribe']
+  );
+
   return notification;
 };
 
