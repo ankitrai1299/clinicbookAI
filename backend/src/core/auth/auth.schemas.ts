@@ -12,7 +12,15 @@ export const signupSchema = z.object({
 
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(1).max(128)
+  password: z.string().min(1).max(128),
+  // WHICH product this sign-in is for. The web already knows — the ClinicBook
+  // and MediScribe sign-in pages are separate screens — it just never told the
+  // server, so a doctor could sign in at the ClinicBook door.
+  //
+  // OPTIONAL, and that is deliberate. The native MediScribe app posts to this
+  // same endpoint and does not send it; when it is absent the login behaves
+  // exactly as it always has, so no shipped client breaks.
+  product: z.enum(['clinicbook', 'mediscribe']).optional()
 });
 
 // Email verification (signup OTP gate).

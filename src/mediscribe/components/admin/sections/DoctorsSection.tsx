@@ -263,6 +263,8 @@ function DoctorFormModal({
   onSaved: () => void;
 }) {
   const { token } = useAuth();
+  // Not an error — the doctor WAS saved. It is the half that is missing.
+  const [warning, setWarning] = useState<string | null>(null);
   const [form, setForm] = useState<DoctorInput & { password?: string }>({
     name: doctor?.name || '',
     email: doctor?.email || '',
@@ -284,6 +286,7 @@ function DoctorFormModal({
     if (!token) return;
     setBusy(true);
     setError(null);
+    setWarning(null);
     try {
       const payload: DoctorInput = {
         name: form.name,
@@ -295,8 +298,18 @@ function DoctorFormModal({
         phone: form.phone,
       };
       if (form.password) payload.password = form.password;
-      if (doctor) await updateDoctor(token, doctor.id, payload);
-      else await createDoctor(token, payload);
+      const saved = doctor
+        ? await updateDoctor(token, doctor.id, payload)
+        : await createDoctor(token, payload);
+
+      // The doctor saved, but they may not be able to SIGN IN — no email, or no
+      // password typed. Say so here, in front of the person who can fix it, and
+      // stay on the form. Closing silently is how a doctor ends up phoning the
+      // clinic on their first morning.
+      if (saved.login === 'skipped' && saved.reason) {
+        setWarning(saved.reason);
+        return;
+      }
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save doctor');
@@ -316,6 +329,19 @@ function DoctorFormModal({
         {error && (
           <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm font-medium">
             {error}
+          </div>
+        )}
+        {warning && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+            <span className="font-medium">Saved — but this doctor cannot sign in yet.</span>{' '}
+            {warning}
+            <button
+              type="button"
+              onClick={onSaved}
+              className="mt-2 block underline underline-offset-2 font-medium"
+            >
+              That's fine, close
+            </button>
           </div>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

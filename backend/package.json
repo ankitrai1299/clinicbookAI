@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "storage:check": "tsx scripts/checkStorage.ts"
+    "storage:check": "tsx scripts/checkStorage.ts",
+    "doctors:backfill": "tsx scripts/backfillDoctorLogins.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",

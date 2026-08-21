@@ -57,7 +57,20 @@ export const isMfaChallenge = (r: AuthResult | MfaChallenge): r is MfaChallenge 
  * the server side too: a client that knows nothing about MFA must treat this as
  * a failure rather than as a session.
  */
-export const loginUser = async (body: { email: string; password: string }): Promise<AuthResult | MfaChallenge> => {
+export const loginUser = async (body: {
+  email: string;
+  password: string;
+  /**
+   * Which product this sign-in is for. The server refuses a doctor at the
+   * ClinicBook door and says so, instead of letting them into a front-desk
+   * dashboard that was never meant for them.
+   *
+   * Optional on the server, so leaving it out is a working login — but the web
+   * always knows which of the two sign-in screens the person is on, so it always
+   * sends it.
+   */
+  product?: 'clinicbook' | 'mediscribe';
+}): Promise<AuthResult | MfaChallenge> => {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/api/auth/login`, {

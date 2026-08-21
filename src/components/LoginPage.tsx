@@ -52,7 +52,14 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
     setError(null);
     setLoading(true);
     try {
-      const result = await loginUser({ email, password });
+      // Tell the server which door this is. `product` is 'novascribe' here for
+      // historic routing reasons — the deep links on doctors' phones still use
+      // that word — but the surface the SERVER knows is called 'mediscribe'.
+      const result = await loginUser({
+        email,
+        password,
+        product: isNova ? 'mediscribe' : 'clinicbook',
+      });
 
       // Password accepted, second factor owed. Hold the short-lived challenge
       // token and ask for the code — nothing is stored as a session yet.

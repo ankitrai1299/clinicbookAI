@@ -20,11 +20,19 @@ export const requireAuth = (req: Request, _res: Response, next: NextFunction) =>
     return next(new AppError('Invalid or expired token', 401));
   }
 
-  // Doctor-portal tokens must never unlock the admin/clinic API. They carry a
-  // doctorId in `userId` (not a real User) and are confined to /api/doctor-portal.
-  if (payload.role === 'DOCTOR') {
-    return next(new AppError('Invalid token for this resource', 403));
-  }
+  // There used to be a hard refusal here for any token whose role was 'DOCTOR'.
+  // It guarded the deleted doctor portal, whose tokens carried a doctorId in
+  // `userId` — not a real User — and had to be kept out of the clinic API.
+  //
+  // DOCTOR is now a real account role, so that line would have rejected every
+  // genuine doctor with "Invalid token for this resource" and made the login look
+  // broken for exactly the people this change is for.
+  //
+  // Removing it is safe on its own terms: no portal token can be minted any more
+  // (the code is gone), and one that somehow survived is refused a few lines
+  // below anyway — the revocation check looks the user up, finds no such User,
+  // and returns 401. Where a doctor may actually GO is decided by the permission
+  // matrix and core/authz/surfaces.ts, not by refusing them a session.
 
   // Half-authenticated: the password was right, the second factor was not given.
   // Only the MFA verification route accepts one of these; everything else must

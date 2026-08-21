@@ -13,6 +13,7 @@ import { hashPassword, sanitizeUser, newId } from '../services/auth.js';
 import { requirePermission } from '../middleware/auth.js';
 import type { AdminSettings, SearchResult } from '../contracts/index.js';
 import { currentClinicId } from '../context.js';
+import { clinicBookRoleOf, type PlatformRole } from '../../../core/authz/index.js';
 import {
   listClinicDoctorsAdmin,
   listClinicPatientsAdmin,
@@ -82,45 +83,133 @@ router.get('/doctors', requirePermission('doctors.view'), async (req, res) => {
   }
 });
 
-// Give (or reset) a doctor an app login. When the admin types a password in the
-// Doctors form, create a REAL ClinicBook login account for the doctor (email +
-// password + the 'doctor' MediScribe role) so they can sign in — and keep the
-// doctor's email in sync, which is the link that scopes their appointments to
-// their login. Existing login for that email → password reset. No email or no
-// password → nothing to do (doctors stay bookable resources without a login).
+// Give (or reset) a doctor an app login.
+//
+// This is the ONE place a doctor becomes a person who can sign in. It writes all
+// three things that make a doctor whole, together:
+//
+//   1. the login account          (email + password, role DOCTOR)
+//   2. the link                   (Doctor.userId → that account)
+//   3. the scribe's stored role   ('doctor', what the admin lists read)
+//
+// The link is the point. It used to be an email compared against an email, so an
+// admin who left the field blank or typed a different address produced a doctor
+// who signed in fine and saw an EMPTY day — nothing failed, so nothing was
+// reported. A key cannot be mistyped.
+//
+// No email or no password → no login, and we SAY so in the response rather than
+// returning silently. A bookable doctor with no login is a legitimate thing to
+// want; a doctor the admin THINKS has a login and doesn't is the bug.
+type LoginResult = { login: 'created' | 'updated' | 'skipped'; reason?: string };
+
 async function giveDoctorLogin(
   clinicId: string,
   doctor: { id: string; name: string; email?: string | null },
   emailInput?: string,
   passwordInput?: string
-): Promise<void> {
+): Promise<LoginResult> {
   const password = passwordInput ? String(passwordInput) : '';
   const email = String(emailInput ?? doctor.email ?? '').toLowerCase().trim();
-  if (!email || password.length < 6) return;
+  if (!email) return { login: 'skipped', reason: 'No email — add one to give this doctor a login.' };
+  if (password.length < 6) {
+    return { login: 'skipped', reason: 'No password (min 6 chars) — this doctor cannot sign in yet.' };
+  }
 
   const { prisma } = await import('../../../config/prisma.js');
-  const { UserRole } = await import('@prisma/client');
   const bcrypt = (await import('bcryptjs')).default;
   const { forClinic } = await import('../../../config/tenantPrisma.js');
+  const { clinicBookRoleOf } = await import('../../../core/authz/index.js');
 
   const passwordHash = await bcrypt.hash(password, 12);
   if (email !== (doctor.email ?? '').toLowerCase()) {
     await forClinic(clinicId).doctor.update({ where: { id: doctor.id }, data: { email } }).catch(() => undefined);
   }
 
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  // `User.email` is unique across the WHOLE platform, so this lookup can only be
+  // done unscoped — and that is exactly why the clinic must be checked after it.
+  // Without the check, an admin of clinic A typing an address that belongs to
+  // clinic B would RESET THAT PERSON'S PASSWORD and hand their account to a
+  // different tenant. Refuse instead, and say why.
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, clinicId: true }
+  });
+  if (existing && existing.clinicId !== clinicId) {
+    throw new Error('That email already belongs to an account at another clinic.');
+  }
+
+  const role = clinicBookRoleOf('doctor');
   let userId: string;
+  let outcome: 'created' | 'updated';
   if (existing) {
-    await prisma.user.update({ where: { id: existing.id }, data: { passwordHash, emailVerified: true } });
+    // Promote to DOCTOR as well as resetting the password: an account that was
+    // created before this role existed is still stored as STAFF.
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { passwordHash, emailVerified: true, role }
+    });
     userId = existing.id;
+    outcome = 'updated';
   } else {
     const created = await prisma.user.create({
-      data: { clinicId, name: doctor.name, email, passwordHash, role: UserRole.STAFF, emailVerified: true },
-      select: { id: true },
+      data: { clinicId, name: doctor.name, email, passwordHash, role, emailVerified: true },
+      select: { id: true }
     });
     userId = created.id;
+    outcome = 'created';
   }
+
+  // The link, written last so it only ever points at an account that exists.
+  // Unique, so a second doctor cannot claim the same login: if that happens the
+  // link is left alone rather than silently stolen from the first doctor.
+  await forClinic(clinicId)
+    .doctor.update({ where: { id: doctor.id }, data: { userId } })
+    .catch(() => undefined);
+
   await usersRepo.upsert({ id: userId, name: doctor.name, email, role: 'doctor', status: 'active', hospitalId: '' });
+  return { login: outcome };
+}
+
+// The mirror of giveDoctorLogin: an account was created FIRST (from Roles &
+// Users, where the admin picks a role rather than filling a doctor form), so now
+// the bookable half has to catch up.
+//
+// Prefer an existing unlinked Doctor with the same address — an admin who added
+// the doctor to the Doctors page last week and is only now giving them a login
+// should end up with ONE doctor, not two with the same name.
+async function linkOrCreateDoctorFor(
+  clinicId: string,
+  account: { id: string; name: string; email: string },
+  specialization: string
+): Promise<void> {
+  const { forClinic } = await import('../../../config/tenantPrisma.js');
+  const db = forClinic(clinicId);
+
+  const existing = await db.doctor.findFirst({
+    where: { userId: null, email: { equals: account.email, mode: 'insensitive' } },
+    select: { id: true }
+  });
+  if (existing) {
+    await db.doctor.update({ where: { id: existing.id }, data: { userId: account.id } }).catch(() => undefined);
+    return;
+  }
+
+  // `@@unique([clinicId, name])` — a clash means a doctor of that name is already
+  // on the books. Linking the account to THAT record is wrong (it may be someone
+  // else entirely), so leave it: the admin can set the email on the Doctors page
+  // and the link is made there. Failing loudly here would block a login that is
+  // otherwise fine.
+  await db.doctor
+    .create({
+      data: {
+        clinicId,
+        name: account.name,
+        speciality: specialization.trim() || 'General',
+        email: account.email,
+        userId: account.id
+      }
+    })
+    .catch(() => undefined);
 }
 
 // Add a doctor from the scribe → creates a REAL ClinicBook doctor (shows in both
@@ -131,8 +220,16 @@ router.post('/doctors', requirePermission('doctors.manage'), async (req, res) =>
     const { name, specialization, experience, email, phone, password } = req.body ?? {};
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Doctor name is required' });
     const doctor = await createClinicDoctor(currentClinicId(), { name, specialization, experience, email, phone });
-    await giveDoctorLogin(currentClinicId(), doctor as { id: string; name: string; email?: string | null }, email, password);
-    return res.json(doctor);
+    const login = await giveDoctorLogin(
+      currentClinicId(),
+      doctor as { id: string; name: string; email?: string | null },
+      email,
+      password
+    );
+    // Additive: the client keeps reading the doctor exactly as before and simply
+    // ignores what it does not know about. But now, if no login was created, the
+    // reason travelled back instead of vanishing.
+    return res.json({ ...(doctor as object), ...login });
   } catch (error: any) {
     console.error('[admin:doctor:create]', error);
     return res.status(400).json({ error: error?.message || 'Failed to create doctor' });
@@ -143,8 +240,13 @@ router.put('/doctors/:id', requirePermission('doctors.manage'), async (req, res)
   try {
     const { name, specialization, experience, email, phone, password } = req.body ?? {};
     const doctor = await updateClinicDoctor(currentClinicId(), req.params.id, { name, specialization, experience, email, phone });
-    await giveDoctorLogin(currentClinicId(), doctor as { id: string; name: string; email?: string | null }, email, password);
-    return res.json(doctor);
+    const login = await giveDoctorLogin(
+      currentClinicId(),
+      doctor as { id: string; name: string; email?: string | null },
+      email,
+      password
+    );
+    return res.json({ ...(doctor as object), ...login });
   } catch (error: any) {
     console.error('[admin:doctor:update]', error);
     const status = /not found/i.test(error?.message || '') ? 404 : 400;
@@ -193,19 +295,19 @@ router.post('/users', requirePermission('users.manage'), async (req, res) => {
     const normalized = String(email).toLowerCase().trim();
 
     // Create a REAL, pre-verified ClinicBook login account in THIS clinic. The
-    // ClinicBook role is mapped from the chosen MediScribe role (ClinicBook has no
-    // DOCTOR enum); the full MediScribe role (e.g. 'doctor') is stored keyed by the
-    // new account id, so on login /me returns it and the correct panel opens. This is
-    // what makes "doctorx@clinic → doctor panel, adminx@clinic → admin panel" work.
+    // ClinicBook role is mapped from the chosen role, and the same role is stored
+    // keyed by the new account id, so on login /me returns it and the correct
+    // panel opens — "doctorx@clinic → doctor panel, adminx@clinic → admin panel".
     const { prisma } = await import('../../../config/prisma.js');
-    const { UserRole } = await import('@prisma/client');
     const bcrypt = (await import('bcryptjs')).default;
 
     const exists = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true } });
     if (exists) return res.status(409).json({ error: 'A user with that email already exists' });
 
-    const clinicRole =
-      role === 'superadmin' ? UserRole.ADMIN : role === 'hospital_admin' ? UserRole.CLINIC_ADMIN : UserRole.STAFF;
+    // One mapper, shared with its inverse and round-trip tested. This used to be
+    // a ternary chain ending `: UserRole.STAFF`, duplicated here and below — so
+    // 'doctor', which neither branch named, silently became front-desk staff.
+    const clinicRole = clinicBookRoleOf(role as PlatformRole);
 
     const account = await prisma.user.create({
       data: {
@@ -222,6 +324,14 @@ router.post('/users', requirePermission('users.manage'), async (req, res) => {
     // Persist the MediScribe role keyed by the ClinicBook account id (what /me reads).
     const mUser = { id: account.id, name: account.name, email: account.email, role, status: 'active' as const, hospitalId: '' };
     await usersRepo.upsert(mUser);
+
+    // A DOCTOR needs the other half too, or the admin has created someone who can
+    // sign in but whom no patient can book — and whose queue is therefore empty
+    // for a reason nothing on screen explains. Reuse the clinic's existing Doctor
+    // record when one already matches this address; otherwise make one.
+    if (role === 'doctor') {
+      await linkOrCreateDoctorFor(currentClinicId(), account, String(req.body?.specialization ?? ''));
+    }
     return res.json(sanitizeUser(mUser));
   } catch (error) {
     console.error('[admin:user:create]', error);
@@ -239,9 +349,7 @@ router.put('/users/:id/role', requirePermission('users.manage'), async (req, res
     // aren't a real ClinicBook account).
     try {
       const { prisma } = await import('../../../config/prisma.js');
-      const { UserRole } = await import('@prisma/client');
-      const clinicRole =
-        role === 'superadmin' ? UserRole.ADMIN : role === 'hospital_admin' ? UserRole.CLINIC_ADMIN : UserRole.STAFF;
+      const clinicRole = clinicBookRoleOf(role as PlatformRole);
       await prisma.user.update({ where: { id: req.params.id }, data: { role: clinicRole } });
     } catch {
       /* not a ClinicBook account row — MediScribe role is enough */

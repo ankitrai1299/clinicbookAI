@@ -4,5 +4,14 @@
 // vocabularies map onto one, and requirePermission.ts for enforcement.
 
 export { PERMISSIONS, ROLE_PERMISSIONS, hasPermission, type Permission } from './permissions.js';
-export { PLATFORM_ROLES, platformRoleOf, asPlatformRole, effectiveRole, type PlatformRole } from './roles.js';
+export {
+  PLATFORM_ROLES,
+  platformRoleOf,
+  clinicBookRoleOf,
+  asPlatformRole,
+  effectiveRole,
+  type PlatformRole,
+  type ClinicBookRole
+} from './roles.js';
 export { requirePermission, assertPermission, resolveActingRole, type RoleResolver } from './requirePermission.js';
+export { SURFACES, SURFACE_ACCESS, maySignInTo, wrongSurfaceMessage, type Surface } from './surfaces.js';

@@ -47,6 +47,11 @@ export function mapClinicBookRole(role: string | undefined): Role {
       return 'superadmin';
     case 'CLINIC_ADMIN':
       return 'hospital_admin';
+    // MUST be listed. This function's fallback is `hospital_admin`, so a DOCTOR
+    // account reaching the default would be handed a CLINIC ADMIN's session —
+    // which is why the enum value may never ship ahead of this line.
+    case 'DOCTOR':
+      return 'doctor';
     case 'STAFF':
       return 'receptionist';
     default:

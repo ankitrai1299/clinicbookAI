@@ -433,7 +433,8 @@ mediscribeRouter.get('/appointments/upcoming', async (req: AuthedRequest, res: R
     // A doctor sees only their own appointments (matched to a ClinicBook Doctor by
     // email); an admin/receptionist sees every doctor's.
     const me = await resolvePrincipal(req);
-    const opts = me.role === 'doctor' ? { doctorEmail: req.auth?.email } : undefined;
+    const opts =
+      me.role === 'doctor' ? { doctorEmail: req.auth?.email, doctorUserId: req.auth?.userId } : undefined;
     return res.json(await listUpcomingAppointments(currentClinicId(), opts));
   } catch (error) { console.error('[mediscribe:upcoming]', error); return res.json([]); }
 });
@@ -447,7 +448,7 @@ mediscribeRouter.get('/appointments/link-status', async (req: AuthedRequest, res
     const me = await resolvePrincipal(req);
     if (me.role !== 'doctor') return res.json({ linked: true, role: me.role });
     const email = req.auth?.email ?? '';
-    const doctor = await findDoctorForLogin(currentClinicId(), email);
+    const doctor = await findDoctorForLogin(currentClinicId(), email, req.auth?.userId);
     return res.json({ linked: !!doctor, role: me.role, email, doctorName: doctor?.name ?? null });
   } catch (error) {
     console.error('[mediscribe:link-status]', error);

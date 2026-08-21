@@ -642,22 +642,34 @@ export async function getDoctors(token: string, search = ''): Promise<AuthUser[]
   return jsonOrThrow<AuthUser[]>(res, 'Failed to load doctors');
 }
 
-export async function createDoctor(token: string, input: DoctorInput): Promise<AuthUser> {
+/**
+ * Whether saving the doctor also gave them a way to SIGN IN.
+ *
+ * A bookable doctor with no login is a legitimate thing to create. A doctor the
+ * admin believes has a login and doesn't is the bug this reports: they would
+ * find out when the doctor phoned to say the app won't let them in.
+ */
+export interface DoctorSaved extends AuthUser {
+  login?: 'created' | 'updated' | 'skipped';
+  reason?: string;
+}
+
+export async function createDoctor(token: string, input: DoctorInput): Promise<DoctorSaved> {
   const res = await fetch(`${ADMIN}/doctors`, {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify(input),
   });
-  return jsonOrThrow<AuthUser>(res, 'Failed to create doctor');
+  return jsonOrThrow<DoctorSaved>(res, 'Failed to create doctor');
 }
 
-export async function updateDoctor(token: string, id: string, input: DoctorInput): Promise<AuthUser> {
+export async function updateDoctor(token: string, id: string, input: DoctorInput): Promise<DoctorSaved> {
   const res = await fetch(`${ADMIN}/doctors/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: authHeaders(token),
     body: JSON.stringify(input),
   });
-  return jsonOrThrow<AuthUser>(res, 'Failed to update doctor');
+  return jsonOrThrow<DoctorSaved>(res, 'Failed to update doctor');
 }
 
 export async function deleteDoctor(token: string, id: string): Promise<void> {

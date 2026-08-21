@@ -253,21 +253,38 @@ const dateStrOf = (d: Date): string => d.toISOString().slice(0, 10);
  * started a few minutes ago — because the doctor documents the visit during or
  * after it. So the rule is simply "today (clinic-local) or later, not cancelled". */
 /**
- * Is this login actually linked to a ClinicBook Doctor?
+ * The ClinicBook Doctor this login IS.
  *
- * The link is by email, and nothing keeps the two sides in step: a Doctor row
- * can carry a different address from the login, or none at all. When it misses,
- * the queue is empty — indistinguishable from "no appointments booked", which is
- * how a doctor with a full day sat looking at a blank dashboard. The dashboard
- * uses this to say WHICH of the two it is.
+ * Two ways in, and the order is the whole point:
+ *
+ *   1. `Doctor.userId` — a real key, written when the account was created.
+ *   2. the email — how it used to work, and still the only way for doctors who
+ *      existed before the key did.
+ *
+ * The email path is why a doctor could sign in perfectly and see an EMPTY day:
+ * `Doctor.email` is optional and typed by hand, so leaving it blank or typing a
+ * different address made the match miss, and a miss looks exactly like "no
+ * appointments booked". Nothing failed, so nothing was reported. Keys cannot be
+ * mistyped — but the fallback stays until every doctor has one.
  */
 export const findDoctorForLogin = async (
   clinicId: string,
-  email?: string | null
+  email?: string | null,
+  userId?: string | null
 ): Promise<{ id: string; name: string } | null> => {
+  const db = forClinic(clinicId);
+
+  if (userId) {
+    const byKey = await db.doctor.findFirst({ where: { userId }, select: { id: true, name: true } });
+    if (byKey) return byKey;
+  }
+
   const e = (email || '').trim();
   if (!e) return null;
-  return forClinic(clinicId).doctor.findFirst({
+  // Case-insensitive, and it must stay that way: the login is stored lowercased
+  // while a Doctor row keeps whatever the admin typed ("A.K.DAS@gmail.com"), so
+  // lowercasing only one side made a miss CERTAIN for any capitalised address.
+  return db.doctor.findFirst({
     where: { email: { equals: e, mode: 'insensitive' } },
     select: { id: true, name: true }
   });
@@ -275,27 +292,23 @@ export const findDoctorForLogin = async (
 
 export const listUpcomingAppointments = async (
   clinicId: string,
-  opts?: { doctorEmail?: string }
+  opts?: { doctorEmail?: string; doctorUserId?: string }
 ): Promise<UpcomingAppointment[]> => {
   const today = clinicNow().dateStr;
 
-  // Doctor scope: a logged-in doctor sees only the appointments of the ClinicBook
-  // Doctor whose email matches theirs (the doctor-user ↔ Doctor link). No matching
-  // Doctor → no appointments (we can't tell which are "theirs"). Admins pass no
-  // doctorEmail, so they see every doctor's appointments.
+  // Doctor scope: a logged-in doctor sees only THEIR OWN appointments — the ones
+  // belonging to the ClinicBook Doctor their login is. Resolved by
+  // findDoctorForLogin, which prefers the `Doctor.userId` key and falls back to
+  // the email for doctors created before that key existed.
   //
-  // The comparison MUST be case-insensitive. Emails are case-insensitive in
-  // practice but Postgres `=` is not, and the two sides are written by different
-  // flows: the login is stored lowercased while a Doctor row keeps whatever the
-  // admin typed ("doctorA.K.DAS@gmail.com"). Lowercasing only the input made a
-  // miss CERTAIN for any doctor whose stored address has a capital in it — their
-  // queue silently rendered empty with a real appointment sitting in the table.
+  // No matching Doctor → NO appointments, never "all of them". We cannot tell
+  // which are theirs, and showing a doctor another doctor's patients is worse
+  // than showing them nothing.
+  //
+  // Admins pass neither option, so they see every doctor's appointments.
   let onlyDoctorId: string | null = null;
-  if (opts?.doctorEmail) {
-    const doc = await forClinic(clinicId).doctor.findFirst({
-      where: { email: { equals: opts.doctorEmail.trim(), mode: 'insensitive' } },
-      select: { id: true }
-    });
+  if (opts?.doctorEmail || opts?.doctorUserId) {
+    const doc = await findDoctorForLogin(clinicId, opts.doctorEmail, opts.doctorUserId);
     onlyDoctorId = doc?.id ?? '__no_match__';
   }
 

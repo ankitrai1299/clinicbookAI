@@ -136,18 +136,29 @@ const routesIn = (abs: string): RouteLine[] => {
 const PUBLIC_FILES = [
   'core/patients/public.routes.ts', // the shareable /register page and booking funnel
   'core/publicapi/v1.routes.ts', // partner API, authenticated by ApiKey + scopes
-  'core/webhooks/webhook.routes.ts', // outbound webhook management, mounted separately
   'routes/health.routes.ts', // liveness
-  'core/billing/billing.routes.ts', // Stripe, verified by webhook signature
-  // UNMOUNTED — routes/index.ts does not register this router (a doctor is a
-  // bookable resource in this product, not an account). Nothing can reach it, so
-  // gating it would be gating dead code; if it is ever remounted it must be
-  // gated first, and removing this line is how that gets noticed.
-  'modules/doctor-portal/doctorPortal.routes.ts'
+  'core/billing/billing.routes.ts' // Stripe, verified by webhook signature
 ];
+
+// An exemption for a file that no longer exists is worse than no exemption: it
+// reads as "we thought about this one" while guarding nothing, and the next
+// person to add a file at that path inherits a silent pass. The doctor portal
+// was deleted, so its line went with it — and this test now says so.
+
 
 describe('every authenticated route is authorized', () => {
   const files = walk(SRC).filter((f) => !PUBLIC_FILES.includes(rel(f)));
+
+  it('has no exemption for a file that no longer exists', () => {
+    const present = new Set(walk(SRC).map(rel));
+    const stale = PUBLIC_FILES.filter((f) => !present.has(f));
+    expect(
+      stale,
+      'These files are exempted from authorization but do not exist. Delete the ' +
+        'lines — a stale exemption silently covers whatever is created at that ' +
+        `path next:\n  ${stale.join('\n  ')}`
+    ).toEqual([]);
+  });
 
   it('finds the routers, so a broken parser cannot pass this vacuously', () => {
     const all = files.flatMap(routesIn);

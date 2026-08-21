@@ -13,7 +13,6 @@ import billingRouter from '../core/billing/billing.routes.js';
 import clinicRouter from '../core/clinics/clinic.routes.js';
 import doctorRouter from '../core/doctors/doctor.routes.js';
 // Unmounted below — kept so restoring the portal is a one-line change.
-// import doctorPortalRouter from '../modules/doctor-portal/doctorPortal.routes.js';
 import notificationRouter from '../core/notifications/notification.routes.js';
 import patientRouter from '../core/patients/patient.routes.js';
 import publicPatientRouter from '../core/patients/public.routes.js';
@@ -33,15 +32,12 @@ apiRouter.use('/api/ai', aiRouter);
 apiRouter.use('/api/billing', billingRouter);
 apiRouter.use('/api/clinics', clinicRouter);
 apiRouter.use('/api/doctors', doctorRouter);
-// Doctor login portal — UNMOUNTED. In this product a doctor is a bookable
-// RESOURCE, not an account: the clinic admin is the customer, and doctors reach
-// their work through MediScribe's own login. The portal was built before that was
-// settled, and nothing renders its UI, so all this mount contributed was a live
-// self-registration endpoint nobody could reach a screen for.
-//
-// The module and the two doctor rows that carry a portal password are left
-// alone — restoring it is this one line.
-// apiRouter.use('/api/doctor-portal', doctorPortalRouter);
+// There was a second, separate doctor login here — its own password field, its
+// own middleware, its own screens — unmounted but still in the tree. It is now
+// DELETED. A doctor signs in through the one shared login and reaches their work
+// in MediScribe; ClinicBook is for admins and the front desk (see
+// core/authz/surfaces.ts). A disabled login sitting next to a live one is how
+// the wrong one gets switched back on.
 apiRouter.use('/api/notifications', notificationRouter);
 apiRouter.use('/api/patients', patientRouter);
 apiRouter.use('/api/public', publicPatientRouter);

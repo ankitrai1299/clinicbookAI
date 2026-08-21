@@ -18,6 +18,12 @@ enum ClinicPlan {
 enum UserRole {
   ADMIN
   CLINIC_ADMIN
+  // A doctor is a first-class identity, not front-desk staff. Before this value
+  // existed, an admin creating a doctor had to store them as STAFF and keep the
+  // real role in MediScribe's own store — so the token said "receptionist" and
+  // only routes that did a second lookup knew better. ADDITIVE: no existing row
+  // uses it, so adding it changes nothing for anyone who can log in today.
+  DOCTOR
   STAFF
 }
 
@@ -265,6 +271,8 @@ model User {
   updatedAt       DateTime  @updatedAt
 
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  // Set when this account IS a doctor (role DOCTOR). Null for admins and staff.
+  doctor          Doctor?
   aiConversations AiConversation[]
   emailOtp        EmailOtp?
   appPasswords    AppPassword[]
@@ -319,9 +327,26 @@ model Doctor {
   experienceYears Int?
   email           String?
   phone           String?
-  // Set when the doctor self-registers on the Doctor Portal. Null for doctors
-  // created by an admin who haven't claimed a login yet.
+  // DEAD. The Doctor Portal it belonged to is gone (a second, separate doctor
+  // login). Kept as a column only because dropping one is destructive and there
+  // is no reason to do that in the same change; nothing reads or writes it.
   passwordHash    String?
+
+  // The login account this doctor signs in with.
+  //
+  // Before this, a doctor's account and their bookable record were joined by
+  // comparing two hand-typed email addresses. `email` above is optional, so
+  // leaving it blank — or typing a different address — let a doctor sign in
+  // successfully and see an EMPTY day, with no error, because nothing failed.
+  // A key cannot be mistyped.
+  //
+  // Optional, because every doctor that exists today has no account linked yet
+  // and must keep working through the email fallback.
+  //
+  // SetNull, not Cascade: deleting a login must not delete the clinical record
+  // of a doctor who has appointments and consultations attached to them.
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   clinic       Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments Appointment[]

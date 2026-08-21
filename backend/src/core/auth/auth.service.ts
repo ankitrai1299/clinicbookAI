@@ -8,6 +8,7 @@ import { resolveAppPassword } from './appPassword.service.js';
 import { AppError } from '../../utils/AppError.js';
 import { issueOtp, verifyOtp } from './otp.service.js';
 import { LoginInput, SignupInput } from './auth.schemas.js';
+import { platformRoleOf, maySignInTo, wrongSurfaceMessage } from '../authz/index.js';
 
 // NOTE: raw prisma by design. Authentication runs BEFORE/ACROSS tenancy — login
 // and getAuthenticatedUser resolve identity by globally-unique email / userId
@@ -146,6 +147,33 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
   }
 
   const { passwordHash: _passwordHash, emailVerified: _emailVerified, mfaEnabled, ...user } = userRecord;
+
+  // The right door. Checked AFTER the password, so a wrong password still reads
+  // as "invalid email or password" and this never becomes a way to discover
+  // which addresses belong to doctors. Checked BEFORE the second factor, so a
+  // doctor is not made to fetch a code and only then told they are in the wrong
+  // app.
+  //
+  // Skipped entirely when the client did not say which product it is — that is
+  // every already-installed native app, and none of them change behaviour.
+  if (input.product) {
+    const role = platformRoleOf(user.role);
+    if (!maySignInTo(role, input.product)) {
+      // 403, not 401: the credentials were correct. A 401 would send the client
+      // to its "wrong password" branch and the person to a password reset that
+      // cannot help them.
+      //
+      // A null role means this build has never heard of the value in the token.
+      // It still cannot sign in (maySignInTo fails closed), but there is no
+      // honest "use the other app" to offer, so say only what is true.
+      throw new AppError(
+        role
+          ? wrongSurfaceMessage(role, input.product)
+          : 'This account cannot sign in here. Ask your clinic administrator.',
+        403
+      );
+    }
+  }
 
   // Second factor, if this user turned it on. The token issued here proves the
   // PASSWORD only (scope 'mfa'); requireAuth refuses it, and the only route that
