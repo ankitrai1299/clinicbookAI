@@ -63,12 +63,16 @@ describe('a notification reaches the phones, not only the open dashboard', () =>
     expect(pushes[0].clinicId).toBe('c1');
   });
 
-  it('reaches BOTH apps', () => {
-    // An appointment concerns the front desk and the doctor who will see the
-    // patient. Narrowing this to one product is a decision, not a default.
-    return createNotification(input).then(() => {
-      expect(pushes[0].products).toEqual(['clinicbook', 'mediscribe']);
-    });
+  it('routes by TYPE, not to everyone', async () => {
+    // A booking request is front-desk work — the desk confirms it, and it may
+    // never reach a doctor's day at all. Sending everything to both apps made
+    // each one noise to the person carrying it. See notification.audience.ts.
+    await createNotification(input);
+    expect(pushes[0].products).toEqual(['clinicbook']);
+
+    pushes.length = 0;
+    await createNotification({ ...input, type: 'APPOINTMENT_CONFIRMED' as never });
+    expect(pushes[0].products).toEqual(['mediscribe']);
   });
 
   it('sends the notification’s own words, and ids as data', async () => {

@@ -3,6 +3,7 @@ import { NotificationType } from '@prisma/client';
 import { forClinic } from '../../config/tenantPrisma.js';
 import { publishClinicEvent } from './notification.realtime.js';
 import { pushToClinic } from './push.service.js';
+import { audienceFor } from './notification.audience.js';
 
 // Dashboard notification feed (the bell / notification center). The automation
 // engine writes here whenever something happens that staff should see —
@@ -60,9 +61,11 @@ export const createNotification = async (input: CreateNotificationInput) => {
         ...(notification.appointmentId ? { appointmentId: notification.appointmentId } : {})
       }
     },
-    // An appointment concerns the front desk AND the doctor who will see the
-    // patient, so both apps get it.
-    ['clinicbook', 'mediscribe']
+    // WHO hears this depends on WHAT it is — a registration is front-desk work,
+    // a confirmed appointment is the doctor's day. See notification.audience.ts;
+    // sending everything to both apps made each one noise to the person
+    // carrying it.
+    audienceFor(notification.type)
   );
 
   return notification;
