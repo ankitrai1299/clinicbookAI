@@ -33,16 +33,26 @@ router.get('/me', async (req: AuthedRequest, res) => {
       status: 'active',
     };
 
-    // Mirror identity so admin user lists include this user. Persist the DEFAULT
-    // role ONLY when the user has none yet — never clobber an admin-assigned role
-    // (the store shallow-merges, so omitting `role` preserves the stored one).
+    // Mirror IDENTITY so admin user lists include this user — name, email,
+    // status. Never the role.
+    //
+    // This used to also write the role derived from the ClinicBook session when
+    // the user had none stored. That single write FROZE it: from then on the
+    // stored value won here forever, even after the ClinicBook role changed. Two
+    // accounts spent months showing "Super Admin" in the scribe because that is
+    // what they happened to be the first time they opened it; the User table had
+    // said CLINIC_ADMIN for a long time and nothing could dislodge the label.
+    //
+    // With nothing written, an unassigned user falls through to the ClinicBook
+    // role on every request, which is by definition current. A stored role now
+    // means one thing only: an admin deliberately assigned it in Roles & Users.
+    // (The store shallow-merges, so omitting `role` leaves any assigned one be.)
     usersRepo
       .upsert({
         id: auth.userId,
         name: merged.name,
         email: auth.email,
         status: 'active',
-        ...(assignedRole ? {} : { role: auth.role }),
       })
       .catch(() => undefined);
 
