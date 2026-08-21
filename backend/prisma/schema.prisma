@@ -56,6 +56,11 @@ model Clinic {
   name             String
   email            String     @unique
   phone            String     @unique
+  // Health Facility Registry id — this clinic's identity in ABDM. Null until
+  // the clinic is registered there; the FHIR document names the organisation by
+  // this when present and omits the identifier entirely when it is not, rather
+  // than inventing one.
+  hfrId            String?
   plan             ClinicPlan @default(STARTER)
   // WHICH products this clinic bought — a different axis from `plan`, which is
   // the tier (how much they pay). A clinic can be on GROWTH with only the scribe.
@@ -310,6 +315,23 @@ model Patient {
   source        String   @default("staff") // 'staff' (dashboard) | 'public' (self-registration)
   createdAt     DateTime @default(now())
 
+  // ── ABDM / ABHA ─────────────────────────────────────────────────────────
+  //
+  // A patient's national health identity. Both are NULL until the patient has
+  // actually linked their ABHA — which is a deliberate act by the patient, not
+  // something a clinic can fill in on their behalf. Everything about this
+  // integration must read "no ABHA" as a normal state, because for most
+  // patients it always will be.
+  //
+  // NOT unique at the database level, on purpose. One person has one ABHA but
+  // may be a patient at several clinics, so it cannot be globally unique; and a
+  // per-clinic unique constraint belongs at the moment of LINKING, where there
+  // is a human to tell. A constraint here would instead surface as an opaque
+  // write failure somewhere unrelated.
+  abhaNumber   String? // 14 digits, e.g. "12-3456-7890-1234"
+  abhaAddress  String? // ABHA address, e.g. "someone@abdm"
+  abhaLinkedAt DateTime?
+
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
   waitlistEntry   Waitlist?
@@ -327,6 +349,10 @@ model Doctor {
   experienceYears Int?
   email           String?
   phone           String?
+  // Healthcare Professional Registry id — the doctor's identity in ABDM, and
+  // the registration number that appears on a clinical document. Each doctor
+  // registers themselves on HPR; a clinic cannot do it for them.
+  hprId           String?
   // DEAD. The Doctor Portal it belonged to is gone (a second, separate doctor
   // login). Kept as a column only because dropping one is destructive and there
   // is no reason to do that in the same change; nothing reads or writes it.

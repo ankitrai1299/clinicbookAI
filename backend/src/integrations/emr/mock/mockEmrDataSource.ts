@@ -93,6 +93,11 @@ const mockPatients = (clinicId: string): PatientPort => {
       clinicId,
       name: data.name,
       phone: data.phone,
+      // No ABHA — see the comment in fhir/mappers.ts. The mock mirrors the real
+      // adapter so a test cannot pass against a shape production never produces.
+      abhaNumber: null,
+      abhaAddress: null,
+      abhaLinkedAt: null,
       language: data.language,
       patientCode: data.patientCode ?? null,
       source: data.source ?? 'emr',

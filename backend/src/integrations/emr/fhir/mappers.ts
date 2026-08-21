@@ -116,6 +116,14 @@ export const patientToRecord = (p: FhirPatient, clinicId: string): PatientRecord
     age: null,
     gender: p.gender ?? null,
     healthConcern: null,
+    // No ABHA. A patient sourced from an external EMR has whatever identity that
+    // EMR holds; linking an ABHA is a deliberate act by the patient inside OUR
+    // product, and it has not happened for this record. Stating the three
+    // explicitly is the point — a mapper that quietly omitted them would compile
+    // and then read as "not yet loaded" rather than "does not exist".
+    abhaNumber: null,
+    abhaAddress: null,
+    abhaLinkedAt: null,
     createdAt: new Date(0),
     updatedAt: new Date(0)
   }) as PatientRecord;
