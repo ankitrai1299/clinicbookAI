@@ -6,6 +6,7 @@ import {
 
 import { registerClinic } from '../api/auth';
 import { PageType, ClinicConfig } from '../types';
+import { BRAND } from '../brand';
 
 interface SignupPageProps {
   // Account created → email needs OTP verification. Parent captures the email +
@@ -237,7 +238,7 @@ export default function SignupPage({ onPendingVerification, setCurrentPage }: Si
               <div className="pt-2">
                 <label className="flex items-start gap-2.5 text-[11px] text-slate-500 cursor-pointer">
                   <input type="checkbox" defaultChecked required className="mt-0.5 rounded-sm bg-slate-100 border-slate-300" />
-                  <span>I agree to ClinicBook AI's 14-day terms. I authorize virtual sandbox numbers to generate messaging alerts for test patients.</span>
+                  <span>I agree to {BRAND.name}'s 14-day terms. I authorize virtual sandbox numbers to generate messaging alerts for test patients.</span>
                 </label>
               </div>
 

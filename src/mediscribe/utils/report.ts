@@ -8,6 +8,7 @@ import {
   FollowUp,
 } from '../types';
 import { pageCss, DEFAULT_PRINT_SETTINGS, type PrintSettings, type PrintScope } from './printSettings';
+import { BRAND } from '../../brand';
 
 // The kinds of content a Premium Clinical Report section can hold. The editor,
 // the print/HTML export and the PDF/DOCX exports all switch on this.
@@ -459,7 +460,7 @@ ${printCss}
 </head>
 <body>
   <div class="header">
-    <div class="brand">MediScribe AI</div>
+    <div class="brand">${BRAND.name}</div>
     <h1>Consultation Transcript</h1>
     ${sub ? `<div class="sub">${sub}</div>` : ''}
   </div>
@@ -620,7 +621,7 @@ ${printCss}
          address, so printing ours over it is what ruins the sheet. The @page rule
          reserves blank space at the top instead; only the patient line stays,
          because that is the part the stationery cannot know. -->
-    ${ownLetterhead ? `<div class="brand">${escapeHtml(meta.clinicName || 'MediScribe AI')}</div>` : ''}
+    ${ownLetterhead ? `<div class="brand">${escapeHtml(meta.clinicName || BRAND.name)}</div>` : ''}
     ${ownLetterhead ? `<h1>${docTitle}</h1>` : ''}
     ${sub ? `<div class="sub">${sub}</div>` : ''}
   </div>

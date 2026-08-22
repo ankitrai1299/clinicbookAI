@@ -4,13 +4,12 @@ import { PageType, DashboardTab, Appointment, WaitlistPatient, ReminderLog, Clin
 import { isMobileApp } from './mediscribe/utils/platform';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
-import LandingPage from './components/LandingPage';
 import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
 import MobileDashboard from './components/MobileDashboard';
 import MediscribeApp from './mediscribe/MediscribeApp';
 import ProductHub from './components/ProductHub';
-import MediScribeLanding from './components/MediScribeLanding';
+import AnvayaSite from './components/AnvayaSite';
 import type { ActiveProduct } from './components/Navigation';
 import SignupPage from './components/SignupPage';
 import LoginPage from './components/LoginPage';
@@ -294,16 +293,16 @@ function AppShell() {
           />
         )}
 
-        {!APP_ONLY && currentPage === 'novascribe-landing' && (
-          <MediScribeLanding
-            isLoggedIn={!!user}
-            onOpen={() => handleSetPage('novascribe')}
-            onBack={openHub}
-          />
-        )}
+        {/* ONE site for both. There used to be two marketing pages selling half
+            the product each — to the same person, the clinic owner, who is not
+            buying "a booking tool" and "a scribe" but one fewer broken handoff
+            between the front desk and the consulting room.
 
-        {!APP_ONLY && currentPage === 'landing' && (
-          <LandingPage setCurrentPage={handleSetPage} />
+            Both routes still resolve, because /clinicbook and /novascribe are
+            printed on things and sitting in people's history. They just arrive
+            at the same place now. */}
+        {!APP_ONLY && (currentPage === 'landing' || currentPage === 'novascribe-landing') && (
+          <AnvayaSite setCurrentPage={handleSetPage} />
         )}
 
         {/* Public API docs — reachable without a login so a partner's developer

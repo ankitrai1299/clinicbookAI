@@ -5,6 +5,7 @@ import { Lock, Mail, ShieldCheck, Loader2, Eye, EyeOff } from 'lucide-react';
 import Logo from '../Logo';
 import { useAuth } from '../../context/Auth';
 import { inputClass } from './ui';
+import { BRAND } from '../../../brand';
 
 export default function LoginView() {
   const { login } = useAuth();
@@ -45,7 +46,7 @@ export default function LoginView() {
               <h1 className="text-xl font-bold text-slate-900">Admin Sign In</h1>
             </div>
             <p className="text-sm text-slate-500 mb-6">
-              Access the MediScribe administration console.
+              Access the {BRAND.name} administration console.
             </p>
 
             {error && (

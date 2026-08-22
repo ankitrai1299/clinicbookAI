@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { BRAND } from '../brand';
 
 // Public, unauthenticated legal pages — Privacy Policy and Terms of Service —
 // served at /privacy and /terms. They carry no app chrome and need no login, so
@@ -28,7 +29,7 @@ const PrivacyBody: React.FC = () => (
   <>
     <p>
       This Privacy Policy explains how {COMPANY} ("we", "us") handles personal data in the
-      ClinicBook AI and NovaScribe products (together, the "Platform"). It is written to align with
+      {BRAND.desk} and {BRAND.scribe} (together, the "Platform"). It is written to align with
       India's Digital Personal Data Protection Act, 2023 (the "DPDP Act").
     </p>
 
@@ -126,7 +127,7 @@ const PrivacyBody: React.FC = () => (
 const TermsBody: React.FC = () => (
   <>
     <p>
-      These Terms govern use of the ClinicBook AI and NovaScribe products (the "Platform") provided
+      These Terms govern use of the {BRAND.desk} and {BRAND.scribe} products (the "Platform") provided
       by {COMPANY}. By creating an account or using the Platform, you agree to these Terms.
     </p>
 
@@ -215,7 +216,7 @@ const LegalPage: React.FC<{ kind: LegalKind }> = ({ kind }) => {
   const title = isPrivacy ? 'Privacy Policy' : 'Terms of Service';
 
   useEffect(() => {
-    document.title = `${title} · ClinicBook AI`;
+    document.title = `${title} · ${BRAND.name}`;
   }, [title]);
 
   return (
@@ -223,7 +224,7 @@ const LegalPage: React.FC<{ kind: LegalKind }> = ({ kind }) => {
       <header className="border-b border-slate-100">
         <div className="mx-auto max-w-3xl px-6 py-5 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Back to ClinicBook AI
+            <ArrowLeft className="w-4 h-4" /> Back to {BRAND.name}
           </a>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
             <ShieldCheck className="w-3.5 h-3.5" /> DPDP Act, 2023

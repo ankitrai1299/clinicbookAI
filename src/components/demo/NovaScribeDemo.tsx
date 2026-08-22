@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import NovaPhoneDemo from '../novascribe/v2/NovaPhoneDemo';
+import { BRAND } from '../../brand';
 
 // Recording frame for the NovaScribe phone demo. It renders the SAME component
 // the landing page uses, so the footage in a reel is literally the product shown
@@ -55,7 +56,7 @@ export default function NovaScribeDemo() {
           {/* Caption — above the phone on vertical, beside it on wide */}
           <div className={isTall ? 'text-center max-w-[330px]' : 'w-[300px]'}>
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 mb-2">
-              NovaScribe
+              {BRAND.scribe}
             </div>
             <h2 className={`font-display font-extrabold text-slate-900 leading-tight ${isTall ? 'text-2xl' : 'text-3xl'}`}>
               Just talk. The note writes itself.

@@ -37,6 +37,7 @@ import {
   EmptyState,
   ErrorState,
 } from '../ui';
+import { BRAND } from '../../../../brand';
 
 export default function ReportsSection() {
   const { token, hasPermission } = useAuth();
@@ -179,7 +180,7 @@ function ReportViewModal({ record, onClose }: { record: ReportRecord; onClose: (
   };
 
   const handleShare = async () => {
-    const text = `MediScribe Clinical Report — ${record.patientName || 'Patient'} (${record.date})`;
+    const text = `${BRAND.name} Clinical Report — ${record.patientName || 'Patient'} (${record.date})`;
     try {
       if (navigator.share) {
         await navigator.share({ title: 'Clinical Report', text });

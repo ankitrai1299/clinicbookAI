@@ -26,6 +26,9 @@ import {
   type RangeKey
 } from './ui';
 import { usePrefs } from './prefs';
+// `BRAND` here is the phone UI's accent colour (from ./ui). The brand NAMES
+// come in under an alias so neither has to be renamed.
+import { BRAND as ANVAYA } from '../../brand';
 
 // Home screen of the phone app (WebView only), in the design language of the
 // native MediScribe app: a calm white hero rather than a coloured slab, a
@@ -166,7 +169,7 @@ export default function MobileHome({
         <div className="flex-1 pr-3 min-w-0">
           <div className="flex items-center gap-1.5">
             <Sparkles size={12} color={BRAND} />
-            <span className="text-[11px] font-bold text-[#5B5CEB] uppercase tracking-[0.06em]">MediScribe</span>
+            <span className="text-[11px] font-bold text-[#5B5CEB] uppercase tracking-[0.06em]">{ANVAYA.scribeShort}</span>
           </div>
           <p className="text-slate-500 mt-3 text-[14px] font-medium">{t(greetingKey(now))}</p>
           {/* Wraps rather than truncates: Indian names are routinely long enough

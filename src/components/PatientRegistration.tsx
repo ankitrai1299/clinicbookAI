@@ -7,6 +7,7 @@ import {
   registerPublicPatient,
   PublicClinic
 } from '../api/publicRegistration';
+import { BRAND } from '../brand';
 
 interface PatientRegistrationProps {
   clinicId: string;
@@ -375,7 +376,7 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
         )}
 
         <p className="text-center text-[11px] text-slate-300 mt-6 font-mono">
-          Powered by ClinicBook AI
+          Powered by {BRAND.name}
         </p>
       </div>
     </div>

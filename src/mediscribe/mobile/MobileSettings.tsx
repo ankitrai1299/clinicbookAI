@@ -3,6 +3,7 @@ import { LogOut, Info, ShieldCheck, FileText, LifeBuoy, ChevronRight, Check, Sun
 import { usePrefs, type Lang, type Appearance } from './prefs';
 import { Avatar, Card } from './ui';
 import { loadDoctorProfile, saveDoctorProfile, loadLanguage, saveLanguage, LANGUAGES, type DoctorProfile } from '../utils/settings';
+import { BRAND } from '../../brand';
 
 // Settings, as its own tab.
 //
@@ -281,7 +282,7 @@ export default function MobileSettings({
         </Card>
       </Section>
 
-      <p className="text-center text-[11.5px] text-slate-400 pb-2">MediScribe · v{appVersion}</p>
+      <p className="text-center text-[11.5px] text-slate-400 pb-2">{BRAND.scribe} · v{appVersion}</p>
     </div>
   );
 }

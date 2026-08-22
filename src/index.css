@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Figtree:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -26,6 +26,34 @@
   --color-sky-800: #115e59;
   --color-sky-900: #134e4a;
   --color-sky-950: #042f2e;
+
+  /* ── Anvaya ───────────────────────────────────────────────────────────────
+     अन्वय — the joining.
+
+     ADDED, not substituted. The teal above still dresses every dashboard
+     screen; swapping it here would restyle the entire product in one commit,
+     which is a different change with a different risk. The marketing site uses
+     these now, and the interior moves over screen by screen.
+
+     Indigo and marigold: India supplied the world's indigo for three hundred
+     years and the pairing is the oldest in Indian cloth. It reads as Indian
+     without reaching for the flag, and it is calm where health brands are
+     usually loud. */
+  --color-anvaya-ink:      #16192A;
+  --color-anvaya-paper:    #FBF8F3;
+  --color-anvaya-sand:     #F3EEE5;
+  --color-anvaya-rule:     #E4DCCE;
+  --color-anvaya-indigo:   #1F2A6B;
+  --color-anvaya-indigo-2: #2E3E8F;
+  --color-anvaya-indigo-3: #3A4CA8;
+  --color-anvaya-marigold: #E0A03C;
+  --color-anvaya-amber:    #B87A1E;
+
+  /* Fraunces carries the name; a serif with warmth, so the brand does not read
+     as one more cold clinical tool. Figtree does the reading — plain and
+     legible on a cheap phone in a busy clinic. */
+  --font-brand: "Fraunces", Georgia, serif;
+  --font-body: "Figtree", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
