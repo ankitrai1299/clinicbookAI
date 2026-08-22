@@ -6,6 +6,7 @@ import {
   QrCode, Copy, Check, Key, ArrowLeft, ShieldCheck
 } from 'lucide-react';
 import AiAssistant from './AiAssistant';
+import { BRAND } from '../brand';
 import { realPhone } from '../utils/phone';
 import DoctorWorkflow from './DoctorWorkflow';
 import ConnectWhatsApp from './ConnectWhatsApp';
@@ -1488,7 +1489,7 @@ export default function ClinicDashboard({
             <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 animate-fadeIn" id="settings-tab-view">
               <div className="border-b border-slate-100 pb-4 text-left">
                 <h2 className="font-display font-extrabold text-lg text-slate-950">Bot Integration Settings</h2>
-                <p className="text-slate-400 text-xs">Configure how the ClinicBook AI speaks, operates, and checks calendar synchronization.</p>
+                <p className="text-slate-400 text-xs">Configure how {BRAND.desk} speaks, operates, and checks calendar synchronization.</p>
               </div>
 
               {/* WhatsApp connection — one-click Meta Embedded Signup */}
@@ -1623,7 +1624,7 @@ export default function ClinicDashboard({
               <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 animate-fadeIn text-left" id="billing-tab-view">
                 <div className="border-b border-slate-100 pb-4">
                   <h2 className="font-display font-extrabold text-lg text-slate-950">SaaS Subscription Ledger</h2>
-                  <p className="text-slate-400 text-xs">Manage your ClinicBook AI subscription billing, download invoices, or audit transaction history.</p>
+                  <p className="text-slate-400 text-xs">Manage your {BRAND.name} subscription billing, download invoices, or audit transaction history.</p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

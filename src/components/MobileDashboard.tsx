@@ -5,6 +5,7 @@ import {
   Stethoscope, Settings, CreditCard, Key, LayoutGrid, MessageCircle, BarChart3, ListOrdered,
 } from 'lucide-react';
 
+import { BRAND } from '../brand';
 import { getAppointments, patchAppointment, completeAppointment, type ApiAppointment } from '../api/appointments';
 import { getPatients, type ApiPatient } from '../api/patients';
 import { getNotifications, type ApiNotification } from '../api/notifications';
@@ -1169,7 +1170,7 @@ function MoreTab({
             {initials(clinicName)}
           </div>
           <div className="min-w-0">
-            <div className="text-white font-bold text-[18px] truncate">{clinicName || 'ClinicBook AI'}</div>
+            <div className="text-white font-bold text-[18px] truncate">{clinicName || BRAND.desk}</div>
             {userName && <div className="text-white/80 text-[13px] truncate mt-0.5">{userName}</div>}
           </div>
         </div>
@@ -1222,7 +1223,7 @@ function MoreTab({
         <LogOut className="w-[17px] h-[17px]" /> Sign out
       </button>
 
-      <p className="text-center text-[11.5px] text-slate-400 pt-1">ClinicBook AI</p>
+      <p className="text-center text-[11.5px] text-slate-400 pt-1">{BRAND.desk}</p>
     </div>
   );
 }

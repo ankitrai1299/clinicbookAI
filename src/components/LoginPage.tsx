@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, ArrowLeft, ArrowRight, CalendarCheck, Key, Mail, Stethoscope, Eye, EyeOff } from 'lucide-react';
 
+import { BRAND } from '../brand';
 import { isMfaChallenge, loginUser, verifyMfaCode } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { PageType } from '../types';
@@ -100,15 +101,19 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
 
         <div className="flex flex-col items-center gap-2 mb-8">
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shadow-sky-100 ${
-            isNova ? 'bg-gradient-to-br from-sky-500 to-sky-700' : 'bg-sky-600'
+            isNova
+              ? 'bg-gradient-to-br from-[#E0A03C] to-[#B87A1E]'
+              : 'bg-gradient-to-br from-[#2E3E8F] to-[#1F2A6B]'
           }`}>
             {isNova ? <Stethoscope className="w-7 h-7" /> : <CalendarCheck className="w-7 h-7" />}
           </div>
           <h1 className="font-display text-2xl font-bold text-slate-900">
-            {isNova ? 'Sign in to MediScribe' : 'Sign in to your clinic'}
+            {isNova ? `Sign in to ${BRAND.scribe}` : `Sign in to ${BRAND.desk}`}
           </h1>
           <p className="text-slate-400 text-sm text-center">
-            {isNova ? 'Access your MediScribe AI medical scribe' : 'Access your ClinicBook AI dashboard'}
+            {isNova
+              ? 'Record a consultation and the note writes itself.'
+              : 'Appointments, patients and WhatsApp, in one place.'}
           </p>
         </div>
 
