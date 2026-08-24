@@ -20,11 +20,13 @@ interface WordmarkProps {
  *
  *   SIZE     At the same font-size Devanagari looks noticeably smaller, because
  *            its glyphs hang below a headline (शिरोरेखा) instead of standing on
- *            a baseline with tall caps. It needs roughly 12% more to look equal.
+ *            a baseline with tall caps. It needs a few percent more to look
+ *            equal — less than a UI face would, because Rozha is already heavy.
  *
- *   WEIGHT   Devanagari strokes are thinner at the same numeric weight. Beside a
- *            700 Latin it needs 700–800 of its own to hold the same colour on
- *            the page, or the Sanskrit half looks faded.
+ *   WEIGHT   Rozha One ships ONE weight. It is not given a numeric weight at
+ *            all: asking for 700 makes the browser synthesise a fake bold,
+ *            which smears the thin horizontals that give the face its contrast
+ *            and is exactly what makes a Devanagari logo look cheap.
  *
  *   BASELINE The headline sits where Latin has ascenders, so the two halves
  *            drift apart vertically. A small nudge settles them onto one line.
@@ -46,14 +48,17 @@ export default function Wordmark({ app, className = '', devClassName, latinClass
         className={devClassName}
         style={{
           fontFamily: 'var(--font-devanagari)',
-          fontSize: '1.12em',
-          fontWeight: 700,
-          letterSpacing: '-0.012em',
+          fontSize: '1.06em',
+          // Deliberately NOT set. Rozha One has one weight and is already
+          // heavy; a numeric weight here would make the browser fake a bold and
+          // destroy the thin horizontals the face is built on.
+          fontWeight: 400,
+          letterSpacing: '-0.005em',
           // Pulls the Latin half in so the two read as one word, and lifts the
           // headline onto the Latin cap line.
-          marginRight: '-0.015em',
+          marginRight: '0.01em',
           position: 'relative',
-          top: '0.045em',
+          top: '0.055em',
           display: 'inline-block',
         }}
       >

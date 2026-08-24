@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Figtree:wght@400;500;600;700&family=Mukta:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Figtree:wght@400;500;600;700&family=Mukta:wght@500;600;700;800&family=Rozha+One&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -54,12 +54,17 @@
      legible on a cheap phone in a busy clinic. */
   --font-brand: "Fraunces", Georgia, serif;
 
-  /* Devanagari for the wordmark. WITHOUT this the browser falls back to
-     whatever the OS ships — Nirmala UI on Windows — and अन्वय renders thin,
-     small and unstyled next to a bold Latin word, which reads as a font
-     failing to load rather than as a brand. Mukta is drawn for Indian UI and
-     sits properly beside a geometric sans. */
-  --font-devanagari: "Mukta", "Noto Sans Devanagari", sans-serif;
+  /* Devanagari for the WORDMARK — a display face, not a UI font.
+     Rozha One is high-contrast: thick verticals against thin horizontals,
+     flared terminals. That contrast is what makes अन्वय read as lettering
+     rather than as text, and it is the look every Hindi logo reaches for.
+     It ships one weight (400) and is already heavy, so it is never asked
+     for a bolder one — there isn't one, and the browser would fake it. */
+  --font-devanagari: "Rozha One", "Mukta", "Noto Sans Devanagari", serif;
+
+  /* Devanagari for RUNNING TEXT, if it is ever needed. A display face at
+     paragraph size turns to mush; Rozha must never be used for prose. */
+  --font-devanagari-text: "Mukta", "Noto Sans Devanagari", sans-serif;
   --font-body: "Figtree", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
