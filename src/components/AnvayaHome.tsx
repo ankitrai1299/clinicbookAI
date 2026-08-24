@@ -84,6 +84,30 @@ function Hero({ setCurrentPage, isLoggedIn }: AnvayaHomeProps) {
           </button>
           <a href="#how" className={BTN_GHOST}>See how it works</a>
         </div>
+
+        {/* The two products, reachable without scrolling. Burying the only two
+            doors on the page below three screens of copy is how a visitor
+            decides there is nothing here to click. */}
+        <div className="mt-7 flex flex-wrap gap-2.5 justify-center items-center">
+          <span className="text-sm text-anvaya-muted">Two products:</span>
+          <button
+            type="button"
+            onClick={() => setCurrentPage('landing')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-anvaya-rule bg-white
+                       text-sm font-semibold text-anvaya-blue hover:border-anvaya-blue/50 hover:-translate-y-px transition cursor-pointer"
+          >
+            {BRAND.book.plain} <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage('novascribe-landing')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-anvaya-rule bg-white
+                       text-sm font-semibold text-anvaya-green hover:border-anvaya-green/50 hover:-translate-y-px transition cursor-pointer"
+          >
+            {BRAND.scribe.plain} <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
         <p className="mt-6 text-sm text-anvaya-muted">
           Nothing for your patients to install. It runs on the WhatsApp they already have.
         </p>
@@ -234,6 +258,7 @@ function Products({ openBook, openScribe }: { openBook: () => void; openScribe: 
           <ProductCard
             onOpen={openBook}
             cut="book"
+            label={BRAND.book.latin}
             who="For the clinic"
             whoClass="text-anvaya-blue"
             cap="from-anvaya-navy to-anvaya-blue"
@@ -248,6 +273,7 @@ function Products({ openBook, openScribe }: { openBook: () => void; openScribe: 
           <ProductCard
             onOpen={openScribe}
             cut="scribe"
+            label={BRAND.scribe.latin}
             who="For the doctor"
             whoClass="text-anvaya-green"
             cap="from-anvaya-teal to-anvaya-green"
@@ -268,6 +294,7 @@ function Products({ openBook, openScribe }: { openBook: () => void; openScribe: 
 function ProductCard({
   onOpen,
   cut,
+  label,
   who,
   whoClass,
   cap,
@@ -276,14 +303,31 @@ function ProductCard({
 }: {
   onOpen: () => void;
   cut: 'book' | 'scribe';
+  label: string;
   who: string;
   whoClass: string;
   cap: string;
   line: string;
   points: string[];
 }) {
+  // The WHOLE card opens the product. It used to be a small "Learn more" text
+  // link at the very bottom, which is the least visible pixel on the card — the
+  // one thing the section exists to do was the hardest thing on it to find.
   return (
-    <div className="rounded-2xl border border-anvaya-rule bg-white overflow-hidden hover:shadow-xl hover:shadow-anvaya-navy/10 hover:-translate-y-0.5 transition">
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="group cursor-pointer rounded-2xl border border-anvaya-rule bg-white overflow-hidden
+                 hover:shadow-xl hover:shadow-anvaya-navy/10 hover:-translate-y-0.5 hover:border-anvaya-teal/40
+                 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-anvaya-teal transition"
+    >
       <div className={`h-1 bg-gradient-to-r ${cap}`} />
       <div className="p-7">
         <p className={`text-[11px] font-bold uppercase tracking-[0.15em] mb-4 ${whoClass}`}>{who}</p>
@@ -300,13 +344,12 @@ function ProductCard({
             </li>
           ))}
         </ul>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-anvaya-teal hover:gap-2.5 transition-all cursor-pointer"
+        <span
+          className={`mt-7 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold
+                      bg-gradient-to-r ${cap} shadow-md group-hover:gap-3 transition-all`}
         >
-          Learn more <ArrowRight className="w-4 h-4" />
-        </button>
+          Open {label} <ArrowRight className="w-4 h-4" />
+        </span>
       </div>
     </div>
   );
