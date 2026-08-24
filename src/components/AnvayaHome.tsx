@@ -35,6 +35,7 @@ export default function AnvayaHome({
       <Hero onStartTrial={onStartTrial} onOpenBook={onOpenBook} onOpenScribe={onOpenScribe} />
       <Chain />
       <Products onOpenBook={onOpenBook} onOpenScribe={onOpenScribe} />
+      <InsideTheRoom onOpenScribe={onOpenScribe} />
       <Pricing onStartTrial={onStartTrial} />
       <WhereTheAiSits />
       <Trust />
@@ -495,6 +496,168 @@ function ProductCard({
   );
 }
 
+/* ── inside the consulting room ───────────────────────────────────────── */
+
+// The patient's side of the product plays in the hero. This is the doctor's, and
+// it needed its own screen: without it the page showed a booking tool with a
+// scribe described beside it in words, and words do not sell the thing that is
+// hardest to believe — that the note writes itself while you talk.
+//
+// The ORDER carries the argument, not the animation. Speech arrives first, the
+// note fills from it, and the approval bar comes LAST and stays — the whole
+// claim of the product is that nothing moves past that bar without a doctor.
+
+const SPEECH: Array<{ who: 'D' | 'P'; text: string }> = [
+  { who: 'D', text: 'सुबह की dizziness अब कैसी है?' },
+  { who: 'P', text: 'पहले से कम है, अब सिर्फ़ उठते वक़्त' },
+  { who: 'D', text: 'BP दोनों तरफ़ देखते हैं — लेटकर और खड़े होकर' },
+];
+
+const NOTE: Array<{ label: string; value: string }> = [
+  { label: 'Chief complaint', value: 'Postural dizziness, 5 days' },
+  { label: 'Examination', value: 'BP 118/76 lying · 96/62 standing' },
+  { label: 'Assessment', value: 'Postural hypotension' },
+  { label: 'Plan', value: 'Hydration, slow positional change, review in 1 week' },
+];
+
+// speech lines, then note rows, then the approval bar
+const TOTAL = SPEECH.length + NOTE.length + 1;
+
+function InsideTheRoom({ onOpenScribe }: Pick<AnvayaHomeProps, 'onOpenScribe'>) {
+  const reduced =
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const [step, setStep] = useState(reduced ? TOTAL : 0);
+
+  useEffect(() => {
+    if (reduced) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = (i: number) => {
+      const next = i >= TOTAL ? 0 : i + 1;
+      // Speech is slower than the note filling in. A person takes time to say a
+      // sentence; a machine does not take time to have understood it.
+      const delay = i >= TOTAL ? 4500 : i < SPEECH.length ? 1800 : 900;
+      timer = setTimeout(() => {
+        setStep(next);
+        tick(next);
+      }, delay);
+    };
+    tick(0);
+    return () => clearTimeout(timer);
+  }, [reduced]);
+
+  const noteStarted = step > SPEECH.length;
+  const approved = step >= TOTAL;
+
+  return (
+    <section className="px-5 sm:px-8 py-20">
+      <div className="max-w-6xl mx-auto grid lg:grid-cols-[1fr_1.15fr] gap-12 lg:gap-14 items-center">
+        <div>
+          <Eyebrow>Inside the consulting room</Eyebrow>
+          <H2>The doctor talks. The note writes itself.</H2>
+          <p className="mt-4 text-anvaya-body leading-relaxed">
+            No typing during the visit, and no writing up afterwards. Anvaya listens to
+            the consultation in whatever language it happens in, and turns it into a
+            clinical note and a prescription while it is still going on.
+          </p>
+          <p className="mt-4 text-anvaya-body leading-relaxed">
+            Then it stops and waits. The doctor reads what was written, corrects anything
+            wrong, and signs it — and only that act sends it anywhere.
+          </p>
+          <button type="button" onClick={onOpenScribe} className={`${BTN_FILL} mt-8`}>
+            Sign in to {BRAND.scribe.plain} <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-anvaya-rule bg-white overflow-hidden shadow-2xl shadow-anvaya-navy/15">
+          <div className="px-4 py-3 flex items-center gap-2.5 bg-gradient-to-r from-anvaya-teal to-anvaya-green">
+            <AnvayaLogo height={15} cut="platform-compact" decorative className="brightness-0 invert" />
+            <span className="text-white text-xs font-semibold">Consultation · Anish Kumar</span>
+            <span className="ml-auto flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-white/90">
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-white"
+                style={{ animation: reduced ? undefined : 'anvaya-typing 1.4s infinite' }}
+              />
+              Rec
+            </span>
+          </div>
+
+          <div className="p-4 sm:p-5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-anvaya-muted mb-2.5">
+              Transcript
+            </p>
+            <div className="space-y-2">
+              {SPEECH.map((l, i) => (
+                <div
+                  key={i}
+                  className="flex gap-2.5 transition-all duration-500"
+                  style={{ opacity: i < step ? 1 : 0, transform: i < step ? 'none' : 'translateY(4px)' }}
+                  aria-hidden={i < step ? undefined : true}
+                >
+                  <span
+                    className={
+                      'shrink-0 w-5 h-5 rounded-md text-[10px] font-bold flex items-center justify-center ' +
+                      (l.who === 'D' ? 'bg-anvaya-teal/15 text-anvaya-teal' : 'bg-anvaya-navy/10 text-anvaya-navy')
+                    }
+                  >
+                    {l.who}
+                  </span>
+                  <p
+                    className="text-[13px] text-anvaya-body leading-snug"
+                    style={{ fontFamily: 'var(--font-devanagari-text)' }}
+                  >
+                    {l.text}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-anvaya-rule">
+              <div className="flex items-center gap-2 mb-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-anvaya-muted">
+                  Clinical note
+                </p>
+                <span
+                  className="text-[10px] text-anvaya-teal transition-opacity duration-300"
+                  style={{ opacity: noteStarted && !approved ? 1 : 0 }}
+                >
+                  drafting…
+                </span>
+              </div>
+              <dl className="space-y-2">
+                {NOTE.map((n, i) => {
+                  const at = SPEECH.length + i;
+                  return (
+                    <div
+                      key={n.label}
+                      className="grid grid-cols-[7.5rem_1fr] gap-2 transition-all duration-500"
+                      style={{ opacity: at < step ? 1 : 0, transform: at < step ? 'none' : 'translateY(4px)' }}
+                      aria-hidden={at < step ? undefined : true}
+                    >
+                      <dt className="text-[11px] text-anvaya-muted pt-px">{n.label}</dt>
+                      <dd className="text-[12.5px] text-anvaya-ink leading-snug">{n.value}</dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </div>
+
+            {/* Last, and it stays. This bar IS the product's claim. */}
+            <div
+              className="mt-5 rounded-xl border border-anvaya-green/40 bg-anvaya-green/5 px-3.5 py-3 flex items-center gap-2.5 transition-all duration-500"
+              style={{ opacity: approved ? 1 : 0.25 }}
+            >
+              <ShieldCheck className="w-4 h-4 text-anvaya-green shrink-0" />
+              <p className="text-[12px] text-anvaya-ink leading-snug">
+                Waiting for <span className="font-semibold">Dr. Ruchi</span> to review and
+                sign. Nothing is sent before that.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 /* ── pricing ──────────────────────────────────────────────────────────── */
 
 // The prices a clinic is actually charged today, carried over unchanged from the
