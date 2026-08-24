@@ -36,6 +36,7 @@ export default function AnvayaHome({
       <Chain />
       <Products onOpenBook={onOpenBook} onOpenScribe={onOpenScribe} />
       <InsideTheRoom onOpenScribe={onOpenScribe} />
+      <ScribeScreens />
       <Pricing onStartTrial={onStartTrial} />
       <WhereTheAiSits />
       <Trust />
@@ -656,6 +657,163 @@ function InsideTheRoom({ onOpenScribe }: Pick<AnvayaHomeProps, 'onOpenScribe'>) 
         </div>
       </div>
     </section>
+  );
+}
+/* ── the rest of the doctor's day ────────────────────────────────── */
+
+// One screen showed the consultation. These three are what surrounds it — the
+// queue before, the prescription after, and the history behind the patient.
+//
+// Drawn as HTML rather than dropped in as screenshots. A screenshot of a product
+// this young is a screenshot of a product that will look different next month,
+// and it goes stale in a way nobody remembers to check. These read from the same
+// tokens as the rest of the page, so they cannot drift from the brand either.
+//
+// The content is a plausible visit, not a real one: no real patient's name,
+// prescription or history appears on a marketing page.
+
+function ScribeScreens() {
+  return (
+    <section className="bg-anvaya-mist border-y border-anvaya-rule px-5 sm:px-8 py-20">
+      <div className="max-w-6xl mx-auto">
+        <div className="max-w-2xl">
+          <Eyebrow>What the doctor sees</Eyebrow>
+          <H2>The queue before. The prescription after.</H2>
+          <p className="mt-4 text-anvaya-body leading-relaxed">
+            A doctor opens one screen in the morning and works down it. Everything else
+            — who is waiting, what was written, what happened last time — is already
+            there, because the desk and the consulting room are the same system.
+          </p>
+        </div>
+
+        <div className="mt-12 grid md:grid-cols-3 gap-5">
+          <Screen title="Today's queue" chip="3 waiting" tone="navy">
+            <div className="space-y-2">
+              {[
+                { i: 'A', n: 'Anish Kumar', t: '12:00 PM', now: true },
+                { i: 'M', n: 'Meena Devi', t: '1:30 PM', now: false },
+                { i: 'S', n: 'Sunil Yadav', t: '4:00 PM', now: false },
+              ].map((r) => (
+                <div
+                  key={r.n}
+                  className={
+                    'flex items-center gap-2.5 rounded-lg px-2.5 py-2 border ' +
+                    (r.now ? 'border-anvaya-teal/40 bg-anvaya-teal/5' : 'border-anvaya-rule bg-white')
+                  }
+                >
+                  <span className="w-6 h-6 rounded-full bg-anvaya-navy/10 text-anvaya-navy text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {r.i}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-semibold text-anvaya-ink truncate">{r.n}</p>
+                    <p className="text-[10px] text-anvaya-muted">{r.t}</p>
+                  </div>
+                  {r.now && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-white bg-anvaya-teal px-2 py-1 rounded-md shrink-0">
+                      Start
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[10.5px] text-anvaya-muted leading-snug">
+              Only this doctor's patients. Two doctors sharing a clinic never see each
+              other's day.
+            </p>
+          </Screen>
+
+          <Screen title="Prescription" chip="Signed" tone="green">
+            <div className="rounded-lg border border-anvaya-rule bg-white p-3">
+              <div className="flex items-center justify-between border-b border-anvaya-rule pb-2 mb-2.5">
+                <AnvayaLogo height={13} cut="platform-compact" decorative />
+                <p className="text-[9px] text-anvaya-muted">21 Aug 2026</p>
+              </div>
+              <p className="text-[11px] font-semibold text-anvaya-ink">Anish Kumar · 34</p>
+              <p className="text-[9.5px] text-anvaya-muted mb-2.5">Dr. Ruchi Kumari · MBBS, MD</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-anvaya-muted mb-1.5">Rx</p>
+              <ol className="space-y-1.5">
+                {[
+                  ['Tab. Paracetamol 500 mg', '1–0–1 · after food · 3 days'],
+                  ['ORS sachet', 'as needed · 2 days'],
+                ].map(([m, d]) => (
+                  <li key={m}>
+                    <p className="text-[11px] text-anvaya-ink leading-snug">{m}</p>
+                    <p className="text-[9.5px] text-anvaya-muted">{d}</p>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-2.5 pt-2 border-t border-anvaya-rule text-[9.5px] text-anvaya-green">
+                Signed by Dr. Ruchi Kumari
+              </p>
+            </div>
+            <p className="mt-3 text-[10.5px] text-anvaya-muted leading-snug">
+              Goes to the patient on WhatsApp, in the same chat they booked from.
+            </p>
+          </Screen>
+
+          <Screen title="Patient history" chip="Anish Kumar" tone="blue">
+            <ol className="relative pl-4">
+              <span className="absolute left-[5px] top-1.5 bottom-1.5 w-px bg-anvaya-rule" aria-hidden />
+              {[
+                { d: '21 Aug', t: 'Prescription sent', tone: 'green' },
+                { d: '21 Aug', t: 'Consultation · postural hypotension', tone: 'teal' },
+                { d: '18 Aug', t: 'Booked on WhatsApp', tone: 'navy' },
+                { d: '02 Aug', t: 'Consultation · viral fever', tone: 'teal' },
+              ].map((e, i) => (
+                <li key={i} className="relative pb-3 last:pb-0">
+                  <span
+                    className={
+                      'absolute -left-4 top-1.5 w-[7px] h-[7px] rounded-full ring-2 ring-anvaya-mist ' +
+                      (e.tone === 'green'
+                        ? 'bg-anvaya-green'
+                        : e.tone === 'teal'
+                          ? 'bg-anvaya-teal'
+                          : 'bg-anvaya-navy')
+                    }
+                    aria-hidden
+                  />
+                  <p className="text-[9.5px] text-anvaya-muted">{e.d}</p>
+                  <p className="text-[11.5px] text-anvaya-ink leading-snug">{e.t}</p>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-3 text-[10.5px] text-anvaya-muted leading-snug">
+              One timeline, whether the visit started on WhatsApp or at the desk.
+            </p>
+          </Screen>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Screen({
+  title,
+  chip,
+  tone,
+  children,
+}: {
+  title: string;
+  chip: string;
+  tone: 'navy' | 'teal' | 'green' | 'blue';
+  children: ReactNode;
+}) {
+  const bar =
+    tone === 'green'
+      ? 'from-anvaya-teal to-anvaya-green'
+      : tone === 'blue'
+        ? 'from-anvaya-navy to-anvaya-blue'
+        : 'from-anvaya-navy via-anvaya-teal to-anvaya-green';
+  return (
+    <div className="rounded-2xl border border-anvaya-rule bg-white overflow-hidden shadow-lg shadow-anvaya-navy/5">
+      <div className={`px-3.5 py-2.5 flex items-center gap-2 bg-gradient-to-r ${bar}`}>
+        <p className="text-white text-[11.5px] font-semibold">{title}</p>
+        <span className="ml-auto text-[9px] font-semibold text-white/80 bg-white/15 px-1.5 py-0.5 rounded">
+          {chip}
+        </span>
+      </div>
+      <div className="p-3.5">{children}</div>
+    </div>
   );
 }
 /* ── pricing ──────────────────────────────────────────────────────────── */
