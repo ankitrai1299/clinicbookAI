@@ -22,14 +22,24 @@ interface LogoProps {
 export default function Logo({ onClick, className = '', light = false }: LogoProps) {
   const inner = (
     <>
-      {/* On a dark sidebar the two-colour mark loses the indigo ring against the
-          ground, so the reversed variant is used instead of tinting it. */}
       <AnvayaLogo height={30} cut="compact" decorative />
-      <span
-        className={`text-xl tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}
-        style={{ fontFamily: 'var(--font-brand)', fontWeight: 500, letterSpacing: '-0.02em' }}
-      >
-        {BRAND.scribe.latin}
+      <span className="leading-tight">
+        <span
+          className={`block text-xl tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}
+          style={{ fontFamily: 'var(--font-brand)', fontWeight: 500, letterSpacing: '-0.02em' }}
+        >
+          {BRAND.scribe.latin}
+        </span>
+        {/* The logo's own line, in Hindi. Mukta, not Rozha — Rozha carries
+            अन्वय in the artwork but its thin horizontals disappear at 10px.
+            And no uppercase or wide tracking: Devanagari has no capitals, and
+            widened tracking drags a matra off its consonant. */}
+        <span
+          className={`block text-[10.5px] ${light ? 'text-white/60' : 'text-slate-400'}`}
+          style={{ fontFamily: 'var(--font-devanagari-text)', letterSpacing: '.005em' }}
+        >
+          {BRAND.taglineHi}
+        </span>
       </span>
     </>
   );

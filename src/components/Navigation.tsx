@@ -70,12 +70,20 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
                       ? BRAND.book.latin
                       : <span className="text-sky-600">{BRAND.devanagari}</span>}
                 </span>
-                <span className="block text-[10px] font-mono text-slate-400 uppercase tracking-widest leading-none">
-                  {activeProduct === 'novascribe'
-                    ? 'AI Medical Scribe'
-                    : activeProduct === 'clinicbook'
-                      ? (user ? (clinicName || user.name) : 'WhatsApp Engine')
-                      : 'Platform'}
+                {/* The logo's own line, in Hindi — the same words drawn into
+                    the artwork, so the header and the logo can never say two
+                    different things. Set in Mukta: Rozha carries अन्वय but its
+                    thin horizontals vanish at this size.
+
+                    Not uppercase and not mono. Devanagari has no capitals, so
+                    `uppercase` does nothing to it while `tracking-widest` pulls
+                    the conjuncts apart — a matra drifting off its consonant is
+                    how Hindi set by a Latin rule ends up looking broken. */}
+                <span
+                  className="block text-[10.5px] text-slate-400 leading-none"
+                  style={{ fontFamily: 'var(--font-devanagari-text)', letterSpacing: '.005em' }}
+                >
+                  {BRAND.taglineHi}
                 </span>
               </div>
             </button>

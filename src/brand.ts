@@ -64,6 +64,16 @@ export const BRAND = {
   /** One line under the name — what the product is, for someone new to it. */
   tagline: 'One thread through the whole visit',
 
+  /**
+   * The line under the logo, in Hindi — the same words that are drawn into the
+   * logo artwork itself, so the two can never say different things.
+   *
+   * Set in Mukta, never Rozha. Rozha is the display face that carries अन्वय; at
+   * the ~10px a sub-label gets, its thin horizontals disappear and the line
+   * turns to mush. A tagline is text, not lettering.
+   */
+  taglineHi: 'हर क्लिनिक, हर मरीज़ के लिए',
+
   /** The legal entity, for footers and policy pages. */
   company: 'NextDot',
 } as const;
