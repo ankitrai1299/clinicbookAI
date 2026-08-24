@@ -41,6 +41,7 @@ export default function AnvayaHome({
       <WhereTheAiSits />
       <Trust />
       <Close onStartTrial={onStartTrial} onSignIn={onSignIn} />
+      <Footer onOpenBook={onOpenBook} onOpenScribe={onOpenScribe} onSignIn={onSignIn} />
     </div>
   );
 }
@@ -1106,3 +1107,92 @@ function Close({ onStartTrial, onSignIn }: Pick<AnvayaHomeProps, 'onStartTrial' 
     </section>
   );
 }
+
+/* ── footer ────────────────────────────────────────────────────────── */
+
+// The page ended on a gradient call-to-action with nothing after it. A visitor
+// looking for who is behind this, or the privacy policy, had nowhere to look —
+// and for a health product those are the two things a careful buyer checks
+// before they trust anything else on the page.
+//
+// The company name comes from brand.ts. It is the same string that goes on a
+// policy page, an invoice and the ABDM registration, and those have to match.
+
+function Footer({
+  onOpenBook,
+  onOpenScribe,
+  onSignIn,
+}: Pick<AnvayaHomeProps, 'onOpenBook' | 'onOpenScribe' | 'onSignIn'>) {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="bg-white border-t border-anvaya-rule px-5 sm:px-8 py-14">
+      <div className="max-w-6xl mx-auto">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
+          <div>
+            <AnvayaLogo height={46} cut="platform-compact" />
+            <p
+              className="mt-3 text-[0.95rem] text-anvaya-teal font-semibold"
+              style={{ fontFamily: 'var(--font-devanagari-text)', letterSpacing: '.01em' }}
+            >
+              {BRAND.taglineHi}
+            </p>
+            <p className="mt-4 max-w-xs text-sm text-anvaya-body leading-relaxed">
+              One thread through the whole visit — from the patient's first message to
+              the prescription in their hand.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-anvaya-muted mb-4">
+              Products
+            </p>
+            <ul className="space-y-2.5">
+              <li>
+                <button type="button" onClick={onOpenBook} className={FOOT_LINK}>
+                  {BRAND.book.plain}
+                </button>
+              </li>
+              <li>
+                <button type="button" onClick={onOpenScribe} className={FOOT_LINK}>
+                  {BRAND.scribe.plain}
+                </button>
+              </li>
+              <li>
+                <button type="button" onClick={onSignIn} className={FOOT_LINK}>
+                  Sign in
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-anvaya-muted mb-4">
+              More
+            </p>
+            <ul className="space-y-2.5">
+              <li><a href="#how" className={FOOT_LINK}>How it works</a></li>
+              <li><a href="#pricing" className={FOOT_LINK}>Pricing</a></li>
+              <li><a href="#ai" className={FOOT_LINK}>Where the AI stops</a></li>
+              {/* Real pages, served from /public — not placeholders. A privacy
+                  link that goes nowhere is worse than none on a health site. */}
+              <li><a href="/privacy" className={FOOT_LINK}>Privacy policy</a></li>
+              <li><a href="/terms" className={FOOT_LINK}>Terms</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-12 pt-7 border-t border-anvaya-rule flex flex-wrap gap-x-6 gap-y-2 items-center justify-between">
+          <p className="text-sm text-anvaya-body">
+            Created by <span className="font-semibold text-anvaya-ink">{BRAND.company}</span>
+          </p>
+          <p className="text-[13px] text-anvaya-muted">
+            © {year} · Patient data held in India
+          </p>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+const FOOT_LINK =
+  'text-sm text-anvaya-body hover:text-anvaya-teal transition cursor-pointer text-left';

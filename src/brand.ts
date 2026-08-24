@@ -78,8 +78,12 @@ export const BRAND = {
    */
   taglineHi: 'स्वस्थ भारत, हमारा लक्ष्य',
 
-  /** The legal entity, for footers and policy pages. */
-  company: 'NextDot',
+  /**
+   * The legal entity. This exact string is what goes on a footer, a policy
+   * page, an invoice and the ABDM registration — those have to match, so it is
+   * written once here rather than typed slightly differently in four places.
+   */
+  company: 'Nextdot Digital Solutions Pvt. Ltd.',
 } as const;
 
 export type ProductKey = 'clinicbook' | 'novascribe' | 'mediscribe';
