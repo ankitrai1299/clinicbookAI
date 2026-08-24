@@ -4,6 +4,7 @@ import { PageType, DashboardTab, Appointment, WaitlistPatient, ReminderLog, Clin
 import { isMobileApp } from './mediscribe/utils/platform';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
+import AnvayaHome from './components/AnvayaHome';
 import LandingPage from './components/LandingPage';
 import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
@@ -27,8 +28,9 @@ import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
 // Each product gets its own shareable URL, so a link can be sent to a clinic or a
 // doctor without landing them on the product chooser:
 //
-//   /clinicbook   → ClinicBook AI (patient booking)   — its landing page
-//   /novascribe   → NovaScribe (AI scribe)            — its landing page
+//   /             → Anvaya — the platform, and the door to both products
+//   /clinicbook   → अन्वय Book   (patient booking)  — its landing page
+//   /novascribe   → अन्वय Scribe (AI scribe)        — its landing page
 //   ?app=novascribe → opens straight INTO the scribe app (the phone app's
 //                     WebView loads this, so it must keep working)
 //
@@ -81,6 +83,7 @@ const APP_ALLOWED_PAGES: PageType[] = [MOBILE_HOME, 'login', 'signup', 'verify-e
 // Keep the address bar in step with the product being viewed, so whatever a user
 // is looking at is what they copy out of the URL bar.
 const PAGE_PATHS: Partial<Record<PageType, string>> = {
+  home: '/',
   hub: '/',
   landing: '/clinicbook',
   dashboard: '/clinicbook',
@@ -92,7 +95,7 @@ function AppShell() {
   const { user, loading, logout, setAuth } = useAuth();
   // The platform launcher (product chooser) is the first screen — unless deep-linked
   // straight to a product (e.g. the mobile app loads `?app=novascribe`).
-  const [currentPage, setCurrentPage] = useState<PageType>(ENTRY?.page ?? (APP_ONLY ? 'novascribe' : 'hub'));
+  const [currentPage, setCurrentPage] = useState<PageType>(ENTRY?.page ?? (APP_ONLY ? 'novascribe' : 'home'));
   // Which product's app to land on after a successful login.
   const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>(
     ENTRY?.app ?? (APP_ONLY ? 'novascribe' : 'dashboard'),
@@ -197,7 +200,7 @@ function AppShell() {
   const activeProduct: ActiveProduct =
     currentPage === 'novascribe' || currentPage === 'novascribe-landing' || onNovaAuthFlow
       ? 'novascribe'
-      : currentPage === 'hub'
+      : currentPage === 'hub' || currentPage === 'home'
         ? null
         : 'clinicbook';
 
@@ -205,7 +208,7 @@ function AppShell() {
     logout();
     // The app has one product, so logging out means its login screen — not a
     // launcher for products this build doesn't contain.
-    setCurrentPage(APP_ONLY ? 'login' : 'hub');
+    setCurrentPage(APP_ONLY ? 'login' : 'home');
     setIntendedApp(APP_ONLY ? 'novascribe' : 'dashboard');
     // Clear dashboard state on logout (no demo data)
     setAppointments([]);
@@ -286,7 +289,13 @@ function AppShell() {
       )}
 
       <div className="flex-1">
-        {!APP_ONLY && currentPage === 'hub' && (
+        {/* The front door. A signed-in user gets the picker instead — they
+            have already read the marketing, and what they want is a way in. */}
+        {!APP_ONLY && currentPage === 'home' && !user && (
+          <AnvayaHome setCurrentPage={handleSetPage} isLoggedIn={false} />
+        )}
+
+        {!APP_ONLY && (currentPage === 'hub' || (currentPage === 'home' && !!user)) && (
           <ProductHub
             userName={user?.name}
             onOpenClinicBook={openClinicBook}
