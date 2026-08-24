@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Figtree:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Figtree:wght@400;500;600;700&family=Mukta:wght@500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -53,6 +53,13 @@
      as one more cold clinical tool. Figtree does the reading — plain and
      legible on a cheap phone in a busy clinic. */
   --font-brand: "Fraunces", Georgia, serif;
+
+  /* Devanagari for the wordmark. WITHOUT this the browser falls back to
+     whatever the OS ships — Nirmala UI on Windows — and अन्वय renders thin,
+     small and unstyled next to a bold Latin word, which reads as a font
+     failing to load rather than as a brand. Mukta is drawn for Indian UI and
+     sits properly beside a geometric sans. */
+  --font-devanagari: "Mukta", "Noto Sans Devanagari", sans-serif;
   --font-body: "Figtree", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
