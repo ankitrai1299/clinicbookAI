@@ -104,9 +104,9 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
           {/* The real logo, not a coloured tile with a stock icon in it. This
               is the first screen anyone sees, and a generic glyph here is the
               cheapest possible first impression. */}
-          <AnvayaLogo height={54} cut="full" />
+          <AnvayaLogo height={46} cut={isNova ? 'scribe' : 'book'} />
           <h1 className="font-display text-2xl font-bold text-slate-900">
-            Sign in to {isNova ? BRAND.scribe.latin : BRAND.book.latin}
+            Sign in
           </h1>
           <p className="text-slate-400 text-sm text-center">
             {isNova

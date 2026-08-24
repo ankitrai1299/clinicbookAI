@@ -54,22 +54,17 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               className="flex items-center gap-2.5 cursor-pointer focus:outline-hidden"
               id="brand-logo-btn"
             >
-              {/* ONE logo for both products. The old tile carried a different
-                  icon per product — a stethoscope, a calendar — which is how a
-                  platform ends up looking like two companies. */}
-              <AnvayaLogo height={38} cut="compact" decorative className="transition-transform duration-300 hover:scale-105" />
+              {/* The product lockup — अन्वय Book or अन्वय Scribe — which already
+                  contains its own name. Nothing is set beside it, because the
+                  logo has already said which product this is; a word repeating
+                  it is the commonest way a rebrand looks amateur. */}
+              <AnvayaLogo
+                height={40}
+                cut={activeProduct === 'novascribe' ? 'scribe' : activeProduct === 'clinicbook' ? 'book' : 'platform-compact'}
+                decorative
+                className="transition-transform duration-300 hover:scale-105"
+              />
               <div className="text-left">
-                <span className="block font-display text-xl font-bold tracking-tight text-slate-900 leading-tight">
-                  {/* Only the PRODUCT half. The logo beside it already says
-                      अन्वय, and setting the full wordmark here printed the name
-                      twice in one lockup. The logo says whose this is; this says
-                      which of the two you are in. */}
-                  {activeProduct === 'novascribe'
-                    ? BRAND.scribe.latin
-                    : activeProduct === 'clinicbook'
-                      ? BRAND.book.latin
-                      : <span className="text-sky-600">{BRAND.devanagari}</span>}
-                </span>
                 {/* The logo's own line, in Hindi — the same words drawn into
                     the artwork, so the header and the logo can never say two
                     different things. Set in Mukta: Rozha carries अन्वय but its
