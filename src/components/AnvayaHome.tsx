@@ -2,12 +2,22 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ShieldCheck, FileText, CircleDot, ArrowRight } from 'lucide-react';
 
 import { BRAND } from '../brand';
-import { PageType } from '../types';
 import AnvayaLogo from './AnvayaLogo';
+// Lifted from the two product sites, which no longer have pages of their own.
+import PatientAsksSection from './platform/PatientAsksSection';
+import ClinicBookShowcase from './platform/ClinicBookShowcase';
+import { HowItWorks } from './novascribe/v2/NovaProcess';
+import { LiveDemo, RealReport } from './novascribe/v2/NovaDemo';
+import NovaLanguages from './novascribe/v2/NovaLanguages';
 
 interface AnvayaHomeProps {
-  setCurrentPage: (page: PageType) => void;
-  isLoggedIn?: boolean;
+  /** Open अन्वय Book — sign-in for a signed-out visitor. */
+  onOpenBook: () => void;
+  /** Open अन्वय Scribe — same. */
+  onOpenScribe: () => void;
+  /** Start a trial. This is the ONLY page that offers one. */
+  onStartTrial: () => void;
+  onSignIn: () => void;
 }
 
 // The platform's front door: what Anvaya is, and the two products that sit on
@@ -18,25 +28,106 @@ interface AnvayaHomeProps {
 // the person reading it is the owner, and they are not buying "a booking tool"
 // and "a scribe" — they are buying one fewer broken handoff between the front
 // desk and the consulting room.
-export default function AnvayaHome({ setCurrentPage, isLoggedIn }: AnvayaHomeProps) {
-  const openBook = () => setCurrentPage('landing');
-  const openScribe = () => setCurrentPage('novascribe-landing');
-
+export default function AnvayaHome({
+  onOpenBook,
+  onOpenScribe,
+  onStartTrial,
+  onSignIn,
+}: AnvayaHomeProps) {
   return (
     <div className="bg-white text-anvaya-ink">
-      <Hero setCurrentPage={setCurrentPage} isLoggedIn={isLoggedIn} />
+      <Hero onStartTrial={onStartTrial} onOpenBook={onOpenBook} onOpenScribe={onOpenScribe} />
       <Chain />
-      <Products openBook={openBook} openScribe={openScribe} />
+      <Products openBook={onOpenBook} openScribe={onOpenScribe} />
+
+      {/* The two product sites used to live at their own URLs and each opened
+          with its own pitch — so a visitor who had just read this page and
+          clicked "Book" was handed a second marketing page instead of a way in.
+          Everything worth reading from both is now here, in one scroll, and the
+          product buttons go straight to sign-in. */}
+      <ProductSection
+        id="book"
+        who="For the clinic"
+        cut="book"
+        tint="text-anvaya-blue"
+        onOpen={onOpenBook}
+        label={BRAND.book.plain}
+      >
+        <PatientAsksSection />
+        <ClinicBookShowcase />
+      </ProductSection>
+
+      <ProductSection
+        id="scribe"
+        who="For the doctor"
+        cut="scribe"
+        tint="text-anvaya-green"
+        onOpen={onOpenScribe}
+        label={BRAND.scribe.plain}
+      >
+        <HowItWorks />
+        <LiveDemo />
+        <NovaLanguages />
+        <RealReport />
+      </ProductSection>
+
       <WhereTheAiSits />
       <Trust />
-      <Close setCurrentPage={setCurrentPage} isLoggedIn={isLoggedIn} />
+      <Close onStartTrial={onStartTrial} onSignIn={onSignIn} />
     </div>
+  );
+}
+
+/**
+ * One product's whole story, under a heading that says whose it is.
+ *
+ * These blocks came from the two separate product sites. Dropped in without a
+ * frame they read as unrelated slabs — the reader has no way to tell where the
+ * clinic's story ends and the doctor's begins. The heading and the closing
+ * button are what turn a pile of sections back into a chapter.
+ */
+function ProductSection({
+  id,
+  who,
+  cut,
+  tint,
+  onOpen,
+  label,
+  children,
+}: {
+  id: string;
+  who: string;
+  cut: 'book' | 'scribe';
+  tint: string;
+  onOpen: () => void;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={id} className="border-t border-anvaya-rule">
+      <div className="max-w-6xl mx-auto px-5 sm:px-8 pt-20 pb-2 text-center">
+        <p className={`text-[11px] font-bold uppercase tracking-[0.19em] mb-5 ${tint}`}>{who}</p>
+        <div className="flex justify-center">
+          <AnvayaLogo height={44} cut={cut} />
+        </div>
+      </div>
+      {children}
+      <div className="max-w-6xl mx-auto px-5 sm:px-8 pb-20 text-center">
+        <button type="button" onClick={onOpen} className={BTN_FILL}>
+          Sign in to {label} <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+    </section>
   );
 }
 
 /* ── hero ─────────────────────────────────────────────────────────────── */
 
-function Hero({ setCurrentPage, isLoggedIn }: AnvayaHomeProps) {
+function Hero({
+  onStartTrial,
+  onOpenBook,
+  onOpenScribe,
+}: Pick<AnvayaHomeProps, 'onStartTrial' | 'onOpenBook' | 'onOpenScribe'>) {
   return (
     <section className="relative overflow-hidden px-5 sm:px-8 pt-16 pb-20 text-center">
       {/* A soft wash behind the mark, so it sits IN the page rather than
@@ -79,8 +170,11 @@ function Hero({ setCurrentPage, isLoggedIn }: AnvayaHomeProps) {
         </p>
 
         <div className="mt-9 flex flex-wrap gap-3 justify-center">
-          <button type="button" onClick={() => setCurrentPage(isLoggedIn ? 'hub' : 'signup')} className={BTN_FILL}>
-            {isLoggedIn ? 'Open my clinic' : 'Start free'} <ArrowRight className="w-4 h-4" />
+          {/* The ONLY place a trial starts. The product sections below offer a
+              way IN, not another pitch — someone who has scrolled that far has
+              already decided which of the two they came for. */}
+          <button type="button" onClick={onStartTrial} className={BTN_FILL}>
+            Start free trial <ArrowRight className="w-4 h-4" />
           </button>
           <a href="#how" className={BTN_GHOST}>See how it works</a>
         </div>
@@ -92,7 +186,7 @@ function Hero({ setCurrentPage, isLoggedIn }: AnvayaHomeProps) {
           <span className="text-sm text-anvaya-muted">Two products:</span>
           <button
             type="button"
-            onClick={() => setCurrentPage('landing')}
+            onClick={onOpenBook}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-anvaya-rule bg-white
                        text-sm font-semibold text-anvaya-blue hover:border-anvaya-blue/50 hover:-translate-y-px transition cursor-pointer"
           >
@@ -100,7 +194,7 @@ function Hero({ setCurrentPage, isLoggedIn }: AnvayaHomeProps) {
           </button>
           <button
             type="button"
-            onClick={() => setCurrentPage('novascribe-landing')}
+            onClick={onOpenScribe}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-anvaya-rule bg-white
                        text-sm font-semibold text-anvaya-green hover:border-anvaya-green/50 hover:-translate-y-px transition cursor-pointer"
           >
@@ -411,7 +505,7 @@ function ProductCard({
           className={`mt-7 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold
                       bg-gradient-to-r ${cap} shadow-md group-hover:gap-3 transition-all`}
         >
-          Open {label} <ArrowRight className="w-4 h-4" />
+          Sign in to {label} <ArrowRight className="w-4 h-4" />
         </span>
       </div>
     </div>
@@ -532,7 +626,7 @@ function Trust() {
 
 /* ── close ────────────────────────────────────────────────────────────── */
 
-function Close({ setCurrentPage, isLoggedIn }: AnvayaHomeProps) {
+function Close({ onStartTrial, onSignIn }: Pick<AnvayaHomeProps, 'onStartTrial' | 'onSignIn'>) {
   return (
     <section className="px-5 sm:px-8 py-20 text-center bg-gradient-to-br from-anvaya-navy via-anvaya-teal to-anvaya-green">
       <div className="max-w-3xl mx-auto">
@@ -552,14 +646,14 @@ function Close({ setCurrentPage, isLoggedIn }: AnvayaHomeProps) {
         <div className="mt-9 flex flex-wrap gap-3 justify-center">
           <button
             type="button"
-            onClick={() => setCurrentPage(isLoggedIn ? 'hub' : 'signup')}
+            onClick={onStartTrial}
             className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-white text-anvaya-navy font-semibold hover:-translate-y-px transition cursor-pointer"
           >
-            {isLoggedIn ? 'Open my clinic' : 'Start free'} <ArrowRight className="w-4 h-4" />
+            Start free trial <ArrowRight className="w-4 h-4" />
           </button>
           <button
             type="button"
-            onClick={() => setCurrentPage('login')}
+            onClick={onSignIn}
             className="px-7 py-3.5 rounded-xl border border-white/40 text-white font-semibold hover:bg-white/10 transition cursor-pointer"
           >
             Sign in

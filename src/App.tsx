@@ -42,10 +42,10 @@ function readEntry(): Entry {
 
   const path = window.location.pathname.replace(/\/+$/, '').toLowerCase();
   if (path === '/novascribe' || path === '/nova' || path === '/scribe') {
-    return { page: 'novascribe-landing', app: 'novascribe' };
+    return { page: 'novascribe', app: 'novascribe' };
   }
   if (path === '/clinicbook' || path === '/booking') {
-    return { page: 'landing', app: 'dashboard' };
+    return { page: 'dashboard', app: 'dashboard' };
   }
 
   // Query form — used by the phone app, which wants the APP, not the landing.
@@ -182,15 +182,13 @@ function AppShell() {
   const openHub = () => handleSetPage('hub');
   const openClinicBook = () => {
     setIntendedApp('dashboard');
-    handleSetPage(user ? 'dashboard' : 'landing');
+    // handleSetPage sends a signed-out visitor to the sign-in screen, branded
+    // for whichever product they asked for.
+    handleSetPage('dashboard');
   };
   const openMediScribe = () => {
-    if (user) {
-      handleSetPage('novascribe');
-    } else {
-      setIntendedApp('novascribe');
-      handleSetPage('novascribe-landing');
-    }
+    setIntendedApp('novascribe');
+    handleSetPage('novascribe');
   };
   // The login/signup/verify screens belong to whichever product the user is
   // entering, so the navbar brands them as MediScribe when that's the intent.
@@ -292,7 +290,12 @@ function AppShell() {
         {/* The front door. A signed-in user gets the picker instead — they
             have already read the marketing, and what they want is a way in. */}
         {!APP_ONLY && currentPage === 'home' && !user && (
-          <AnvayaHome setCurrentPage={handleSetPage} isLoggedIn={false} />
+          <AnvayaHome
+            onOpenBook={openClinicBook}
+            onOpenScribe={openMediScribe}
+            onStartTrial={() => handleSetPage('signup')}
+            onSignIn={() => handleSetPage('login')}
+          />
         )}
 
         {!APP_ONLY && (currentPage === 'hub' || (currentPage === 'home' && !!user)) && (
