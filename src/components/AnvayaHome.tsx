@@ -35,6 +35,7 @@ export default function AnvayaHome({
       <Hero onStartTrial={onStartTrial} onOpenBook={onOpenBook} onOpenScribe={onOpenScribe} />
       <Chain />
       <Products onOpenBook={onOpenBook} onOpenScribe={onOpenScribe} />
+      <Pricing onStartTrial={onStartTrial} />
       <WhereTheAiSits />
       <Trust />
       <Close onStartTrial={onStartTrial} onSignIn={onSignIn} />
@@ -491,6 +492,138 @@ function ProductCard({
         </span>
       </div>
     </div>
+  );
+}
+
+/* ── pricing ──────────────────────────────────────────────────────────── */
+
+// The prices a clinic is actually charged today, carried over unchanged from the
+// two product pages. Nothing here is invented: a number on a pricing page is a
+// promise, and inventing one to fill a layout is the worst kind of placeholder
+// because it looks finished.
+//
+// Book has one plan and Scribe has three, and that asymmetry is left alone.
+// Padding Book out to three columns for symmetry would have meant making two of
+// them up.
+const BOOK_PLAN = {
+  price: '₹999',
+  period: '/month',
+  blurb: 'For a clinic in India, with domestic WhatsApp volume.',
+  features: [
+    'WhatsApp appointment booking',
+    '24-hour and 2-hour reminders, automatic',
+    'Waitlist that fills a freed slot on its own',
+    'Clinic dashboard for the front desk',
+    'Hindi, English and the mix in between',
+    'Google Calendar, if you use it',
+  ],
+};
+
+const SCRIBE_PLANS = [
+  { name: 'Free', price: '₹0', period: '', blurb: '5 consultations a month', popular: false },
+  { name: 'Starter', price: '₹1,499', period: '/month', blurb: '100 consultations, patient timeline', popular: false },
+  {
+    name: 'Professional',
+    price: '₹2,999',
+    period: '/month',
+    blurb: 'Unlimited consultations, WhatsApp prescription delivery',
+    popular: true,
+  },
+];
+
+function Pricing({ onStartTrial }: Pick<AnvayaHomeProps, 'onStartTrial'>) {
+  return (
+    <section id="pricing" className="bg-anvaya-mist border-y border-anvaya-rule px-5 sm:px-8 py-20">
+      <div className="max-w-6xl mx-auto">
+        <div className="max-w-2xl">
+          <Eyebrow>Pricing</Eyebrow>
+          <H2>Per clinic, per month. Cancel whenever.</H2>
+          <p className="mt-4 text-anvaya-body leading-relaxed">
+            Take one product or both. Every plan includes a 14-day free trial, and no
+            card is asked for to start it.
+          </p>
+        </div>
+
+        <div className="mt-12 grid lg:grid-cols-[1fr_1.25fr] gap-6 items-start">
+          {/* ── Book ── */}
+          <div className="rounded-2xl border border-anvaya-rule bg-white overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-anvaya-navy to-anvaya-blue" />
+            <div className="p-7">
+              <AnvayaLogo height={28} cut="book" decorative />
+              <p className="mt-4 text-sm text-anvaya-muted">{BOOK_PLAN.blurb}</p>
+              <p className="mt-5">
+                <span
+                  className="text-[2.6rem] leading-none text-anvaya-ink"
+                  style={{ fontFamily: 'var(--font-brand)', fontWeight: 600 }}
+                >
+                  {BOOK_PLAN.price}
+                </span>
+                <span className="text-sm text-anvaya-muted">{BOOK_PLAN.period}</span>
+              </p>
+              <ul className="mt-6 space-y-2.5">
+                {BOOK_PLAN.features.map((f) => (
+                  <li key={f} className="flex gap-2.5 text-[0.92rem] text-anvaya-body leading-relaxed">
+                    <span className="mt-2 w-1.5 h-1.5 rounded-full shrink-0 bg-gradient-to-r from-anvaya-navy to-anvaya-blue" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <button type="button" onClick={onStartTrial} className={`${BTN_FILL} mt-7 w-full justify-center`}>
+                Start free trial <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* ── Scribe ── */}
+          <div className="rounded-2xl border border-anvaya-rule bg-white overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-anvaya-teal to-anvaya-green" />
+            <div className="p-7">
+              <AnvayaLogo height={28} cut="scribe" decorative />
+              <p className="mt-4 text-sm text-anvaya-muted">Priced by how much a doctor consults.</p>
+
+              <div className="mt-5 grid sm:grid-cols-3 gap-3">
+                {SCRIBE_PLANS.map((pl) => (
+                  <div
+                    key={pl.name}
+                    className={
+                      'rounded-xl p-4 border ' +
+                      (pl.popular
+                        ? 'border-anvaya-green bg-anvaya-green/5'
+                        : 'border-anvaya-rule bg-white')
+                    }
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-anvaya-muted">
+                        {pl.name}
+                      </p>
+                      {pl.popular && (
+                        <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-anvaya-green bg-anvaya-green/15 px-1.5 py-0.5 rounded-full">
+                          Popular
+                        </span>
+                      )}
+                    </div>
+                    <p>
+                      <span
+                        className="text-[1.6rem] leading-none text-anvaya-ink"
+                        style={{ fontFamily: 'var(--font-brand)', fontWeight: 600 }}
+                      >
+                        {pl.price}
+                      </span>
+                      <span className="text-xs text-anvaya-muted">{pl.period}</span>
+                    </p>
+                    <p className="mt-2 text-[0.82rem] text-anvaya-body leading-snug">{pl.blurb}</p>
+                  </div>
+                ))}
+              </div>
+
+              <button type="button" onClick={onStartTrial} className={`${BTN_FILL} mt-7 w-full justify-center`}>
+                Start free trial <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
