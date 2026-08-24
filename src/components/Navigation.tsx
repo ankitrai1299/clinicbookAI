@@ -51,7 +51,7 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
 
             <button
               onClick={onOpenHub}
-              className="flex items-center gap-2.5 cursor-pointer focus:outline-hidden"
+              className="flex flex-col items-start gap-0.5 cursor-pointer focus:outline-hidden"
               id="brand-logo-btn"
             >
               {/* The product lockup — अन्वय Book or अन्वय Scribe — which already
@@ -64,23 +64,21 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
                 decorative
                 className="transition-transform duration-300 hover:scale-105"
               />
-              <div className="text-left">
-                {/* The logo's own line, in Hindi — the same words drawn into
-                    the artwork, so the header and the logo can never say two
-                    different things. Set in Mukta: Rozha carries अन्वय but its
-                    thin horizontals vanish at this size.
+              {/* The logo's own line, in Hindi — the same words drawn into the
+                  artwork, so the header and the logo can never say two different
+                  things. Mukta, not Rozha: Rozha carries अन्वय in the artwork but
+                  its thin horizontals vanish at this size.
 
-                    Not uppercase and not mono. Devanagari has no capitals, so
-                    `uppercase` does nothing to it while `tracking-widest` pulls
-                    the conjuncts apart — a matra drifting off its consonant is
-                    how Hindi set by a Latin rule ends up looking broken. */}
-                <span
-                  className="block text-[10.5px] text-slate-400 leading-none"
-                  style={{ fontFamily: 'var(--font-devanagari-text)', letterSpacing: '.005em' }}
-                >
-                  {BRAND.taglineHi}
-                </span>
-              </div>
+                  No uppercase and no wide tracking either. Devanagari has no
+                  capitals, and widened tracking drags a matra off the consonant
+                  it belongs to — which is how Hindi set by a Latin rule ends up
+                  looking broken rather than merely wrong. */}
+              <span
+                className="block text-[10.5px] text-slate-400 leading-none pl-0.5"
+                style={{ fontFamily: 'var(--font-devanagari-text)', letterSpacing: '.005em' }}
+              >
+                {BRAND.taglineHi}
+              </span>
             </button>
           </div>
 

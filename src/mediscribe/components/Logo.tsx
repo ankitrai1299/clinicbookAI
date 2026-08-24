@@ -22,12 +22,13 @@ interface LogoProps {
 export default function Logo({ onClick, className = '', light = false }: LogoProps) {
   const inner = (
     <>
-      {/* The scribe lockup already reads अन्वय Scribe, so only the Hindi line
-          sits beside it. `light` swaps to the reversed artwork: the lettering
-          is navy, and on this dark sidebar navy is present but unreadable. */}
+      {/* The lockup already reads अन्वय Scribe, so the only thing under it is
+          the Hindi line — a subtitle, below the title, not beside it.
+          `light` swaps to the reversed artwork: the lettering is navy, and on
+          this dark sidebar navy is present but unreadable. */}
       <AnvayaLogo height={32} cut="scribe" light={light} decorative />
       <span
-        className={`text-[10.5px] leading-tight ${light ? 'text-white/60' : 'text-slate-400'}`}
+        className={`block text-[10.5px] leading-none pl-0.5 ${light ? 'text-white/60' : 'text-slate-400'}`}
         style={{ fontFamily: 'var(--font-devanagari-text)', letterSpacing: '.005em' }}
       >
         {BRAND.taglineHi}
@@ -40,12 +41,12 @@ export default function Logo({ onClick, className = '', light = false }: LogoPro
       <button
         type="button"
         onClick={onClick}
-        className={`flex items-center gap-2.5 cursor-pointer transition-opacity hover:opacity-80 ${className}`}
+        className={`flex flex-col items-start gap-0.5 cursor-pointer transition-opacity hover:opacity-80 ${className}`}
       >
         {inner}
       </button>
     );
   }
 
-  return <div className={`flex items-center gap-2.5 ${className}`}>{inner}</div>;
+  return <div className={`flex flex-col items-start gap-0.5 ${className}`}>{inner}</div>;
 }
