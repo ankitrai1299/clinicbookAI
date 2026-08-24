@@ -24,7 +24,7 @@ export default function Logo({ onClick, className = '', light = false }: LogoPro
     <>
       {/* On a dark sidebar the two-colour mark loses the indigo ring against the
           ground, so the reversed variant is used instead of tinting it. */}
-      <AnvayaMark size={26} variant={light ? 'onDark' : 'duo'} />
+      <AnvayaMark size={26} variant={light ? 'onDark' : 'gradient'} />
       <span
         className={`text-xl tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}
         style={{ fontFamily: 'var(--font-brand)', fontWeight: 500, letterSpacing: '-0.02em' }}

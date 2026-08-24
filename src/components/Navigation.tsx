@@ -5,6 +5,7 @@ import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
 import { BRAND } from '../brand';
 import Wordmark from './Wordmark';
+import { AnvayaTile } from './AnvayaMark';
 
 export type ActiveProduct = 'clinicbook' | 'novascribe' | null;
 
@@ -54,19 +55,12 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               className="flex items-center gap-2.5 cursor-pointer focus:outline-hidden"
               id="brand-logo-btn"
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md shadow-sky-100 transition-all duration-300 hover:scale-105 ${
-                activeProduct === 'novascribe'
-                  ? 'bg-gradient-to-br from-sky-500 to-sky-700'
-                  : activeProduct === 'clinicbook'
-                    ? 'bg-sky-600'
-                    : 'bg-gradient-to-br from-teal-500 to-sky-600'
-              }`}>
-                {activeProduct === 'novascribe'
-                  ? <Stethoscope className="w-6 h-6" />
-                  : activeProduct === 'clinicbook'
-                    ? <CalendarCheck className="w-6 h-6" />
-                    : <Activity className="w-6 h-6" />}
-              </div>
+              {/* ONE mark for both products. The old tile carried a different
+                  icon per product — a stethoscope, a calendar — which is how a
+                  platform ends up looking like two companies. The two rings and
+                  the blue→green gradient are the brand; which product you are
+                  in is said by the wordmark beside it, not by the logo. */}
+              <AnvayaTile size={40} className="shadow-md shadow-sky-100 transition-transform duration-300 hover:scale-105" />
               <div className="text-left">
                 <span className="block font-display text-xl font-bold tracking-tight text-slate-900 leading-tight">
                   {/* अन्वय in Devanagari, the rest in Latin. Two scripts, one
