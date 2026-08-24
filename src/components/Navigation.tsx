@@ -4,8 +4,7 @@ import { Activity, CalendarCheck, LayoutDashboard, LayoutGrid, LogIn, LogOut, Me
 import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
 import { BRAND } from '../brand';
-import Wordmark from './Wordmark';
-import { AnvayaTile } from './AnvayaMark';
+import AnvayaLogo from './AnvayaLogo';
 
 export type ActiveProduct = 'clinicbook' | 'novascribe' | null;
 
@@ -55,21 +54,20 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               className="flex items-center gap-2.5 cursor-pointer focus:outline-hidden"
               id="brand-logo-btn"
             >
-              {/* ONE mark for both products. The old tile carried a different
+              {/* ONE logo for both products. The old tile carried a different
                   icon per product — a stethoscope, a calendar — which is how a
-                  platform ends up looking like two companies. The two rings and
-                  the blue→green gradient are the brand; which product you are
-                  in is said by the wordmark beside it, not by the logo. */}
-              <AnvayaTile size={40} className="shadow-md shadow-sky-100 transition-transform duration-300 hover:scale-105" />
+                  platform ends up looking like two companies. */}
+              <AnvayaLogo height={38} cut="compact" decorative className="transition-transform duration-300 hover:scale-105" />
               <div className="text-left">
                 <span className="block font-display text-xl font-bold tracking-tight text-slate-900 leading-tight">
-                  {/* अन्वय in Devanagari, the rest in Latin. Two scripts, one
-                      word — the Sanskrit half says where this comes from, the
-                      English half says what it does. */}
+                  {/* Only the PRODUCT half. The logo beside it already says
+                      अन्वय, and setting the full wordmark here printed the name
+                      twice in one lockup. The logo says whose this is; this says
+                      which of the two you are in. */}
                   {activeProduct === 'novascribe'
-                    ? <Wordmark app="novascribe" devClassName="text-sky-600" />
+                    ? BRAND.scribe.latin
                     : activeProduct === 'clinicbook'
-                      ? <Wordmark app="clinicbook" devClassName="text-sky-600" />
+                      ? BRAND.book.latin
                       : <span className="text-sky-600">{BRAND.devanagari}</span>}
                 </span>
                 <span className="block text-[10px] font-mono text-slate-400 uppercase tracking-widest leading-none">

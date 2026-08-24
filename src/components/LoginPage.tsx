@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowLeft, ArrowRight, CalendarCheck, Key, Mail, Stethoscope, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, Key, Mail, Eye, EyeOff } from 'lucide-react';
 
-import Wordmark from './Wordmark';
+import { BRAND } from '../brand';
+import AnvayaLogo from './AnvayaLogo';
 import { isMfaChallenge, loginUser, verifyMfaCode } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { PageType } from '../types';
@@ -100,15 +101,12 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
         </button>
 
         <div className="flex flex-col items-center gap-2 mb-8">
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shadow-sky-100 ${
-            isNova
-              ? 'bg-gradient-to-br from-[#E0A03C] to-[#B87A1E]'
-              : 'bg-gradient-to-br from-[#2E3E8F] to-[#1F2A6B]'
-          }`}>
-            {isNova ? <Stethoscope className="w-7 h-7" /> : <CalendarCheck className="w-7 h-7" />}
-          </div>
+          {/* The real logo, not a coloured tile with a stock icon in it. This
+              is the first screen anyone sees, and a generic glyph here is the
+              cheapest possible first impression. */}
+          <AnvayaLogo height={54} cut="full" />
           <h1 className="font-display text-2xl font-bold text-slate-900">
-            Sign in to <Wordmark app={isNova ? 'novascribe' : 'clinicbook'} devClassName="text-anvaya-indigo" />
+            Sign in to {isNova ? BRAND.scribe.latin : BRAND.book.latin}
           </h1>
           <p className="text-slate-400 text-sm text-center">
             {isNova

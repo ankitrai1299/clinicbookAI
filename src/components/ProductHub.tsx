@@ -2,8 +2,7 @@ import React from 'react';
 import { CalendarCheck, Stethoscope, ArrowRight } from 'lucide-react';
 
 import { BRAND } from '../brand';
-import AnvayaMark from './AnvayaMark';
-import Wordmark from './Wordmark';
+import AnvayaLogo from './AnvayaLogo';
 
 interface ProductHubProps {
   userName?: string | null;
@@ -23,7 +22,7 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <div className="flex justify-center mb-5">
-            <AnvayaMark size={44} title={`${BRAND.name} — ${BRAND.meaning}`} />
+            <AnvayaLogo height={72} cut="full" />
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-[#16192A]">
             {userName ? (
@@ -41,7 +40,7 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
           <ProductCard
             onClick={onOpenClinicBook}
             icon={<CalendarCheck className="w-7 h-7" />}
-            name={<Wordmark app="clinicbook" devClassName="text-anvaya-indigo" />}
+            name={BRAND.book.latin}
             who="For the clinic"
             description="Patients book, reschedule and cancel over WhatsApp — day or night, in their own language. The desk confirms."
             accent="from-[#2E3E8F] to-[#1F2A6B]"
@@ -49,7 +48,7 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
           <ProductCard
             onClick={onOpenMediScribe}
             icon={<Stethoscope className="w-7 h-7" />}
-            name={<Wordmark app="novascribe" devClassName="text-anvaya-amber" />}
+            name={BRAND.scribe.latin}
             who="For the doctor"
             description="Record the consultation and the note writes itself. The doctor edits and approves — nothing reaches a patient before that."
             accent="from-[#E0A03C] to-[#B87A1E]"
@@ -63,7 +62,7 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
 interface ProductCardProps {
   onClick: () => void;
   icon: React.ReactNode;
-  name: React.ReactNode;
+  name: string;
   who: string;
   description: string;
   accent: string;

@@ -1,5 +1,5 @@
-import Wordmark from '../../components/Wordmark';
-import AnvayaMark from '../../components/AnvayaMark';
+import { BRAND } from '../../brand';
+import AnvayaLogo from '../../components/AnvayaLogo';
 
 interface LogoProps {
   /** When provided, the logo renders as a clickable button (e.g. back to dashboard). */
@@ -24,12 +24,12 @@ export default function Logo({ onClick, className = '', light = false }: LogoPro
     <>
       {/* On a dark sidebar the two-colour mark loses the indigo ring against the
           ground, so the reversed variant is used instead of tinting it. */}
-      <AnvayaMark size={26} variant={light ? 'onDark' : 'gradient'} />
+      <AnvayaLogo height={30} cut="compact" decorative />
       <span
         className={`text-xl tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}
         style={{ fontFamily: 'var(--font-brand)', fontWeight: 500, letterSpacing: '-0.02em' }}
       >
-        <Wordmark app="novascribe" devClassName={light ? 'text-white' : 'text-anvaya-indigo'} />
+        {BRAND.scribe.latin}
       </span>
     </>
   );
