@@ -22,7 +22,15 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <div className="flex justify-center mb-5">
-            <AnvayaLogo height={76} cut="platform" />
+            {/* The cut WITHOUT a line baked in — the slogan is set below as
+                text, and the full artwork carries a different one. */}
+            <AnvayaLogo height={54} cut="platform-compact" />
+            <p
+              className="mt-2.5 text-[13px] text-slate-400"
+              style={{ fontFamily: 'var(--font-devanagari-text)', letterSpacing: '.005em' }}
+            >
+              {BRAND.taglineHi}
+            </p>
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-[#16192A]">
             {userName ? (

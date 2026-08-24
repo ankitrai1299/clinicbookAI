@@ -65,14 +65,18 @@ export const BRAND = {
   tagline: 'One thread through the whole visit',
 
   /**
-   * The line under the logo, in Hindi — the same words that are drawn into the
-   * logo artwork itself, so the two can never say different things.
+   * The line under the logo, in Hindi. ONE slogan, and this is it.
    *
-   * Set in Mukta, never Rozha. Rozha is the display face that carries अन्वय; at
-   * the ~10px a sub-label gets, its thin horizontals disappear and the line
-   * turns to mush. A tagline is text, not lettering.
+   * The full platform artwork has a DIFFERENT line drawn into it — हर क्लिनिक,
+   * हर मरीज़ के लिए — so that cut must never be shown anywhere this text also
+   * appears, or the page carries two slogans that disagree. Wherever the slogan
+   * is set as text, the logo used is the one with no line baked in.
+   *
+   * Mukta, never Rozha. Rozha is the display face that carries अन्वय; at the
+   * ~10px a sub-label gets, its thin horizontals disappear and the line turns to
+   * mush. A tagline is text, not lettering.
    */
-  taglineHi: 'हर क्लिनिक, हर मरीज़ के लिए',
+  taglineHi: 'स्वस्थ भारत, हमारा लक्ष्य',
 
   /** The legal entity, for footers and policy pages. */
   company: 'NextDot',
