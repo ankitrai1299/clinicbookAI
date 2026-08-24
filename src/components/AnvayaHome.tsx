@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ShieldCheck, FileText, CircleDot, ArrowRight } from 'lucide-react';
 
 import { BRAND } from '../brand';
@@ -127,17 +127,57 @@ const BTN_GHOST =
   'inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-anvaya-ink ' +
   'border border-anvaya-rule bg-white hover:-translate-y-px transition cursor-pointer';
 
-// A real exchange, not a screenshot. It is the whole product in six lines, and
-// it answers the only question a clinic actually has: what does my patient see?
+// A real exchange, not a screenshot — and it plays, because a still image of a
+// chat is just a picture, while a conversation arriving line by line is the
+// product doing its job in front of you.
+//
+// Two things are load-bearing here and neither is the animation itself:
+//
+//   Nothing moves.  Every bubble occupies its space from the first frame and
+//                   only fades in. Appending them as they arrive would relayout
+//                   the hero six times, dragging the page under the reader's
+//                   cursor — the classic way an "alive" section makes a site
+//                   feel broken.
+//
+//   It can be off.  prefers-reduced-motion shows the whole conversation at once.
+//                   For a vestibular disorder this is not a preference.
+const CHAT: Array<{ from: 'p' | 'c'; text: string; hi?: boolean; wait: number }> = [
+  { from: 'p', text: 'कल डॉक्टर से मिलना है', hi: true, wait: 700 },
+  { from: 'c', text: 'नमस्ते 🙏 कल डॉ. रुचि उपलब्ध हैं — 11:30 AM या 4:00 PM?', hi: true, wait: 1500 },
+  { from: 'p', text: '4 बजे', hi: true, wait: 1100 },
+  { from: 'c', text: 'हो गया। कल 4:00 PM, डॉ. रुचि। सुबह याद दिला देंगे।', hi: true, wait: 1400 },
+  { from: 'p', text: '🎤 voice note', wait: 1500 },
+  { from: 'c', text: 'आपकी पर्ची तैयार है 📄 — डॉ. रुचि ने अभी साइन की है।', hi: true, wait: 1800 },
+];
+
 function ChatPreview() {
-  const lines: Array<{ from: 'p' | 'c'; text: string; hi?: boolean }> = [
-    { from: 'p', text: 'कल डॉक्टर से मिलना है', hi: true },
-    { from: 'c', text: 'नमस्ते 🙏 कल डॉ. रुचि उपलब्ध हैं — 11:30 AM या 4:00 PM?', hi: true },
-    { from: 'p', text: '4 बजे', hi: true },
-    { from: 'c', text: 'हो गया। कल 4:00 PM, डॉ. रुचि। सुबह याद दिला देंगे।', hi: true },
-    { from: 'p', text: '🎤 voice note' },
-    { from: 'c', text: 'आपकी पर्ची तैयार है 📄 — डॉ. रुचि ने अभी साइन की है।', hi: true },
-  ];
+  const reduced =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  const [shown, setShown] = useState(reduced ? CHAT.length : 0);
+
+  useEffect(() => {
+    if (reduced) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const step = (i: number) => {
+      // After the last line, hold, then run it again — a visitor who arrives
+      // mid-conversation should still get to see the whole thing.
+      const next = i >= CHAT.length ? 0 : i + 1;
+      const delay = i >= CHAT.length ? 4200 : CHAT[i].wait;
+      timer = setTimeout(() => {
+        setShown(next);
+        step(next);
+      }, delay);
+    };
+    step(0);
+    return () => clearTimeout(timer);
+  }, [reduced]);
+
+  // Typing dots while the clinic's side is composing — shown in a row that is
+  // always in the DOM, so its appearance never moves anything either.
+  const typing = !reduced && shown < CHAT.length && CHAT[shown].from === 'c';
+
   return (
     <div className="mt-14 max-w-md mx-auto text-left rounded-2xl border border-anvaya-rule bg-white overflow-hidden shadow-2xl shadow-anvaya-navy/15">
       <div className="px-4 py-3 flex items-center gap-2.5 bg-gradient-to-r from-anvaya-navy via-anvaya-teal to-anvaya-green">
@@ -145,17 +185,25 @@ function ChatPreview() {
         <span className="text-white text-sm font-semibold">Sunrise Clinic</span>
         <span className="ml-auto text-[10px] uppercase tracking-widest text-white/60">WhatsApp</span>
       </div>
+
       <div className="whatsapp-chat-bg p-4 space-y-2">
-        {lines.map((l, i) => (
+        {CHAT.map((l, i) => (
           <div key={i} className={l.from === 'p' ? 'flex justify-end' : 'flex justify-start'}>
             <div
               className={
-                'max-w-[87%] px-3 py-2 rounded-xl text-[13.5px] leading-snug ' +
+                'max-w-[87%] px-3 py-2 rounded-xl text-[13.5px] leading-snug transition-all duration-500 ease-out ' +
                 (l.from === 'p'
                   ? 'bg-[#DCF8C6] text-slate-800 rounded-br-sm'
                   : 'bg-white border border-anvaya-rule text-slate-700 rounded-bl-sm')
               }
-              style={l.hi ? { fontFamily: 'var(--font-devanagari-text)' } : undefined}
+              style={{
+                fontFamily: l.hi ? 'var(--font-devanagari-text)' : undefined,
+                opacity: i < shown ? 1 : 0,
+                transform: i < shown ? 'none' : 'translateY(6px)',
+              }}
+              // Hidden bubbles are still read by a screen reader if they are only
+              // transparent, so the whole conversation would be announced at once.
+              aria-hidden={i < shown ? undefined : true}
             >
               {l.from === 'c' && (
                 <span className="block text-[9px] uppercase tracking-[0.14em] text-anvaya-muted mb-0.5">
@@ -166,6 +214,21 @@ function ChatPreview() {
             </div>
           </div>
         ))}
+
+        <div className="flex justify-start" aria-hidden>
+          <div
+            className="px-3 py-2.5 rounded-xl rounded-bl-sm bg-white border border-anvaya-rule flex gap-1 transition-opacity duration-300"
+            style={{ opacity: typing ? 1 : 0 }}
+          >
+            {[0, 1, 2].map((d) => (
+              <span
+                key={d}
+                className="w-1.5 h-1.5 rounded-full bg-anvaya-muted"
+                style={{ animation: 'anvaya-typing 1.2s infinite', animationDelay: `${d * 0.18}s` }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

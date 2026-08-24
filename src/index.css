@@ -224,3 +224,14 @@ html.cb-phone-page body {
   min-height: 100dvh;
   margin: 0;
 }
+
+/* The three dots while the clinic's side is composing. Bounded and small — a
+   loop that runs forever should be quiet enough to ignore. */
+@keyframes anvaya-typing {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30%           { opacity: 1;   transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes anvaya-typing { 0%, 100% { opacity: .45; transform: none; } }
+}
