@@ -1170,7 +1170,7 @@ function MoreTab({
             {initials(clinicName)}
           </div>
           <div className="min-w-0">
-            <div className="text-white font-bold text-[18px] truncate">{clinicName || BRAND.desk}</div>
+            <div className="text-white font-bold text-[18px] truncate">{clinicName || BRAND.book.plain}</div>
             {userName && <div className="text-white/80 text-[13px] truncate mt-0.5">{userName}</div>}
           </div>
         </div>
@@ -1223,7 +1223,7 @@ function MoreTab({
         <LogOut className="w-[17px] h-[17px]" /> Sign out
       </button>
 
-      <p className="text-center text-[11.5px] text-slate-400 pt-1">{BRAND.desk}</p>
+      <p className="text-center text-[11.5px] text-slate-400 pt-1">{BRAND.book.plain}</p>
     </div>
   );
 }

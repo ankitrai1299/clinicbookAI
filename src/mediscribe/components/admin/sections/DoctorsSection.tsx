@@ -400,7 +400,7 @@ function DoctorFormModal({
                 {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-            <p className="mt-1 text-[11px] text-slate-400">The doctor signs in to {BRAND.scribe} with their email + this password.</p>
+            <p className="mt-1 text-[11px] text-slate-400">The doctor signs in to {BRAND.scribe.plain} with their email + this password.</p>
           </Field>
         </div>
         <div className="pt-2 flex gap-3 justify-end">

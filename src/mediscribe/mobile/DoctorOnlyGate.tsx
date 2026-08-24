@@ -18,7 +18,7 @@ export default function DoctorOnlyGate({ email, onSignOut }: DoctorOnlyGateProps
       </div>
       <h1 className="text-2xl font-bold text-slate-900 mb-2">Doctors only</h1>
       <p className="text-slate-500 leading-relaxed max-w-sm">
-        The {BRAND.scribe} app is for <span className="font-semibold text-slate-700">doctor accounts</span>.
+        The {BRAND.scribe.plain} app is for <span className="font-semibold text-slate-700">doctor accounts</span>.
         Please sign in with a doctor login to record consultations and see your patients.
       </p>
 

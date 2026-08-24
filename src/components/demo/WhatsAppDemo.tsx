@@ -233,7 +233,7 @@ export default function WhatsAppDemo() {
           {!isTall && (
             <div className="w-[300px]">
               <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 mb-3">
-                {BRAND.desk}
+                {BRAND.book.plain}
               </div>
               <h2 className="font-display text-3xl font-extrabold text-slate-900 leading-tight">
                 Appointments on WhatsApp.
@@ -324,7 +324,7 @@ export default function WhatsAppDemo() {
             href="/demo/novascribe"
             className="text-xs font-bold rounded-full px-4 py-2 border bg-white text-violet-700 border-violet-200 hover:border-violet-300"
           >
-            {BRAND.scribe} demo →
+            {BRAND.scribe.plain} demo →
           </a>
         </div>
       )}

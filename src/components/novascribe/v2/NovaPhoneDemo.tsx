@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useInView, useReducedMotion } from 'motion/rea
 import { Mic, Sparkles, Check, FileText, Pill, Send, ShieldCheck, ChevronLeft, MoreVertical, Languages } from 'lucide-react';
 import { SCENES, NOTE, RX, INDIC_FONT } from './scenes';
 
-// NovaScribe running inside a phone — the same animation used on the landing page
+// AnvayaScribe running inside a phone — the same animation used on the landing page
 // and for recording vertical footage, so what a doctor sees on the site is exactly
 // what goes into a reel.
 //

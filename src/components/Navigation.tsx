@@ -3,6 +3,8 @@ import { Activity, CalendarCheck, LayoutDashboard, LayoutGrid, LogIn, LogOut, Me
 
 import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
+import { BRAND } from '../brand';
+import Wordmark from './Wordmark';
 
 export type ActiveProduct = 'clinicbook' | 'novascribe' | null;
 
@@ -67,11 +69,14 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               </div>
               <div className="text-left">
                 <span className="block font-display text-xl font-bold tracking-tight text-slate-900 leading-tight">
+                  {/* अन्वय in Devanagari, the rest in Latin. Two scripts, one
+                      word — the Sanskrit half says where this comes from, the
+                      English half says what it does. */}
                   {activeProduct === 'novascribe'
-                    ? <>Nova<span className="text-sky-600">Scribe</span></>
+                    ? <Wordmark app="novascribe" devClassName="text-sky-600" />
                     : activeProduct === 'clinicbook'
-                      ? <>ClinicBook <span className="text-sky-600">AI</span></>
-                      : <>Healthcare <span className="text-sky-600">AI</span></>}
+                      ? <Wordmark app="clinicbook" devClassName="text-sky-600" />
+                      : <span className="text-sky-600">{BRAND.devanagari}</span>}
                 </span>
                 <span className="block text-[10px] font-mono text-slate-400 uppercase tracking-widest leading-none">
                   {activeProduct === 'novascribe'

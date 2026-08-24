@@ -1489,7 +1489,7 @@ export default function ClinicDashboard({
             <div className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 animate-fadeIn" id="settings-tab-view">
               <div className="border-b border-slate-100 pb-4 text-left">
                 <h2 className="font-display font-extrabold text-lg text-slate-950">Bot Integration Settings</h2>
-                <p className="text-slate-400 text-xs">Configure how {BRAND.desk} speaks, operates, and checks calendar synchronization.</p>
+                <p className="text-slate-400 text-xs">Configure how {BRAND.book.plain} speaks, operates, and checks calendar synchronization.</p>
               </div>
 
               {/* WhatsApp connection — one-click Meta Embedded Signup */}

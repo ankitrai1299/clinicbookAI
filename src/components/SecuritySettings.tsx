@@ -238,7 +238,7 @@ export default function SecuritySettings({ onSignedOut }: Props) {
         )}
 
         <p className="text-xs text-slate-400 mt-4">
-          The {BRAND.scribe} Android app cannot ask for a code. To keep using it with two-factor on, create a
+          The {BRAND.scribe.plain} Android app cannot ask for a code. To keep using it with two-factor on, create a
           device password below and sign in there with that.
         </p>
       </section>
@@ -252,7 +252,7 @@ export default function SecuritySettings({ onSignedOut }: Props) {
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-slate-900">Device passwords</h3>
             <p className="text-sm text-slate-500 mt-1">
-              For the {BRAND.scribe} Android app, which cannot ask for a 6-digit code. Sign in there with your
+              For the {BRAND.scribe.plain} Android app, which cannot ask for a 6-digit code. Sign in there with your
               email and the device password instead of your real one.
             </p>
             <p className="text-xs text-slate-400 mt-2">

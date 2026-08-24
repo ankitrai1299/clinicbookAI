@@ -282,7 +282,7 @@ export default function MobileSettings({
         </Card>
       </Section>
 
-      <p className="text-center text-[11.5px] text-slate-400 pb-2">{BRAND.scribe} · v{appVersion}</p>
+      <p className="text-center text-[11.5px] text-slate-400 pb-2">{BRAND.scribe.plain} · v{appVersion}</p>
     </div>
   );
 }

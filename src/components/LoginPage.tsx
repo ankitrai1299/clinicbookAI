@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, ArrowLeft, ArrowRight, CalendarCheck, Key, Mail, Stethoscope, Eye, EyeOff } from 'lucide-react';
 
-import { BRAND } from '../brand';
+import Wordmark from './Wordmark';
 import { isMfaChallenge, loginUser, verifyMfaCode } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { PageType } from '../types';
@@ -108,7 +108,7 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
             {isNova ? <Stethoscope className="w-7 h-7" /> : <CalendarCheck className="w-7 h-7" />}
           </div>
           <h1 className="font-display text-2xl font-bold text-slate-900">
-            {isNova ? `Sign in to ${BRAND.scribe}` : `Sign in to ${BRAND.desk}`}
+            Sign in to <Wordmark app={isNova ? 'novascribe' : 'clinicbook'} devClassName="text-anvaya-indigo" />
           </h1>
           <p className="text-slate-400 text-sm text-center">
             {isNova

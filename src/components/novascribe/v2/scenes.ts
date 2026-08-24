@@ -1,4 +1,4 @@
-// The same consultation, spoken in different languages — used by every NovaScribe
+// The same consultation, spoken in different languages — used by every AnvayaScribe
 // demo surface so the site and the recorded footage never drift apart.
 //
 // The transcript is written in the language's OWN script, because that is what the

@@ -29,7 +29,7 @@ const PrivacyBody: React.FC = () => (
   <>
     <p>
       This Privacy Policy explains how {COMPANY} ("we", "us") handles personal data in the
-      {BRAND.desk} and {BRAND.scribe} (together, the "Platform"). It is written to align with
+      {BRAND.book.plain} and {BRAND.scribe.plain} (together, the "Platform"). It is written to align with
       India's Digital Personal Data Protection Act, 2023 (the "DPDP Act").
     </p>
 
@@ -127,7 +127,7 @@ const PrivacyBody: React.FC = () => (
 const TermsBody: React.FC = () => (
   <>
     <p>
-      These Terms govern use of the {BRAND.desk} and {BRAND.scribe} products (the "Platform") provided
+      These Terms govern use of the {BRAND.book.plain} and {BRAND.scribe.plain} products (the "Platform") provided
       by {COMPANY}. By creating an account or using the Platform, you agree to these Terms.
     </p>
 
@@ -216,7 +216,7 @@ const LegalPage: React.FC<{ kind: LegalKind }> = ({ kind }) => {
   const title = isPrivacy ? 'Privacy Policy' : 'Terms of Service';
 
   useEffect(() => {
-    document.title = `${title} · ${BRAND.name}`;
+    document.title = `${title} · ${BRAND.devanagari}`;
   }, [title]);
 
   return (

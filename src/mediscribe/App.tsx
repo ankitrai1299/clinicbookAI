@@ -333,7 +333,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
 
   // Update the document title only — URL routing is owned by the host app shell.
   useEffect(() => {
-    document.title = `${BRAND.scribe} — ${VIEW_TITLES[activeView]}`;
+    document.title = `${BRAND.scribe.mixed} — ${VIEW_TITLES[activeView]}`;
   }, [activeView]);
 
   // Handlers

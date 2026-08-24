@@ -3,6 +3,7 @@ import { CalendarCheck, Stethoscope, ArrowRight } from 'lucide-react';
 
 import { BRAND } from '../brand';
 import AnvayaMark from './AnvayaMark';
+import Wordmark from './Wordmark';
 
 interface ProductHubProps {
   userName?: string | null;
@@ -40,7 +41,7 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
           <ProductCard
             onClick={onOpenClinicBook}
             icon={<CalendarCheck className="w-7 h-7" />}
-            name={BRAND.desk}
+            name={<Wordmark app="clinicbook" devClassName="text-anvaya-indigo" />}
             who="For the clinic"
             description="Patients book, reschedule and cancel over WhatsApp — day or night, in their own language. The desk confirms."
             accent="from-[#2E3E8F] to-[#1F2A6B]"
@@ -48,7 +49,7 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
           <ProductCard
             onClick={onOpenMediScribe}
             icon={<Stethoscope className="w-7 h-7" />}
-            name={BRAND.scribe}
+            name={<Wordmark app="novascribe" devClassName="text-anvaya-amber" />}
             who="For the doctor"
             description="Record the consultation and the note writes itself. The doctor edits and approves — nothing reaches a patient before that."
             accent="from-[#E0A03C] to-[#B87A1E]"
@@ -62,7 +63,7 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
 interface ProductCardProps {
   onClick: () => void;
   icon: React.ReactNode;
-  name: string;
+  name: React.ReactNode;
   who: string;
   description: string;
   accent: string;

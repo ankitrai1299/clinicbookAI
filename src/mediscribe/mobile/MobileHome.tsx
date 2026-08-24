@@ -169,7 +169,7 @@ export default function MobileHome({
         <div className="flex-1 pr-3 min-w-0">
           <div className="flex items-center gap-1.5">
             <Sparkles size={12} color={BRAND} />
-            <span className="text-[11px] font-bold text-[#5B5CEB] uppercase tracking-[0.06em]">{ANVAYA.scribeShort}</span>
+            <span className="text-[11px] font-bold text-[#5B5CEB] uppercase tracking-[0.06em]">{ANVAYA.scribe.latin}</span>
           </div>
           <p className="text-slate-500 mt-3 text-[14px] font-medium">{t(greetingKey(now))}</p>
           {/* Wraps rather than truncates: Indian names are routinely long enough

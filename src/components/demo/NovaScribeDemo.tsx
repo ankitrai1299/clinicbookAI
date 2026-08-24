@@ -56,7 +56,7 @@ export default function NovaScribeDemo() {
           {/* Caption — above the phone on vertical, beside it on wide */}
           <div className={isTall ? 'text-center max-w-[330px]' : 'w-[300px]'}>
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 mb-2">
-              {BRAND.scribe}
+              {BRAND.scribe.plain}
             </div>
             <h2 className={`font-display font-extrabold text-slate-900 leading-tight ${isTall ? 'text-2xl' : 'text-3xl'}`}>
               Just talk. The note writes itself.

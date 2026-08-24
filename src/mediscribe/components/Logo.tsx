@@ -1,4 +1,4 @@
-import { BRAND } from '../../brand';
+import Wordmark from '../../components/Wordmark';
 import AnvayaMark from '../../components/AnvayaMark';
 
 interface LogoProps {
@@ -29,7 +29,7 @@ export default function Logo({ onClick, className = '', light = false }: LogoPro
         className={`text-xl tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}
         style={{ fontFamily: 'var(--font-brand)', fontWeight: 500, letterSpacing: '-0.02em' }}
       >
-        {BRAND.scribe}
+        <Wordmark app="novascribe" devClassName={light ? 'text-white' : 'text-anvaya-indigo'} />
       </span>
     </>
   );
