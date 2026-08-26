@@ -805,6 +805,49 @@ export async function deleteReport(token: string, id: string): Promise<void> {
   await jsonOrThrow(res, 'Failed to delete report');
 }
 
+// ── ABDM registry ──────────────────────────────
+
+export interface ProfessionalRegistration {
+  id: string;
+  name: string;
+  speciality: string;
+  hprId: string | null;
+}
+
+export interface RegistryStatus {
+  facility: { clinicName: string; hfrId: string | null };
+  doctors: ProfessionalRegistration[];
+  complete: boolean;
+}
+
+export async function getRegistryStatus(token: string): Promise<RegistryStatus> {
+  const res = await fetch(`${ADMIN}/abdm`, { headers: authHeaders(token), cache: 'no-store' });
+  return jsonOrThrow<RegistryStatus>(res, 'Failed to load registration status');
+}
+
+/** Blank CLEARS the id — a wrongly-typed one has to be correctable. */
+export async function saveFacilityId(token: string, hfrId: string): Promise<RegistryStatus> {
+  const res = await fetch(`${ADMIN}/abdm/facility`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ hfrId }),
+  });
+  return jsonOrThrow<RegistryStatus>(res, 'Failed to save HFR id');
+}
+
+export async function saveProfessionalId(
+  token: string,
+  doctorId: string,
+  hprId: string
+): Promise<RegistryStatus> {
+  const res = await fetch(`${ADMIN}/abdm/doctors/${doctorId}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ hprId }),
+  });
+  return jsonOrThrow<RegistryStatus>(res, 'Failed to save HPR id');
+}
+
 // ── Settings ─────────────────────────────────────────────────
 export async function getSettings(token: string): Promise<AdminSettings> {
   const res = await fetch(`${ADMIN}/settings`, { headers: authHeaders(token), cache: 'no-store' });

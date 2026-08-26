@@ -195,11 +195,9 @@ const toClinicDoctorInput = (b: ScribeDoctorInput) => {
     ...(exp !== undefined && !Number.isNaN(exp) ? { experienceYears: exp } : {}),
     // ClinicBook validates these — only send when they look valid, else omit.
     ...(email && /.+@.+\..+/.test(email) ? { email } : {}),
-    ...(phone.length >= 6 ? { phone } : {}),
-    // Sent even when blank — unlike the others, which are omitted when empty
-    // because ClinicBook validates them. An id has no format to fail, and
-    // omitting it would make a wrongly-typed one impossible to clear.
-    ...(b.hprId !== undefined ? { hprId: String(b.hprId).trim() || null } : {})
+    ...(phone.length >= 6 ? { phone } : {})
+    // hprId is deliberately NOT here. It goes through abdmRegistry, which
+    // writes our own row directly — see the note there.
   };
 };
 

@@ -8,6 +8,7 @@ import {
   Bell,
   Settings,
   ShieldCheck,
+  Landmark,
   LogOut,
   ArrowLeft,
   Menu,
@@ -26,6 +27,7 @@ import LanguagesSection from './sections/LanguagesSection';
 import NotificationsSection from './sections/NotificationsSection';
 import SettingsSection from './sections/SettingsSection';
 import RolesUsersSection from './sections/RolesUsersSection';
+import AbdmSection from './sections/AbdmSection';
 
 type SectionId =
   | 'dashboard'
@@ -37,6 +39,7 @@ type SectionId =
   | 'languages'
   | 'notifications'
   | 'settings'
+  | 'abdm'
   | 'roles'
   | 'search';
 
@@ -59,6 +62,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'languages', label: 'Languages', icon: Languages, permission: 'analytics.view', render: () => <LanguagesSection /> },
   { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'notifications.view', render: () => <NotificationsSection /> },
   { id: 'settings', label: 'Settings', icon: Settings, permission: 'settings.view', render: () => <SettingsSection /> },
+  { id: 'abdm', label: 'ABDM', icon: Landmark, permission: 'settings.view', render: () => <AbdmSection /> },
   { id: 'roles', label: 'Roles & Users', icon: ShieldCheck, permission: 'users.manage', render: () => <RolesUsersSection /> },
 ];
 

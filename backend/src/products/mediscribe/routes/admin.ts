@@ -21,6 +21,11 @@ import {
   updateClinicDoctor,
   deleteClinicDoctor
 } from '../clinicData.js';
+import {
+  getRegistryStatus,
+  setFacilityId,
+  setProfessionalId,
+} from '../../../services/abdmRegistry.service.js';
 
 const router = Router();
 
@@ -219,7 +224,12 @@ router.post('/doctors', requirePermission('doctors.manage'), async (req, res) =>
   try {
     const { name, specialization, experience, email, phone, password, hprId } = req.body ?? {};
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Doctor name is required' });
-    const doctor = await createClinicDoctor(currentClinicId(), { name, specialization, experience, email, phone, hprId });
+    const doctor = await createClinicDoctor(currentClinicId(), { name, specialization, experience, email, phone });
+    // Written separately, not as part of the doctor: the roster may be owned by
+    // an EMR, but the registry id is ours. See abdmRegistry.service.
+    if (hprId !== undefined) {
+      await setProfessionalId(currentClinicId(), (doctor as { id: string }).id, hprId);
+    }
     const login = await giveDoctorLogin(
       currentClinicId(),
       doctor as { id: string; name: string; email?: string | null },
@@ -239,7 +249,10 @@ router.post('/doctors', requirePermission('doctors.manage'), async (req, res) =>
 router.put('/doctors/:id', requirePermission('doctors.manage'), async (req, res) => {
   try {
     const { name, specialization, experience, email, phone, password, hprId } = req.body ?? {};
-    const doctor = await updateClinicDoctor(currentClinicId(), req.params.id, { name, specialization, experience, email, phone, hprId });
+    const doctor = await updateClinicDoctor(currentClinicId(), req.params.id, { name, specialization, experience, email, phone });
+    if (hprId !== undefined) {
+      await setProfessionalId(currentClinicId(), req.params.id, hprId);
+    }
     const login = await giveDoctorLogin(
       currentClinicId(),
       doctor as { id: string; name: string; email?: string | null },
@@ -671,6 +684,39 @@ router.get('/search', requirePermission('dashboard.view'), async (req, res) => {
   } catch (error) {
     console.error('[admin:search]', error);
     return res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// ── ABDM registry ─────────────────────────────────────────────────────────
+//
+// One screen showing what this clinic still has to register with the government
+// and where each id goes. Read is `settings.view` because seeing what is missing
+// is not a privileged act; writing an id is `settings.manage`.
+
+router.get('/abdm', requirePermission('settings.view'), async (_req, res) => {
+  try {
+    return res.json(await getRegistryStatus(currentClinicId()));
+  } catch (error: any) {
+    console.error('[admin:abdm]', error);
+    return res.status(500).json({ error: 'Failed to load registration status' });
+  }
+});
+
+router.put('/abdm/facility', requirePermission('settings.manage'), async (req, res) => {
+  try {
+    return res.json(await setFacilityId(currentClinicId(), req.body?.hfrId));
+  } catch (error: any) {
+    console.error('[admin:abdm:facility]', error);
+    return res.status(error?.statusCode || 400).json({ error: error?.message || 'Failed to save HFR id' });
+  }
+});
+
+router.put('/abdm/doctors/:id', requirePermission('settings.manage'), async (req, res) => {
+  try {
+    return res.json(await setProfessionalId(currentClinicId(), req.params.id, req.body?.hprId));
+  } catch (error: any) {
+    console.error('[admin:abdm:doctor]', error);
+    return res.status(error?.statusCode || 400).json({ error: error?.message || 'Failed to save HPR id' });
   }
 });
 

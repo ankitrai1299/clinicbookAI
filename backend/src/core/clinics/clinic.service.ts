@@ -13,7 +13,7 @@ import { RegisterClinicInput, UpdateClinicInput } from './clinic.schemas.js';
 export const getMyClinic = async (clinicId: string) => {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { id: true, name: true, email: true, phone: true, plan: true },
+    select: { id: true, name: true, email: true, phone: true, plan: true, hfrId: true },
   });
   if (!clinic) throw new AppError('Clinic not found', 404);
   return clinic;
