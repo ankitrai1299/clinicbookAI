@@ -217,9 +217,9 @@ async function linkOrCreateDoctorFor(
 // giveDoctorLogin); otherwise they're a bookable resource with no login.
 router.post('/doctors', requirePermission('doctors.manage'), async (req, res) => {
   try {
-    const { name, specialization, experience, email, phone, password } = req.body ?? {};
+    const { name, specialization, experience, email, phone, password, hprId } = req.body ?? {};
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Doctor name is required' });
-    const doctor = await createClinicDoctor(currentClinicId(), { name, specialization, experience, email, phone });
+    const doctor = await createClinicDoctor(currentClinicId(), { name, specialization, experience, email, phone, hprId });
     const login = await giveDoctorLogin(
       currentClinicId(),
       doctor as { id: string; name: string; email?: string | null },
@@ -238,8 +238,8 @@ router.post('/doctors', requirePermission('doctors.manage'), async (req, res) =>
 
 router.put('/doctors/:id', requirePermission('doctors.manage'), async (req, res) => {
   try {
-    const { name, specialization, experience, email, phone, password } = req.body ?? {};
-    const doctor = await updateClinicDoctor(currentClinicId(), req.params.id, { name, specialization, experience, email, phone });
+    const { name, specialization, experience, email, phone, password, hprId } = req.body ?? {};
+    const doctor = await updateClinicDoctor(currentClinicId(), req.params.id, { name, specialization, experience, email, phone, hprId });
     const login = await giveDoctorLogin(
       currentClinicId(),
       doctor as { id: string; name: string; email?: string | null },

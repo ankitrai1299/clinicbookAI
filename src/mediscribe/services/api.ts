@@ -634,6 +634,15 @@ export interface DoctorInput {
   hospital?: string;
   experience?: number;
   phone?: string;
+  /**
+   * Healthcare Professional Registry id, from hpr.abdm.gov.in.
+   *
+   * Distinct from `licenseNumber`, which is the medical council registration.
+   * A doctor registers on HPR THEMSELVES and comes back with this id — a
+   * clinic cannot obtain one on their behalf — so it is typed in here when
+   * they do, and blank until then.
+   */
+  hprId?: string;
 }
 
 export async function getDoctors(token: string, search = ''): Promise<AuthUser[]> {

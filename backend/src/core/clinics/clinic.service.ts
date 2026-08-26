@@ -28,8 +28,11 @@ export const updateMyClinic = async (clinicId: string, input: UpdateClinicInput)
     data: {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
+      // Empty string CLEARS it, rather than being treated as "not supplied" —
+      // a wrongly-typed registry id has to be correctable.
+      ...(input.hfrId !== undefined ? { hfrId: input.hfrId || null } : {}),
     },
-    select: { id: true, name: true, email: true, phone: true, plan: true },
+    select: { id: true, name: true, email: true, phone: true, plan: true, hfrId: true },
   });
 };
 

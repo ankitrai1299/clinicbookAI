@@ -139,6 +139,15 @@ export interface ScribeAdminDoctor {
   licenseNumber: string;
   hospital: string;
   phone: string;
+  /**
+   * Healthcare Professional Registry id, from hpr.abdm.gov.in.
+   *
+   * Typed in by an admin, because a doctor registers THEMSELVES on the portal
+   * and comes back with an id — a clinic cannot obtain one on their behalf.
+   * Blank for every doctor until they do, and the product has to read that as
+   * normal rather than as missing data.
+   */
+  hprId: string;
   createdAt?: string;
 }
 
@@ -154,6 +163,7 @@ export const toScribeAdminDoctor = (d: any): ScribeAdminDoctor => ({
   licenseNumber: '',
   hospital: '',
   phone: d.phone || '',
+  hprId: d.hprId || '',
   createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : undefined
 });
 
@@ -172,6 +182,7 @@ export interface ScribeDoctorInput {
   experience?: number | string;
   email?: string;
   phone?: string;
+  hprId?: string;
 }
 
 const toClinicDoctorInput = (b: ScribeDoctorInput) => {
@@ -184,7 +195,11 @@ const toClinicDoctorInput = (b: ScribeDoctorInput) => {
     ...(exp !== undefined && !Number.isNaN(exp) ? { experienceYears: exp } : {}),
     // ClinicBook validates these — only send when they look valid, else omit.
     ...(email && /.+@.+\..+/.test(email) ? { email } : {}),
-    ...(phone.length >= 6 ? { phone } : {})
+    ...(phone.length >= 6 ? { phone } : {}),
+    // Sent even when blank — unlike the others, which are omitted when empty
+    // because ClinicBook validates them. An id has no format to fail, and
+    // omitting it would make a wrongly-typed one impossible to clear.
+    ...(b.hprId !== undefined ? { hprId: String(b.hprId).trim() || null } : {})
   };
 };
 

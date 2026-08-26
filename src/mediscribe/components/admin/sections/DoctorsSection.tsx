@@ -271,6 +271,7 @@ function DoctorFormModal({
     email: doctor?.email || '',
     specialization: doctor?.specialization || '',
     licenseNumber: doctor?.licenseNumber || '',
+    hprId: (doctor as { hprId?: string } | undefined)?.hprId || '',
     hospital: doctor?.hospital || '',
     experience: doctor?.experience || 0,
     phone: doctor?.phone || '',
@@ -294,6 +295,7 @@ function DoctorFormModal({
         email: form.email,
         specialization: form.specialization,
         licenseNumber: form.licenseNumber,
+        hprId: form.hprId,
         hospital: form.hospital,
         experience: Number(form.experience) || 0,
         phone: form.phone,
@@ -363,6 +365,20 @@ function DoctorFormModal({
           </Field>
           <Field label="License Number">
             <input value={form.licenseNumber} onChange={(e) => set('licenseNumber', e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="HPR ID">
+            <input
+              value={form.hprId}
+              onChange={(e) => set('hprId', e.target.value)}
+              className={inputClass}
+              placeholder="From hpr.abdm.gov.in"
+            />
+            {/* Says where it comes from, because nobody types an id they have
+                not been given, and the doctor has to fetch it themselves. */}
+            <p className="mt-1 text-[11px] text-slate-400">
+              The doctor registers on hpr.abdm.gov.in and gets this. Needed for ABDM;
+              leave blank until they have it.
+            </p>
           </Field>
           <Field label="Hospital">
             <input value={form.hospital} onChange={(e) => set('hospital', e.target.value)} className={inputClass} />

@@ -11,9 +11,18 @@ export const registerClinicSchema = z.object({
 export const updateClinicSchema = z.object({
   name: z.string().trim().min(2).max(200).optional(),
   phone: z.string().trim().min(6).max(30).optional(),
-}).refine(data => data.name !== undefined || data.phone !== undefined, {
-  message: 'At least one field (name or phone) is required',
-});
+  /**
+   * Health Facility Registry id, from facility.abdm.gov.in — this clinic's
+   * identity in ABDM. Blank until the clinic is registered there.
+   *
+   * Allowed to be an empty string, which CLEARS it. A field that can only ever
+   * be set is a field nobody can correct after typing it wrong once.
+   */
+  hfrId: z.string().trim().max(60).optional(),
+}).refine(
+  (d) => d.name !== undefined || d.phone !== undefined || d.hfrId !== undefined,
+  { message: 'At least one field (name, phone or hfrId) is required' },
+);
 
 export type RegisterClinicInput = z.infer<typeof registerClinicSchema>;
 export type UpdateClinicInput = z.infer<typeof updateClinicSchema>;
