@@ -139,6 +139,30 @@ describe('summariseTemplates — dashboard readiness roll-up', () => {
     const s = summariseTemplates([], null);
     expect(s.ready).toBe(false);
     expect(s.total).toBe(TEMPLATE_DEFINITIONS.length);
+    expect(s.missing).toBe(TEMPLATE_DEFINITIONS.length);
+  });
+
+  // The case of a clinic that connected BEFORE a template was added to the
+  // canonical list. It is neither pending nor rejected — it was never sent —
+  // and counting it as pending would tell that clinic Meta was reviewing a
+  // template it has never seen, with nothing on screen able to fix it.
+  it('counts a never-submitted template as missing, not pending', () => {
+    const rows = TEMPLATE_DEFINITIONS.slice(0, -1).map((t) => row(t.name, 'APPROVED'));
+    const s = summariseTemplates(rows, null);
+    expect(s.missing).toBe(1);
+    expect(s.pending).toBe(0);
+    expect(s.rejected).toBe(0);
+    expect(s.ready).toBe(false);
+  });
+
+  it('does not count a WABA’s own unrelated templates as ours', () => {
+    const rows = [
+      ...TEMPLATE_DEFINITIONS.map((t) => row(t.name, 'APPROVED')),
+      row('something_the_clinic_made_itself', 'APPROVED')
+    ];
+    const s = summariseTemplates(rows, null);
+    expect(s.missing).toBe(0);
+    expect(s.ready).toBe(true);
   });
 });
 

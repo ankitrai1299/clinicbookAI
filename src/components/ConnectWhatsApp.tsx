@@ -435,18 +435,24 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
             <div>
               <p>
-                {tpl.rejected > 0
-                  ? 'Some message templates were not approved. Patients can still chat with you, but reminders and confirmations sent outside a 24-hour conversation need approved templates.'
-                  : 'Meta is reviewing your message templates. This usually takes a few minutes and can take up to 24 hours — patients can already message you in the meantime.'}
+                {tpl.missing > 0
+                  ? 'New message templates are available and have not been sent to Meta for approval yet. Submit them to use the messages they carry — everything already approved keeps working.'
+                  : tpl.rejected > 0
+                    ? 'Some message templates were not approved. Patients can still chat with you, but reminders and confirmations sent outside a 24-hour conversation need approved templates.'
+                    : 'Meta is reviewing your message templates. This usually takes a few minutes and can take up to 24 hours — patients can already message you in the meantime.'}
               </p>
-              {tpl.rejected > 0 && (
+              {/* Also shown for MISSING, not just rejected. A template added
+                  after this clinic connected has no row, so it is neither
+                  pending nor rejected — and without this the banner sat there
+                  claiming Meta was reviewing it, with no way to send it. */}
+              {(tpl.rejected > 0 || tpl.missing > 0) && (
                 <button
                   onClick={handleRetryTemplates}
                   disabled={busy === 'templates'}
                   className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-semibold rounded-lg cursor-pointer"
                 >
                   {busy === 'templates' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  Resubmit templates
+                  {tpl.missing > 0 ? 'Submit templates' : 'Resubmit templates'}
                 </button>
               )}
             </div>

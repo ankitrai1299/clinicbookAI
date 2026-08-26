@@ -183,6 +183,16 @@ export interface TemplateReadiness {
   approved: number;
   pending: number;
   rejected: number;
+  /**
+   * Canonical templates with NO row at all — never submitted to this WABA.
+   *
+   * Distinct from `pending`, which counts rows Meta is still reviewing. A clinic
+   * that connected before a template was added to TEMPLATE_DEFINITIONS has
+   * neither: nothing is under review, because nothing was ever sent. Without
+   * this count that clinic sits at "not ready" forever, being told Meta is
+   * reviewing templates it has never seen.
+   */
+  missing: number;
   // True once every canonical template is APPROVED on the clinic's own WABA.
   ready: boolean;
   syncedAt: Date | null;
@@ -352,11 +362,16 @@ export const summariseTemplates = (
   const approved = rows.filter((r) => r.status === 'APPROVED').length;
   const rejected = rows.filter((r) => r.status === 'REJECTED' || r.status === 'ERROR').length;
   const pending = rows.length - approved - rejected;
+  // Counted against the canonical list, not against rows: a WABA may carry
+  // templates of its own that are none of our business.
+  const present = new Set(rows.map((r) => r.name));
+  const missing = TEMPLATE_DEFINITIONS.filter((t) => !present.has(t.name)).length;
   return {
     total: TEMPLATE_DEFINITIONS.length,
     approved,
     pending,
     rejected,
+    missing,
     ready: approved >= TEMPLATE_DEFINITIONS.length,
     syncedAt,
     templates: rows

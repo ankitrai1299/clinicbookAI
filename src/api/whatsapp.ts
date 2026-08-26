@@ -45,6 +45,8 @@ export interface TemplateReadiness {
   approved: number;
   pending: number;
   rejected: number;
+  /** Canonical templates never submitted to this WABA (no row at all). */
+  missing: number;
   ready: boolean;
   syncedAt: string | null;
   templates: TemplateState[];

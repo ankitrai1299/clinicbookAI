@@ -93,9 +93,9 @@ export const notifyAppointmentMissed = (p: AppointmentMissedParams): void => {
 
   const dateLabel = formatDateLabel(p.appointmentDate);
   const sessionBody =
-    `Hello ${p.patientName}, your appointment at ${p.clinicName} on ${dateLabel} at ` +
-    `${p.appointmentTime} has now passed. If you would like another time, reply ` +
-    `*book* and we will find you the next available slot.`;
+    `Hi ${p.patientName}, your appointment at ${p.clinicName} on ${dateLabel} at ` +
+    `${p.appointmentTime} has now passed. If you would like another time, just reply ` +
+    `here and we will find you the next available slot.`;
 
   void sendTemplatedOrSession({
     to: p.to,

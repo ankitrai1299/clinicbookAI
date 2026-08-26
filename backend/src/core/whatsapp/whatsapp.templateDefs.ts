@@ -81,6 +81,20 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
     example: ['Asha', 'Paracetamol 500mg — 1 tablet after food', 'Sunrise Medical Center']
   },
   {
+    // {{1}} patient · {{2}} date · {{3}} time · {{4}} clinic.
+    //
+    // Deliberately says the time has PASSED, never that the patient failed to
+    // attend. A no-show is inferred from a missing scribe note, and a doctor who
+    // saw the patient on paper leaves the same gap — so this has to read
+    // correctly to someone who did come. No doctor name: the point is the slot,
+    // and a patient who did attend should not be reminded who they saw.
+    name: WhatsAppTemplate.APPOINTMENT_MISSED,
+    category: 'UTILITY',
+    bodyText:
+      'Hi {{1}}, your appointment at {{4}} on {{2}} at {{3}} has now passed. If you would like another time, just reply here and we will find you the next available slot.',
+    example: ['Asha', 'Monday, June 15, 2026', '10:00 AM', 'Sunrise Medical Center']
+  },
+  {
     // {{1}} patient · {{2}} doctor (bare) · {{3}} clinic · {{4}} medicines.
     // {{4}} must be ONE line — WhatsApp rejects newlines inside a variable.
     name: WhatsAppTemplate.PRESCRIPTION_READY,
