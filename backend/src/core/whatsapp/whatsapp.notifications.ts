@@ -13,6 +13,7 @@ import {
   WaitlistTemplateData,
   WhatsAppTemplate,
   appointmentCompletedComponents,
+  appointmentMissedComponents,
   bookingConfirmationComponents,
   registrationWelcomeComponents,
   waitlistOfferComponents
@@ -62,6 +63,54 @@ export const notifyBookingConfirmation = (p: BookingConfirmationParams): void =>
     sessionBody,
     clinicId: p.clinicId
   }).catch((err) => console.error('[WhatsApp] Booking confirmation send failed:', err));
+};
+
+export interface AppointmentMissedParams {
+  to: string;
+  clinicId: string;
+  patientName: string;
+  clinicName: string;
+  appointmentDate: Date;
+  appointmentTime: string;
+}
+
+/**
+ * Sent when an appointment is marked NO_SHOW — by the desk, or by the sweep
+ * once the slot has ended and no scribe note exists.
+ *
+ * The wording never says the patient failed to attend. A no-show is INFERRED
+ * from a missing scribe note, and a doctor who saw the patient without opening
+ * the scribe leaves exactly the same gap — so the guess is sometimes wrong.
+ * The message therefore states only what is certainly true (the time has
+ * passed) and offers a new slot, which is useful to a patient who missed the
+ * visit and harmless to one who did not. Accusing someone who sat in the
+ * waiting room would be far worse than sending nothing at all.
+ */
+export const notifyAppointmentMissed = (p: AppointmentMissedParams): void => {
+  if (!isWhatsAppConfigured()) {
+    return;
+  }
+
+  const dateLabel = formatDateLabel(p.appointmentDate);
+  const sessionBody =
+    `Hello ${p.patientName}, your appointment at ${p.clinicName} on ${dateLabel} at ` +
+    `${p.appointmentTime} has now passed. If you would like another time, reply ` +
+    `*book* and we will find you the next available slot.`;
+
+  void sendTemplatedOrSession({
+    to: p.to,
+    templateName: WhatsAppTemplate.APPOINTMENT_MISSED,
+    components: appointmentMissedComponents({
+      patientName: p.patientName,
+      dateLabel,
+      time: p.appointmentTime,
+      // Not in this template's body, but AppointmentTemplateData requires it.
+      doctorName: '',
+      clinicName: p.clinicName
+    }),
+    sessionBody,
+    clinicId: p.clinicId
+  }).catch((err) => console.error('[WhatsApp] Missed-appointment send failed:', err));
 };
 
 export interface AppointmentCompletedParams {

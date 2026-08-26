@@ -451,6 +451,10 @@ enum NotificationType {
   APPOINTMENT_BOOKED
   APPOINTMENT_CONFIRMED
   APPOINTMENT_CANCELLED
+  // The patient did not attend. Its own type rather than reusing CANCELLED,
+  // which means someone called off the visit — a different thing for a clinic
+  // counting revenue or chasing follow-ups.
+  APPOINTMENT_MISSED
   APPOINTMENT_RESCHEDULED
   APPOINTMENT_COMPLETED
   // A new patient exists — self-registered by QR, onboarded by their first

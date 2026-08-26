@@ -6,7 +6,18 @@
 // they used MediScribe (a finalized consultation exists for that patient). So:
 //   • scribe WAS used for the patient  → auto-mark the visit COMPLETED (which
 //     fires the existing thank-you message) AND send them their prescription.
-//   • scribe was NOT used              → leave it for staff to complete manually.
+//   • scribe was NOT used              → after a grace period, mark it NO_SHOW,
+//     which offers the patient a new slot.
+//
+// The second half used to be "leave it for staff to complete manually", and in
+// practice nothing ever completed it: a booking with no scribe note sat
+// CONFIRMED in the roster for good, and the patient who missed the visit heard
+// nothing. Both halves are now closed automatically.
+//
+// The inference is not certain — a doctor can see a patient without opening the
+// scribe — so two things protect against a wrong guess: NO_SHOW is correctable
+// (see the transition table), and the message never says the patient failed to
+// attend.
 //
 // Cross-product composition (ClinicBook appointments + MediScribe notes + WhatsApp)
 // lives here in the shared services layer, never inside a product module.
@@ -14,7 +25,11 @@
 import { AppointmentStatus } from '@prisma/client';
 
 import { prisma } from '../config/prisma.js';
-import { completeAppointment, type AppointmentRecord } from '../core/appointments/appointment.service.js';
+import {
+  completeAppointment,
+  markNoShowAppointment,
+  type AppointmentRecord
+} from '../core/appointments/appointment.service.js';
 import { registerPostVisitAction } from '../core/appointments/postVisit.service.js';
 import { finalizedScribeForPatient, type ScribeReport } from '../products/novascribe/skills/mediscribeData.js';
 import { sendTemplatedOrSession } from '../core/whatsapp/whatsapp.service.js';
@@ -23,6 +38,18 @@ import { clinicLocalInstant } from './scheduling.service.js';
 import { parseFrequencyTimes, medicineLabel } from './medicineReminder.frequency.js';
 
 const DEFAULT_SLOT_MIN = 30; // when a doctor's schedule doesn't specify one
+
+/**
+ * How long after a slot ends before an unaccounted-for visit is called a
+ * no-show.
+ *
+ * The whole inference is "no scribe note means the patient never came", and the
+ * commonest way for that to be WRONG is simply that the doctor has not saved
+ * the note yet. This grace is what separates "still writing it up" from "did
+ * not attend"; without it the sweep would race the doctor and text a patient
+ * who is still in the room.
+ */
+const NO_SHOW_GRACE_MIN = 30;
 
 const to12h = (hhmm: string): string => {
   const [h, m] = hhmm.split(':').map(Number);
@@ -180,7 +207,16 @@ export const processAutoCompleteVisits = async (): Promise<void> => {
   // ── Decide + complete ────────────────────────────────────────────────────
   for (const a of ended) {
     try {
-      if (!hasFinalizedScribe.has(`${a.clinicId}|${a.patientId}`)) continue; // scribe not used → leave manual
+      if (!hasFinalizedScribe.has(`${a.clinicId}|${a.patientId}`)) {
+        // No note anywhere for this patient, so there is nothing to attribute
+        // and the same-day ambiguity below cannot arise: if they had two
+        // bookings that day, they missed both.
+        const slotMin = slotMinutes.get(scheduleKey(a.doctorId, a.appointmentDate.getUTCDay())) ?? DEFAULT_SLOT_MIN;
+        if (slotEndInstant(a, slotMin + NO_SHOW_GRACE_MIN) > now) continue; // still within grace
+        await markNoShowAppointment(a.clinicId, a.id);
+        console.info(`[AutoComplete] Visit ${a.id} marked no-show (no scribe note ${NO_SHOW_GRACE_MIN}m after the slot).`);
+        continue;
+      }
 
       // Per-PATIENT matching can't disambiguate two bookings on one day.
       const sameDay = liveThatDay.get(patientDayKey(a.clinicId, a.patientId, a.appointmentDate)) ?? 1;

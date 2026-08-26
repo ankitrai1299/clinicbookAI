@@ -15,7 +15,8 @@ export const WhatsAppTemplate = {
   PATIENT_REGISTRATION: 'patient_registration',
   REGISTRATION_WELCOME: 'registration_welcome',
   MEDICINE_REMINDER: 'medicine_reminder',
-  PRESCRIPTION_READY: 'prescription_ready'
+  PRESCRIPTION_READY: 'prescription_ready',
+  APPOINTMENT_MISSED: 'appointment_missed'
 } as const;
 
 export type WhatsAppTemplateName = (typeof WhatsAppTemplate)[keyof typeof WhatsAppTemplate];
@@ -77,6 +78,18 @@ export const bookingConfirmationComponents = (d: AppointmentTemplateData): Templ
 export const appointmentCompletedComponents = (
   d: AppointmentCompletedTemplateData
 ): TemplateComponent[] => bodyParams(d.clinicName, d.patientName, d.doctorName);
+
+// appointment_missed:
+//   {{1}} patient · {{2}} date · {{3}} time · {{4}} clinic
+//
+// The wording must work whether or not the patient actually came — we infer a
+// no-show from a missing scribe note, and a doctor who saw them on paper leaves
+// the same gap. So it states the time has passed and offers a new slot; it never
+// says they failed to attend. Telling someone who sat in the waiting room that
+// they missed their appointment is worse than saying nothing.
+export const appointmentMissedComponents = (
+  d: AppointmentTemplateData
+): TemplateComponent[] => bodyParams(d.patientName, d.dateLabel, d.time, d.clinicName);
 
 // waitlist_offer:
 //   {{1}} patient · {{2}} doctor · {{3}} clinic

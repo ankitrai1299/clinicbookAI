@@ -66,3 +66,31 @@ describe('slotEndInstant', () => {
     expect(end <= new Date('2026-08-04T05:00:00.000Z')).toBe(true); // exactly at the end → done
   });
 });
+
+// The no-show half of the sweep. Same pure helper, called with the slot length
+// PLUS a grace period, so the two decisions differ only by that offset.
+describe('no-show grace', () => {
+  const GRACE = 30;
+
+  it('waits a further 30 minutes after the slot ends before calling it a miss', () => {
+    const appt = { appointmentDate: day('2026-08-04'), appointmentTime: '12:00 PM' };
+    // 12:00 PM IST = 06:30 UTC. Slot ends 07:00; a miss is only declared at 07:30.
+    expect(slotEndInstant(appt, 30)).toEqual(new Date('2026-08-04T07:00:00.000Z'));
+    expect(slotEndInstant(appt, 30 + GRACE)).toEqual(new Date('2026-08-04T07:30:00.000Z'));
+  });
+
+  it('leaves a window in which the visit is over but no message has gone out', () => {
+    // The point of the grace: a doctor who has finished but not yet saved the
+    // note must not have their patient texted "your appointment has passed".
+    const appt = { appointmentDate: day('2026-08-04'), appointmentTime: '12:00 PM' };
+    const justAfterTheSlot = new Date('2026-08-04T07:15:00.000Z');
+    expect(slotEndInstant(appt, 30) <= justAfterTheSlot).toBe(true); // eligible to complete
+    expect(slotEndInstant(appt, 30 + GRACE) > justAfterTheSlot).toBe(true); // not yet a no-show
+  });
+
+  it('scales with the doctor’s own slot length, not a fixed hour', () => {
+    // A 15-minute consultation is a no-show 45 minutes in, not 60.
+    const appt = { appointmentDate: day('2026-08-04'), appointmentTime: '12:00 PM' };
+    expect(slotEndInstant(appt, 15 + GRACE)).toEqual(new Date('2026-08-04T07:15:00.000Z'));
+  });
+});

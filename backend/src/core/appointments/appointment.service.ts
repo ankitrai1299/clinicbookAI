@@ -3,12 +3,13 @@ import { AppointmentStatus } from '@prisma/client';
 import { AppError } from '../../utils/AppError.js';
 import {
   notifyBookingConfirmation,
+  notifyAppointmentMissed,
   notifyAppointmentRejectedWithAlternatives
 } from '../whatsapp/whatsapp.notifications.js';
 import { recordNotification } from '../notifications/notification.service.js';
 import { eventBus } from '../events/index.js';
 import { emitEvent, type PatientEventType } from '../timeline/patientTimeline.service.js';
-import { canonicalizeTime, isPastSlot } from '../../services/scheduling.service.js';
+import { canonicalizeTime, clinicLocalInstant, isPastSlot } from '../../services/scheduling.service.js';
 import { runPostVisitWorkflow } from './postVisit.service.js';
 import { CreateAppointmentInput, UpdateAppointmentInput } from './appointment.schemas.js';
 import { appointmentSourceFor } from './appointmentSource.js';
@@ -38,17 +39,27 @@ const whenLabel = (appt: AppointmentRecord): string =>
 // Appointment lifecycle guard. The ONLY legal transitions are:
 //   PENDING   → CONFIRMED | CANCELLED | NO_SHOW
 //   CONFIRMED → COMPLETED | CANCELLED | NO_SHOW
-//   CANCELLED → (terminal)   COMPLETED → (terminal)   NO_SHOW → (terminal)
+//   NO_SHOW   → COMPLETED | CONFIRMED
+//   CANCELLED → (terminal)   COMPLETED → (terminal)
 // Terminal states have NO outgoing transitions, so a completed or cancelled
 // appointment can never be reopened/reactivated. isValidTransition is pure
 // (unit-tested); assertTransition is the throwing guard used by write paths.
+//
+// NO_SHOW is deliberately NOT terminal, unlike the other two. It is now applied
+// automatically by the no-show sweep, which infers "did not come" from the
+// absence of a scribe note — and a doctor who saw the patient without opening
+// the scribe produces exactly that absence. So the inference is sometimes wrong,
+// and the desk has to be able to say so: → COMPLETED for a visit that did
+// happen (which fires the normal post-visit workflow), → CONFIRMED for one
+// marked before the patient walked in late. A guess that cannot be corrected
+// would quietly poison the clinic's no-show numbers forever.
 // ---------------------------------------------------------------------------
 const ALLOWED_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
   [AppointmentStatus.PENDING]: [AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
   [AppointmentStatus.CONFIRMED]: [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
   [AppointmentStatus.CANCELLED]: [],
   [AppointmentStatus.COMPLETED]: [],
-  [AppointmentStatus.NO_SHOW]: []
+  [AppointmentStatus.NO_SHOW]: [AppointmentStatus.COMPLETED, AppointmentStatus.CONFIRMED]
 };
 
 export const isValidTransition = (from: AppointmentStatus, to: AppointmentStatus): boolean =>
@@ -61,6 +72,15 @@ const FRIENDLY = {
   COMPLETED: 'completed',
   NO_SHOW: 'missed'
 } as const;
+
+// How long after a slot a missed-appointment message is still worth sending.
+//
+// Beyond this the status is still corrected — the roster has to clear — but the
+// patient is NOT texted. Two reasons: a message about a visit from yesterday is
+// no use to anyone, and without the cap, turning this on (or a clinic that has
+// simply never marked anything complete) would text a backlog of patients all
+// at once, about appointments most of them probably attended.
+const MISSED_MESSAGE_MAX_AGE_MS = 6 * 60 * 60_000;
 
 const assertTransition = (from: AppointmentStatus, to: AppointmentStatus): void => {
   if (!isValidTransition(from, to)) {
@@ -115,6 +135,31 @@ const onStatusTransition = (prev: AppointmentStatus, appt: AppointmentRecord): v
       type: 'APPOINTMENT_CONFIRMED',
       title: 'Appointment confirmed',
       body: `${patientName}'s appointment with ${doctorName} on ${whenLabel(appt)} was confirmed.`,
+      appointmentId: appt.id
+    });
+  } else if (appt.status === AppointmentStatus.NO_SHOW) {
+    // Lives here, not in the sweep, so the desk marking a no-show by hand and
+    // the sweep inferring one behave identically — which is what this function
+    // is for.
+    const slotStart = clinicLocalInstant(appt.appointmentDate, appt.appointmentTime);
+    const fresh = Date.now() - slotStart.getTime() <= MISSED_MESSAGE_MAX_AGE_MS;
+    if (fresh && appt.patient?.phone && appt.clinic) {
+      notifyAppointmentMissed({
+        to: appt.patient.phone,
+        clinicId: appt.clinicId,
+        patientName: appt.patient.name,
+        clinicName: appt.clinic.name,
+        appointmentDate: appt.appointmentDate,
+        appointmentTime: appt.appointmentTime
+      });
+    }
+    recordNotification({
+      clinicId: appt.clinicId,
+      type: 'APPOINTMENT_MISSED',
+      title: 'Appointment missed',
+      body:
+        `${patientName} did not attend their appointment with ${doctorName} on ${whenLabel(appt)}.` +
+        (fresh ? ' They were offered a new slot.' : ''),
       appointmentId: appt.id
     });
   } else if (appt.status === AppointmentStatus.CANCELLED) {

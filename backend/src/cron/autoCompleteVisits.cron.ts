@@ -4,8 +4,13 @@ import { withCronLock } from './cronLock.js';
 
 import { processAutoCompleteVisits } from '../services/autoCompleteVisits.service.js';
 
-// Every 5 minutes — soon after a slot ends, if the doctor used the scribe, the
-// visit auto-completes and the patient gets their thank-you + prescription.
+// Every 5 minutes. Soon after a slot ends: if the doctor used the scribe the
+// visit auto-completes and the patient gets their thank-you + prescription; if
+// no note exists 30 minutes later, the visit is marked no-show and the patient
+// is offered another slot.
+//
+// AUTO_COMPLETE_VISITS_ENABLED=false stops BOTH. Worth knowing, because the
+// no-show half both writes a status and messages patients.
 const CRON_EXPRESSION = '*/5 * * * *';
 
 // Only ONE instance runs each tick. The lease is generous (the job releases it

@@ -23,6 +23,7 @@ export type NotificationKind =
   | 'APPOINTMENT_BOOKED'
   | 'APPOINTMENT_CONFIRMED'
   | 'APPOINTMENT_CANCELLED'
+  | 'APPOINTMENT_MISSED'
   | 'APPOINTMENT_RESCHEDULED'
   | 'APPOINTMENT_COMPLETED'
   | 'PATIENT_REGISTERED'
@@ -59,6 +60,13 @@ export const AUDIENCE: Record<NotificationKind, PushProduct[]> = {
   // the failure this prevents.
   APPOINTMENT_CANCELLED: BOTH,
   APPOINTMENT_RESCHEDULED: BOTH,
+
+  // The patient did not come. The desk chases them and rebooks; the doctor has
+  // already lived through the empty slot and does not need telling about it
+  // afterwards. It also lands automatically from the sweep, so sending it to
+  // both would put a notification on a doctor's phone for every quiet
+  // afternoon.
+  APPOINTMENT_MISSED: DESK,
 
   // Closing the visit is desk bookkeeping. The doctor was there.
   APPOINTMENT_COMPLETED: DESK,
