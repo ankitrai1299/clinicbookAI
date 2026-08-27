@@ -8,6 +8,7 @@ import {
   deletePatientHandler,
   getPatientsHandler,
   getSinglePatientHandler,
+  setPatientAbhaHandler,
   updatePatientHandler
 } from './patient.controller.js';
 import { createPatientSchema, patientIdParamsSchema, updatePatientSchema } from './patient.schemas.js';
@@ -33,6 +34,14 @@ patientRouter.put(
   validate(patientIdParamsSchema, 'params'),
   validate(updatePatientSchema),
   updatePatientHandler
+);
+// A patient's ABHA. Under patient.update because it edits a patient record, and
+// the desk that registers people is the desk that will be handed an ABHA card.
+patientRouter.put(
+  '/:id/abha',
+  requirePermission('patient.update'),
+  validate(patientIdParamsSchema, 'params'),
+  setPatientAbhaHandler
 );
 patientRouter.delete(
   '/:id',

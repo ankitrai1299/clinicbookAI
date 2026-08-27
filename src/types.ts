@@ -21,6 +21,9 @@ export interface Patient {
   gender?: string | null;
   healthConcern?: string | null;
   source?: string | null;
+  // National health identity. Null for most patients — a normal state, not a gap.
+  abhaNumber?: string | null;
+  abhaAddress?: string | null;
 }
 
 export interface Appointment {

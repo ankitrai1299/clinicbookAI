@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { recordFromRequest } from '../audit/audit.service.js';
+import { setPatientAbha } from '../../services/abdmIdentity.service.js';
 import { createPatient, deletePatient, getPatients, getSinglePatient, updatePatient } from './patient.service.js';
 import { CreatePatientInput, PatientIdParams, UpdatePatientInput } from './patient.schemas.js';
 
@@ -131,4 +132,34 @@ export const deletePatientHandler = asyncHandler(async (req: Request, res: Respo
     success: true,
     message: 'Patient deleted successfully'
   });
+});
+
+/**
+ * Record (or clear) a patient's ABHA — their national health identity.
+ *
+ * Its own route rather than a field on updatePatient, because patients are
+ * written through the datasource port and that port refuses updates for
+ * EMR-backed clinics. An ABHA is our own mapping to a government registry, not
+ * the EMR's data, so it must not inherit that restriction.
+ */
+export const setPatientAbhaHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const { id } = req.params as PatientIdParams;
+  const patient = await setPatientAbha(clinicId, id, req.body ?? {});
+
+  // WHICH identity fields were touched, never the values. An ABHA number is
+  // itself sensitive — an audit trail is not the place to make a second copy
+  // of every patient's national health id.
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id,
+    metadata: {
+      fields: Object.keys((req.body ?? {}) as Record<string, unknown>).join(','),
+      abdm: patient.abhaLinkedAt ? 'linked' : 'cleared'
+    }
+  });
+
+  res.json({ success: true, data: patient });
 });

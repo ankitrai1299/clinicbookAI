@@ -23,6 +23,7 @@ import {
 } from '../api/appointments';
 import { getPatients as getPatientsApi, createPatient as createPatientApi, ApiPatient } from '../api/patients';
 import PatientRecordModal from './PatientRecordModal';
+import PatientAbhaModal from './PatientAbhaModal';
 import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
 import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, convertWaitlistEntry as convertWaitlistEntryApi, ApiWaitlistEntry } from '../api/waitlist';
 import { getMyClinic as getMyClinicApi, updateMyClinic as updateMyClinicApi } from '../api/clinic';
@@ -64,6 +65,8 @@ const mapApiPatient = (p: ApiPatient): Patient => ({
   gender: p.gender,
   healthConcern: p.healthConcern,
   source: p.source,
+  abhaNumber: p.abhaNumber ?? null,
+  abhaAddress: p.abhaAddress ?? null,
 });
 
 const mapApiDoctor = (d: ApiDoctor): Doctor => ({
@@ -184,6 +187,7 @@ export default function ClinicDashboard({
   const [apiPatients, setApiPatients] = useState<ApiPatient[]>([]);
   // Patient 360 record modal — the patient whose full record is open (id/code).
   const [recordPatientId, setRecordPatientId] = useState<string | null>(null);
+  const [abhaPatient, setAbhaPatient] = useState<Patient | null>(null);
   const [apiDoctors, setApiDoctors] = useState<ApiDoctor[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
@@ -1447,6 +1451,7 @@ export default function ClinicDashboard({
                       <th className="py-3 px-2">Age / Gender</th>
                       <th className="py-3 px-2">Reason for Visit</th>
                       <th className="py-3 px-2">Preferred Chat Accent</th>
+                      <th className="py-3 px-2">ABHA</th>
                       <th className="py-3 px-2">Activity State</th>
                       <th className="py-3 px-2 text-right">Action History</th>
                     </tr>
@@ -1463,6 +1468,28 @@ export default function ClinicDashboard({
                           {p.healthConcern || '—'}
                         </td>
                         <td className="py-3 px-2 font-semibold text-sky-700">🗣 {p.preferredLanguage}</td>
+                        <td className="py-3 px-2">
+                          <button
+                            type="button"
+                            onClick={() => setAbhaPatient(p)}
+                            className="text-left cursor-pointer group"
+                            title="Record this patient's ABHA"
+                          >
+                            {p.abhaNumber || p.abhaAddress ? (
+                              <span className="font-mono text-[10px] text-emerald-700 group-hover:underline">
+                                {p.abhaNumber || p.abhaAddress}
+                              </span>
+                            ) : (
+                              /* Deliberately not styled as a warning. Most
+                                 patients will never have an ABHA, and a red
+                                 "missing" on every row would train the desk to
+                                 ignore the column entirely. */
+                              <span className="text-[10px] text-slate-300 group-hover:text-sky-600 italic">
+                                + add
+                              </span>
+                            )}
+                          </button>
+                        </td>
                         <td className="py-3 px-2">
                           <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full font-bold font-mono text-[9px] uppercase tracking-wider">
                             ● Active
@@ -1728,6 +1755,20 @@ export default function ClinicDashboard({
 
       <AiAssistant />
 
+      {abhaPatient && (
+        <PatientAbhaModal
+          patient={abhaPatient}
+          onClose={() => setAbhaPatient(null)}
+          onSaved={(identity) =>
+            // Patched in place rather than refetching the whole directory: the
+            // server has already returned the stored (normalised) values, so a
+            // reload would only cost a round-trip to learn what we know.
+            setPatients((list) =>
+              list.map((x) => (x.id === abhaPatient.id ? { ...x, ...identity } : x))
+            )
+          }
+        />
+      )}
       {recordPatientId && (
         <PatientRecordModal patientId={recordPatientId} onClose={() => setRecordPatientId(null)} />
       )}
