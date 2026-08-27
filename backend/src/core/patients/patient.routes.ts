@@ -9,6 +9,8 @@ import {
   getPatientsHandler,
   getSinglePatientHandler,
   setPatientAbhaHandler,
+  startAbhaEnrolmentHandler,
+  finishAbhaEnrolmentHandler,
   updatePatientHandler
 } from './patient.controller.js';
 import { createPatientSchema, patientIdParamsSchema, updatePatientSchema } from './patient.schemas.js';
@@ -42,6 +44,21 @@ patientRouter.put(
   requirePermission('patient.update'),
   validate(patientIdParamsSchema, 'params'),
   setPatientAbhaHandler
+);
+// Creating an ABHA for a patient who has none (ABDM M1). Two steps because the
+// patient has to read an OTP off their own phone in between — this is not a
+// form the desk can complete from a photocopy.
+patientRouter.post(
+  '/:id/abha/enrol',
+  requirePermission('patient.update'),
+  validate(patientIdParamsSchema, 'params'),
+  startAbhaEnrolmentHandler
+);
+patientRouter.post(
+  '/:id/abha/enrol/verify',
+  requirePermission('patient.update'),
+  validate(patientIdParamsSchema, 'params'),
+  finishAbhaEnrolmentHandler
 );
 patientRouter.delete(
   '/:id',

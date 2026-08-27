@@ -48,3 +48,25 @@ export const getPatients = () => apiFetch<ApiPatient[]>('/api/patients');
 
 export const createPatient = (body: { name: string; phone: string; language: string }) =>
   apiFetch<ApiPatient>('/api/patients', { method: 'POST', body: JSON.stringify(body) });
+
+/**
+ * Create an ABHA for a patient who has none (ABDM Milestone M1).
+ *
+ * Two calls, because the patient reads an OTP off their own phone in between.
+ * The Aadhaar number goes to the server, on to ABDM encrypted, and is never
+ * stored — not here, not there. Nothing derived from it comes back.
+ */
+export const startAbhaEnrolment = (id: string, aadhaar: string) =>
+  apiFetch<{ txnId: string; message?: string }>(`/api/patients/${id}/abha/enrol`, {
+    method: 'POST',
+    body: JSON.stringify({ aadhaar }),
+  });
+
+export const finishAbhaEnrolment = (
+  id: string,
+  body: { txnId: string; otp: string; mobile: string }
+) =>
+  apiFetch<AbhaIdentity & { alreadyExisted: boolean }>(`/api/patients/${id}/abha/enrol/verify`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });

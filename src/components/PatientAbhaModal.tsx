@@ -21,9 +21,16 @@ import { useState } from 'react';
 import { X, ShieldCheck, Loader2 } from 'lucide-react';
 
 import { setPatientAbha } from '../api/patients';
+import AbhaEnrolment from './AbhaEnrolment';
 
 interface PatientAbhaModalProps {
-  patient: { id: string; name: string; abhaNumber?: string | null; abhaAddress?: string | null };
+  patient: {
+    id: string;
+    name: string;
+    phone?: string | null;
+    abhaNumber?: string | null;
+    abhaAddress?: string | null;
+  };
   onClose: () => void;
   onSaved: (identity: { abhaNumber: string | null; abhaAddress: string | null }) => void;
 }
@@ -33,6 +40,10 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
   const [address, setAddress] = useState(patient.abhaAddress ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Creating an ABHA is a different job from typing one in, so it replaces the
+  // form rather than sitting beneath it — two sets of boxes for one outcome is
+  // how a desk ends up filling in the wrong one.
+  const [creating, setCreating] = useState(false);
 
   const save = async () => {
     setSaving(true);
@@ -77,6 +88,18 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
           </button>
         </div>
 
+        {creating ? (
+          <div className="px-6 py-5">
+            <AbhaEnrolment
+              patient={patient}
+              onCreated={(identity) => {
+                onSaved(identity);
+                onClose();
+              }}
+              onCancel={() => setCreating(false)}
+            />
+          </div>
+        ) : (
         <div className="px-6 py-5 space-y-5">
           {/* Said first, because a blank field on a health record otherwise
               reads as something the desk failed to fill in. */}
@@ -119,8 +142,25 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
           <p className="text-[11px] text-slate-400">
             Clearing a box and saving removes that value.
           </p>
-        </div>
 
+          {/* The whole point of the ask: a patient with no ABHA can get one
+              here, rather than being turned away to a government portal. */}
+          <div className="pt-4 border-t border-slate-100">
+            <p className="text-xs text-slate-500 mb-2">
+              {patient.name} doesn&rsquo;t have an ABHA yet?
+            </p>
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="text-sm font-bold text-sky-600 hover:text-sky-700 cursor-pointer"
+            >
+              Create one now &rarr;
+            </button>
+          </div>
+        </div>
+        )}
+
+        {!creating && (
         <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -137,6 +177,7 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
             Save
           </button>
         </div>
+        )}
       </div>
     </div>
   );

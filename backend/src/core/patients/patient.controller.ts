@@ -4,6 +4,7 @@ import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { recordFromRequest } from '../audit/audit.service.js';
 import { setPatientAbha } from '../../services/abdmIdentity.service.js';
+import { startAbhaEnrolment, finishAbhaEnrolment } from '../../services/abhaEnrolment.service.js';
 import { createPatient, deletePatient, getPatients, getSinglePatient, updatePatient } from './patient.service.js';
 import { CreatePatientInput, PatientIdParams, UpdatePatientInput } from './patient.schemas.js';
 
@@ -162,4 +163,55 @@ export const setPatientAbhaHandler = asyncHandler(async (req: Request, res: Resp
   });
 
   res.json({ success: true, data: patient });
+});
+
+/**
+ * Start creating an ABHA for a patient who has none: ABDM texts an OTP to the
+ * mobile registered against their Aadhaar.
+ *
+ * The Aadhaar number is read off the request, handed to ABDM encrypted, and
+ * dropped. It is never stored, never audited and never logged — the audit
+ * entry below deliberately records only that enrolment was STARTED.
+ */
+export const startAbhaEnrolmentHandler = asyncHandler(async (req: Request, res: Response) => {
+  getClinicId(req); // authorises the caller; enrolment itself is not clinic-scoped
+  const { aadhaar } = (req.body ?? {}) as { aadhaar?: string };
+  if (!aadhaar) throw new AppError('Aadhaar number is required', 400);
+
+  const started = await startAbhaEnrolment(aadhaar);
+
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: (req.params as PatientIdParams).id,
+    patientId: (req.params as PatientIdParams).id,
+    metadata: { abdm: 'abha-enrolment-started' }
+  });
+
+  // txnId only. Echoing anything derived from the Aadhaar back to the browser
+  // would put it somewhere it does not belong.
+  res.json({ success: true, data: { txnId: started.txnId, message: started.message } });
+});
+
+/**
+ * Finish enrolment with the OTP the patient just received, and store the
+ * resulting ABHA on their record.
+ */
+export const finishAbhaEnrolmentHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const { id } = req.params as PatientIdParams;
+  const { txnId, otp, mobile } = (req.body ?? {}) as { txnId?: string; otp?: string; mobile?: string };
+  if (!txnId || !otp) throw new AppError('The OTP and its session are both required', 400);
+
+  const result = await finishAbhaEnrolment(clinicId, id, txnId, otp, mobile ?? '');
+
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id,
+    metadata: { abdm: result.alreadyExisted ? 'abha-linked-existing' : 'abha-created' }
+  });
+
+  res.json({ success: true, data: result });
 });

@@ -144,7 +144,16 @@ const envSchema = z.object({
   // answers 401, which reads as bad credentials and sends you to check the
   // secret. Proven against the live sandbox — same id and secret, 200 with the
   // header and 401 without it.
-  ABDM_CM_ID: z.string().trim().default('sbx')
+  ABDM_CM_ID: z.string().trim().default('sbx'),
+  /**
+   * The ABHA enrolment APIs live on a DIFFERENT host from the gateway, and are
+   * a separate product behind the same token.
+   *
+   * That separation is load-bearing today: our client has no subscription on
+   * the gateway APIs (every one answers 900908) but full access to these — so
+   * ABHA creation works while the HIP linking flow waits on NHA.
+   */
+  ABDM_ABHA_BASE_URL: z.string().trim().default('https://abhasbx.abdm.gov.in')
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
