@@ -20,6 +20,7 @@ import publicApiV1Router from '../core/publicapi/v1.routes.js';
 import { mediscribeRouter } from '../products/mediscribe/router.js';
 import waitlistRouter from '../products/clinicbook/waitlist/waitlist.routes.js';
 import whatsappRouter from '../core/whatsapp/whatsapp.routes.js';
+import { abdmHipRouter } from '../integrations/abdm/abdmHip.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import patient360Router from './patient360.routes.js';
 import healthRouter from './health.routes.js';
@@ -46,6 +47,12 @@ apiRouter.use('/api/v1', publicApiV1Router);
 // Managing those keys, by contrast, is a dashboard (JWT) action — never key-authed.
 apiRouter.use('/api/api-keys', apiKeyRouter);
 apiRouter.use('/api/appointments', appointmentRouter);
+// ABDM calls US here — this path IS the bridge callback URL registered against
+// our client id. Deliberately NOT behind requireAuth: the caller is the
+// government gateway, which holds no account of ours. What keeps it safe is
+// that no answer is ever returned down this connection; see the note in
+// abdmHip.routes.ts.
+apiRouter.use('/api/abdm', abdmHipRouter);
 apiRouter.use('/api/waitlist', waitlistRouter);
 // MediScribe (the new AI scribe) — ClinicBook requireAuth first so the bridge has
 // req.user; then the ported router scopes everything to that clinic.
