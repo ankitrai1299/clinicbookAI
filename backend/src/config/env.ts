@@ -136,7 +136,15 @@ const envSchema = z.object({
   ABDM_CLIENT_SECRET: z.string().trim().optional(),
   // Sandbox is dev.abdm.gov.in; production is a different host, so this is a
   // variable rather than a constant — going live must not need a code change.
-  ABDM_GATEWAY_BASE_URL: z.string().trim().default('https://dev.abdm.gov.in')
+  ABDM_GATEWAY_BASE_URL: z.string().trim().default('https://dev.abdm.gov.in'),
+  // The Consent Manager this bridge talks to. 'sbx' is the sandbox CM; a
+  // production bridge uses a different one.
+  //
+  // Sent as X-CM-ID on every call, and NOT optional: without it the gateway
+  // answers 401, which reads as bad credentials and sends you to check the
+  // secret. Proven against the live sandbox — same id and secret, 200 with the
+  // header and 401 without it.
+  ABDM_CM_ID: z.string().trim().default('sbx')
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

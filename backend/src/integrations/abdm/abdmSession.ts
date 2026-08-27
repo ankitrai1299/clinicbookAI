@@ -1,20 +1,34 @@
 // The ABDM gateway session token — the first thing every other ABDM call needs.
 //
-// ── Which endpoint, and why not the one in the docs ────────────────────────
+// ── The three headers, and why they are not optional ───────────────────────
 //
-// NHA's onboarding mail points at the V3 documentation, and V3 has its own
-// session endpoint at /api/hiecm/gateway/v3/sessions. Tried against the bridge
-// credentials we were issued, that returns 401; /gateway/v0.5/sessions returns
-// a token for the same credentials. A bridge is registered against one API
-// generation, and ours is the older one — so the version here is a fact about
-// our registration, not a preference, and it must not be "upgraded" to V3
-// without re-testing against the real gateway.
+// V3 needs REQUEST-ID, TIMESTAMP and X-CM-ID on every call, and gets them wrong
+// in a way that costs hours if you do not know it:
+//
+//   X-CM-ID missing      → 401, not 400
+//   REQUEST-ID not a UUID → 401, not 400
+//
+// Both look exactly like bad credentials. Working this out took a run of calls
+// against the live sandbox: the same client id and secret returned 401 four
+// times and 200 twice, and the only difference between them was X-CM-ID. So
+// these headers are load-bearing, not ceremony, and a 401 from ABDM is far more
+// likely to be a missing header than a wrong secret — check here first.
+//
+// (An earlier version of this file used /gateway/v0.5/sessions, on the strength
+// of a single V3 401, with a comment asserting our bridge was registered
+// against the older generation. That was wrong: the 401 was a malformed
+// REQUEST-ID. V3 is the current standard and v0.5 is legacy, so building on
+// v0.5 would have meant redoing the lot.)
 //
 // ── The token has to be cached ─────────────────────────────────────────────
 //
-// It is valid for a long time (hours) and minting one is a network round-trip.
-// Without caching, a single care-context link would spend two calls where it
-// needs one, and a sync sweep would mint a token per record.
+// It is valid for hours and minting one is a network round-trip. Without
+// caching, a single care-context link would spend two calls where it needs one,
+// and a sync sweep would mint a token per record. The sandbox also rate-limits
+// session creation — several rapid mints start failing — so caching is what
+// keeps this working under load, not just what makes it quick.
+
+import { randomUUID } from 'node:crypto';
 
 import axios, { AxiosInstance } from 'axios';
 
@@ -52,6 +66,18 @@ export const expiryFrom = (expiresInSeconds: number | undefined, now: number): n
   return now + seconds * 1000;
 };
 
+/**
+ * The headers ABDM V3 requires on EVERY call, session included.
+ *
+ * REQUEST-ID must be a UUID — anything else is rejected as unauthorised rather
+ * than as malformed, so it is generated here and never taken from a caller.
+ */
+export const abdmHeaders = (): Record<string, string> => ({
+  'REQUEST-ID': randomUUID(),
+  TIMESTAMP: new Date().toISOString().replace(/\.\d{3}Z$/, '.000Z'),
+  'X-CM-ID': env.ABDM_CM_ID
+});
+
 export class AbdmNotConfigured extends Error {
   constructor() {
     super('ABDM is not configured (ABDM_CLIENT_ID / ABDM_CLIENT_SECRET are unset).');
@@ -73,9 +99,16 @@ export const getGatewayToken = async (now = Date.now()): Promise<string> => {
   if (tokenIsUsable(cached, now)) return cached!.token;
 
   const { data } = await axios.post(
-    `${env.ABDM_GATEWAY_BASE_URL}/gateway/v0.5/sessions`,
-    { clientId: env.ABDM_CLIENT_ID, clientSecret: env.ABDM_CLIENT_SECRET },
-    { headers: { 'Content-Type': 'application/json' }, timeout: 20_000 }
+    `${env.ABDM_GATEWAY_BASE_URL}/api/hiecm/gateway/v3/sessions`,
+    {
+      clientId: env.ABDM_CLIENT_ID,
+      clientSecret: env.ABDM_CLIENT_SECRET,
+      grantType: 'client_credentials'
+    },
+    {
+      headers: { 'Content-Type': 'application/json', ...abdmHeaders() },
+      timeout: 20_000
+    }
   );
 
   const token = data?.accessToken;
@@ -86,15 +119,19 @@ export const getGatewayToken = async (now = Date.now()): Promise<string> => {
 };
 
 /**
- * An axios client already carrying the session token.
+ * An axios client already carrying the session token and the required headers.
  *
- * `Authorization: Bearer <token>` is the only form the gateway accepts — a raw
- * token, or the same token under X-Token, comes back 900902 "Missing
- * Credentials", which reads like bad credentials rather than a bad header.
+ * `Authorization: Bearer <token>` is the only accepted form — a raw token, or
+ * the same token under X-Token, comes back 900902 "Missing Credentials", which
+ * reads like bad credentials rather than a bad header.
+ *
+ * REQUEST-ID is stamped per REQUEST, not once per client: it identifies the
+ * call, and reusing one across calls is what makes a gateway trace impossible
+ * to follow when something goes wrong.
  */
 export const abdmClient = async (): Promise<AxiosInstance> => {
   const token = await getGatewayToken();
-  return axios.create({
+  const client = axios.create({
     baseURL: env.ABDM_GATEWAY_BASE_URL,
     timeout: 30_000,
     headers: {
@@ -103,6 +140,11 @@ export const abdmClient = async (): Promise<AxiosInstance> => {
       accept: 'application/json'
     }
   });
+  client.interceptors.request.use((config) => {
+    Object.assign(config.headers, abdmHeaders());
+    return config;
+  });
+  return client;
 };
 
 /** Drop the cached token. For tests, and for a forced re-auth after a 401. */
