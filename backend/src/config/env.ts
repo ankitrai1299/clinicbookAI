@@ -122,7 +122,21 @@ const envSchema = z.object({
   // auto-detection often mis-fires on short Hindi/Hinglish clips (it picks Urdu
   // and garbles "doctor" → "cardiologist"), so we pin a language by default.
   // Set blank to let Whisper auto-detect (best for genuinely multilingual use).
-  WA_VOICE_LANGUAGE: z.string().default('hi')
+  WA_VOICE_LANGUAGE: z.string().default('hi'),
+
+  // ── ABDM (Ayushman Bharat Digital Mission) ───────────────────────────
+  //
+  // Credentials issued by NHA when a sandbox bridge is created. Optional, and
+  // deliberately so: every ABDM feature is inert without them, and a clinic that
+  // never touches ABDM must not be blocked from starting the server.
+  //
+  // ABDM_CLIENT_ID is the BRIDGE id (NHA's mail calls it "client ID(bridge ID)"),
+  // not a per-clinic identifier — one bridge carries every clinic we onboard.
+  ABDM_CLIENT_ID: z.string().trim().optional(),
+  ABDM_CLIENT_SECRET: z.string().trim().optional(),
+  // Sandbox is dev.abdm.gov.in; production is a different host, so this is a
+  // variable rather than a constant — going live must not need a code change.
+  ABDM_GATEWAY_BASE_URL: z.string().trim().default('https://dev.abdm.gov.in')
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
