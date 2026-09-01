@@ -331,6 +331,18 @@ model Patient {
   abhaNumber   String? // 14 digits, e.g. "12-3456-7890-1234"
   abhaAddress  String? // ABHA address, e.g. "someone@abdm"
   abhaLinkedAt DateTime?
+  // Has anyone CHECKED that this ABHA belongs to this patient?
+  //
+  // True when the desk saw the card, or when we created the ABHA ourselves
+  // through Aadhaar OTP. False when the patient simply typed it at us over
+  // WhatsApp, where nothing proves it is theirs.
+  //
+  // This is not bookkeeping. ABDM discovery matches on the ABHA, so an
+  // unverified one that we trusted would hand THIS patient's records to whoever
+  // the address really belongs to. Discovery therefore ignores unverified ids
+  // entirely, and the default is false so anything that forgets to set it is
+  // untrusted rather than trusted.
+  abhaVerified Boolean @default(false)
 
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments    Appointment[]

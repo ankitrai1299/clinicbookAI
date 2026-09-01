@@ -73,7 +73,15 @@ const candidatesFor = async (
 
   return prisma.patient.findMany({
     where: { clinicId, OR: or },
-    select: { id: true, name: true, phone: true, gender: true, abhaNumber: true, abhaAddress: true },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      gender: true,
+      abhaNumber: true,
+      abhaAddress: true,
+      abhaVerified: true
+    },
     take: 25
   });
 };

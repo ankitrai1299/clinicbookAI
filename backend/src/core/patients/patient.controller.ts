@@ -146,7 +146,9 @@ export const deletePatientHandler = asyncHandler(async (req: Request, res: Respo
 export const setPatientAbhaHandler = asyncHandler(async (req: Request, res: Response) => {
   const clinicId = getClinicId(req);
   const { id } = req.params as PatientIdParams;
-  const patient = await setPatientAbha(clinicId, id, req.body ?? {});
+  // verified: the desk is looking at the patient's card. Not taken from the
+  // request body — a client must not be able to declare its own trust level.
+  const patient = await setPatientAbha(clinicId, id, { ...(req.body ?? {}), verified: true });
 
   // WHICH identity fields were touched, never the values. An ABHA number is
   // itself sensitive — an audit trail is not the place to make a second copy

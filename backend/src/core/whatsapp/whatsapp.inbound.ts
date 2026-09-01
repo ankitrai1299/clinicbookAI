@@ -22,6 +22,7 @@ import { maskPhone } from '../observability/redact.js';
 import { prisma } from '../../config/prisma.js';
 import { handleConsentKeywords, showNoticeIfNeeded } from '../consent/whatsappConsent.js';
 import { handleRightsRequest } from '../rights/whatsappRights.js';
+import { handleAbhaMessage } from './whatsapp.abha.js';
 import { claimInboundMessage } from './whatsapp.dedupe.js';
 import { dataSourceFor } from '../datasource/index.js';
 import { env } from '../../config/env.js';
@@ -292,6 +293,19 @@ const processOne = async (
         patientLanguage: patient.language
       });
       if (rightsTurn.handled) return;
+
+      // Then an ABHA, if that is what they sent — or an Aadhaar, which is
+      // refused here rather than left sitting in the thread. Before the FSM
+      // because fourteen digits would otherwise be read as a menu selection,
+      // and after consent and rights because those outrank it.
+      const abhaTurn = await handleAbhaMessage({
+        clinicId,
+        patientId: patient.id,
+        phone: to,
+        text,
+        patientLanguage: patient.language
+      });
+      if (abhaTurn.handled) return;
 
       // Then the notice, once per patient per version, as its own message ahead
       // of the reply. Awaited so it arrives FIRST — a disclosure that lands after

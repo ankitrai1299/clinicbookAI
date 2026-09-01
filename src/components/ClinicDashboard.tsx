@@ -67,6 +67,7 @@ const mapApiPatient = (p: ApiPatient): Patient => ({
   source: p.source,
   abhaNumber: p.abhaNumber ?? null,
   abhaAddress: p.abhaAddress ?? null,
+  abhaVerified: p.abhaVerified ?? false,
 });
 
 const mapApiDoctor = (d: ApiDoctor): Doctor => ({
@@ -1476,8 +1477,25 @@ export default function ClinicDashboard({
                             title="Record this patient's ABHA"
                           >
                             {p.abhaNumber || p.abhaAddress ? (
-                              <span className="font-mono text-[10px] text-emerald-700 group-hover:underline">
-                                {p.abhaNumber || p.abhaAddress}
+                              <span className="block">
+                                <span
+                                  className={`font-mono text-[10px] group-hover:underline ${
+                                    p.abhaVerified ? 'text-emerald-700' : 'text-amber-700'
+                                  }`}
+                                >
+                                  {p.abhaNumber || p.abhaAddress}
+                                </span>
+                                {/* The patient sent this themselves, so nothing
+                                    proves it is theirs and ABDM ignores it. It
+                                    does nothing until the desk checks the card
+                                    and saves it — which is what this line is
+                                    for. Amber, not red: it is a task, not a
+                                    fault. */}
+                                {!p.abhaVerified && (
+                                  <span className="block text-[9px] text-amber-600 font-semibold">
+                                    check card to confirm
+                                  </span>
+                                )}
                               </span>
                             ) : (
                               /* Deliberately not styled as a warning. Most

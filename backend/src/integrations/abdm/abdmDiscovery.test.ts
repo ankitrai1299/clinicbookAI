@@ -12,6 +12,9 @@ const patient = (over: Partial<CandidatePatient> = {}): CandidatePatient => ({
   gender: 'F',
   abhaNumber: null,
   abhaAddress: null,
+  // Default true: the ordinary case is an ABHA the desk checked against the
+  // card. The unverified case has its own tests below, where it belongs.
+  abhaVerified: true,
   ...over
 });
 
@@ -129,5 +132,44 @@ describe('matchPatient — what it accepts', () => {
       [patient({ id: 'p1', name: 'Asha Verma' }), patient({ id: 'p2', name: 'Ravi Verma' })]
     );
     expect(out.status).toBe('ambiguous');
+  });
+});
+
+// An ABHA nobody has checked. A patient can type ANY address at us over
+// WhatsApp, including one belonging to somebody else, so trusting it would hand
+// this clinic's records for this patient to whoever the address really belongs
+// to. This is the rule that stops that, and it is the reason the column exists.
+describe('matchPatient — an unverified ABHA is worse than none', () => {
+  it('does NOT match on an unverified ABHA address', () => {
+    const out = matchPatient({ id: 'asha@sbx' }, [
+      patient({ abhaAddress: 'asha@sbx', abhaVerified: false })
+    ]);
+    expect(out.status).toBe('none');
+  });
+
+  it('does NOT match on an unverified ABHA number', () => {
+    const out = matchPatient({ id: '12-3456-7890-1234' }, [
+      patient({ abhaNumber: '12345678901234', abhaVerified: false })
+    ]);
+    expect(out.status).toBe('none');
+  });
+
+  it('still matches on a verified MOBILE even when the ABHA is unverified', () => {
+    // The mobile rule is unaffected: the Consent Manager verified that number
+    // itself. Refusing here too would lock out a patient for having once typed
+    // an ABHA at us, which helps nobody.
+    const out = matchPatient(
+      { id: 'x@sbx', verifiedIdentifiers: [{ type: 'MOBILE', value: '9812345678' }] },
+      [patient({ abhaAddress: 'someone.else@sbx', abhaVerified: false })]
+    );
+    expect(out.status).toBe('matched');
+    if (out.status === 'matched') expect(out.matchedBy).toContain('MOBILE');
+  });
+
+  it('matches once the desk has confirmed the same address', () => {
+    const out = matchPatient({ id: 'asha@sbx' }, [
+      patient({ abhaAddress: 'asha@sbx', abhaVerified: true })
+    ]);
+    expect(out.status).toBe('matched');
   });
 });

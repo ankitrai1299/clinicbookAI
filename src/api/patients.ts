@@ -20,6 +20,15 @@ export interface ApiPatient {
   abhaNumber?: string | null;
   abhaAddress?: string | null;
   abhaLinkedAt?: string | null;
+  /**
+   * Has anyone CHECKED this ABHA belongs to this patient?
+   *
+   * False when the patient typed it at us over WhatsApp, where nothing proves
+   * it is theirs. ABDM discovery ignores unverified ids, so until the desk
+   * confirms it against the card it does nothing at all — which is why the
+   * dashboard has to show the difference.
+   */
+  abhaVerified?: boolean;
 }
 
 export interface AbhaIdentity {
@@ -28,6 +37,7 @@ export interface AbhaIdentity {
   abhaNumber: string | null;
   abhaAddress: string | null;
   abhaLinkedAt: string | null;
+  abhaVerified: boolean;
 }
 
 /**

@@ -60,6 +60,17 @@ export const normaliseAbhaAddress = (raw: unknown): string | null => {
 export interface AbhaInput {
   abhaNumber?: unknown;
   abhaAddress?: unknown;
+  /**
+   * Has anyone CHECKED this belongs to this patient?
+   *
+   * True for the desk (they are holding the card) and for an ABHA we created
+   * ourselves through Aadhaar OTP. False for one a patient typed at us over
+   * WhatsApp, where nothing proves it is theirs.
+   *
+   * Required rather than optional: the one thing that must never happen is a
+   * new caller getting `true` by saying nothing.
+   */
+  verified: boolean;
 }
 
 export interface PatientAbha {
@@ -68,6 +79,7 @@ export interface PatientAbha {
   abhaNumber: string | null;
   abhaAddress: string | null;
   abhaLinkedAt: Date | null;
+  abhaVerified: boolean;
 }
 
 /**
@@ -139,11 +151,21 @@ export const setPatientAbha = async (
   const willHaveAddress = 'abhaAddress' in data ? data.abhaAddress : existing.abhaAddress;
   const linked = Boolean(willHaveNumber || willHaveAddress);
   data.abhaLinkedAt = linked ? existing.abhaLinkedAt ?? new Date() : null;
+  // Cleared along with the ids: an emptied record is not a "verified" one, and
+  // leaving the flag set would let the NEXT unverified write inherit trust.
+  data.abhaVerified = linked ? input.verified : false;
 
   const updated = await db.patient.update({
     where: { id: patientId },
     data,
-    select: { id: true, name: true, abhaNumber: true, abhaAddress: true, abhaLinkedAt: true }
+    select: {
+      id: true,
+      name: true,
+      abhaNumber: true,
+      abhaAddress: true,
+      abhaLinkedAt: true,
+      abhaVerified: true
+    }
   });
 
   // Not audited as a clinical change, but it IS the moment a patient becomes
@@ -158,7 +180,14 @@ export const setPatientAbha = async (
 export const getPatientAbha = async (clinicId: string, patientId: string): Promise<PatientAbha> => {
   const patient = await forClinic(clinicId).patient.findFirst({
     where: { id: patientId },
-    select: { id: true, name: true, abhaNumber: true, abhaAddress: true, abhaLinkedAt: true }
+    select: {
+      id: true,
+      name: true,
+      abhaNumber: true,
+      abhaAddress: true,
+      abhaLinkedAt: true,
+      abhaVerified: true
+    }
   });
   if (!patient) throw new AppError('Patient not found', 404);
   return patient;

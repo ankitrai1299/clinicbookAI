@@ -63,7 +63,10 @@ export const finishAbhaEnrolment = async (
 
   const patient = await setPatientAbha(clinicId, patientId, {
     ...(created.abhaNumber ? { abhaNumber: created.abhaNumber } : {}),
-    ...(created.abhaAddress ? { abhaAddress: created.abhaAddress } : {})
+    ...(created.abhaAddress ? { abhaAddress: created.abhaAddress } : {}),
+    // Verified by construction: ABDM issued this against an Aadhaar OTP that
+    // only this patient could read.
+    verified: true
   });
 
   return { ...patient, alreadyExisted: created.alreadyExisted };

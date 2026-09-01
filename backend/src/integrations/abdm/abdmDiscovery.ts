@@ -49,6 +49,16 @@ export interface CandidatePatient {
   gender: string | null;
   abhaNumber: string | null;
   abhaAddress: string | null;
+  /**
+   * Has anyone checked this ABHA belongs to this patient?
+   *
+   * An unverified one is worse than none. A patient can type any ABHA at us
+   * over WhatsApp, including somebody else's — and matching on it would hand
+   * THIS clinic's records for THIS patient to whoever the address really
+   * belongs to. So the ABHA rules below require it; the verified-mobile rule
+   * does not, because the Consent Manager verified that itself.
+   */
+  abhaVerified: boolean;
 }
 
 export type MatchOutcome =
@@ -97,7 +107,9 @@ export const matchPatient = (
   // 1. ABHA number, if the gateway sent one and we have it stored. The
   //    strongest signal available: it identifies a person nationally.
   const abha = digitsOnly(incoming.id?.includes('@') ? null : incoming.id);
-  const byAbha = abha ? candidates.filter((c) => digitsOnly(c.abhaNumber) === abha) : [];
+  const byAbha = abha
+    ? candidates.filter((c) => c.abhaVerified && digitsOnly(c.abhaNumber) === abha)
+    : [];
   if (byAbha.length) {
     pool = byAbha;
     matchedBy.push('ABHA_NUMBER');
@@ -106,7 +118,9 @@ export const matchPatient = (
   // 2. The ABHA address (asha@sbx), which the gateway sends as `id`.
   if (!pool.length && incoming.id?.includes('@')) {
     const addr = incoming.id.trim().toLowerCase();
-    const byAddress = candidates.filter((c) => c.abhaAddress?.trim().toLowerCase() === addr);
+    const byAddress = candidates.filter(
+      (c) => c.abhaVerified && c.abhaAddress?.trim().toLowerCase() === addr
+    );
     if (byAddress.length) {
       pool = byAddress;
       matchedBy.push('HEALTH_ID');

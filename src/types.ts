@@ -24,6 +24,8 @@ export interface Patient {
   // National health identity. Null for most patients — a normal state, not a gap.
   abhaNumber?: string | null;
   abhaAddress?: string | null;
+  /** False = the patient sent it themselves and nobody has checked it yet. */
+  abhaVerified?: boolean;
 }
 
 export interface Appointment {
