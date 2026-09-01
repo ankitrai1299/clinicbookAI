@@ -156,8 +156,11 @@ export const enrolByAadhaar = async (
       {
         authData: {
           authMethods: ['otp'],
+          // Exactly the fields NHA's own Postman collection sends. An earlier
+          // version added a timeStamp here; it is not in the contract, and a
+          // field ABDM does not expect is not worth the risk of a rejection
+          // whose only message would be an opaque "Invalid ...".
           otp: {
-            timeStamp: new Date().toISOString().replace(/\.\d{3}Z$/, '.000Z'),
             txnId,
             otpValue: await encryptForAbdm(otp),
             mobile: mobile.replace(/\D/g, '').slice(-10)
@@ -198,6 +201,18 @@ const asAppError = (err: unknown, fallback: string): AppError => {
   if (err instanceof AppError) return err;
   const res = (err as { response?: { status?: number; data?: Record<string, unknown> } })?.response;
   const body = res?.data ?? {};
+
+  // The shape ABDM uses for the error a desk will actually hit — a wrong or
+  // expired OTP:
+  //   422 { "error": { "code": "ABDM-1204",
+  //                    "message": "UIDAI Error code : 400 : Invalid Aadhaar OTP value." } }
+  // Read FIRST, because without it that arrives as a generic failure and the
+  // desk is told nothing about the one thing they can fix by retyping.
+  const nested = (body as { error?: { message?: string } }).error?.message;
+  if (typeof nested === 'string' && nested) {
+    return new AppError(nested, res?.status && res.status < 500 ? res.status : 502);
+  }
+
   const message =
     (typeof body.message === 'string' && body.message) ||
     (typeof body.details === 'string' && body.details) ||
