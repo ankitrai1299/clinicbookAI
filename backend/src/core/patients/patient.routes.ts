@@ -11,6 +11,8 @@ import {
   setPatientAbhaHandler,
   startAbhaEnrolmentHandler,
   finishAbhaEnrolmentHandler,
+  claimAbhaAddressHandler,
+  abhaCardHandler,
   updatePatientHandler
 } from './patient.controller.js';
 import { createPatientSchema, patientIdParamsSchema, updatePatientSchema } from './patient.schemas.js';
@@ -59,6 +61,18 @@ patientRouter.post(
   requirePermission('patient.update'),
   validate(patientIdParamsSchema, 'params'),
   finishAbhaEnrolmentHandler
+);
+patientRouter.post(
+  '/:id/abha/address',
+  requirePermission('patient.update'),
+  validate(patientIdParamsSchema, 'params'),
+  claimAbhaAddressHandler
+);
+patientRouter.post(
+  '/:id/abha/card',
+  requirePermission('patient.update'),
+  validate(patientIdParamsSchema, 'params'),
+  abhaCardHandler
 );
 patientRouter.delete(
   '/:id',

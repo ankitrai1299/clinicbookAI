@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { apiFetch, API_BASE } from './client';
 
 export interface ApiPatient {
   id: string;
@@ -72,11 +72,50 @@ export const startAbhaEnrolment = (id: string, aadhaar: string) =>
     body: JSON.stringify({ aadhaar }),
   });
 
+export interface EnrolmentResult extends AbhaIdentity {
+  alreadyExisted: boolean;
+  /**
+   * Carry the enrolment session into the two steps that follow. Held only for
+   * the length of this flow — nothing stores them, here or on the server.
+   */
+  txnId: string | null;
+  abhaToken: string | null;
+  /** Readable addresses ABDM offers for this patient. */
+  suggestions: string[];
+}
+
 export const finishAbhaEnrolment = (
   id: string,
   body: { txnId: string; otp: string; mobile: string }
 ) =>
-  apiFetch<AbhaIdentity & { alreadyExisted: boolean }>(`/api/patients/${id}/abha/enrol/verify`, {
+  apiFetch<EnrolmentResult>(`/api/patients/${id}/abha/enrol/verify`, {
     method: 'POST',
     body: JSON.stringify(body),
   });
+
+/** Claim a readable ABHA address, e.g. `asha.verma` — ABDM appends the rest. */
+export const claimAbhaAddress = (id: string, body: { txnId: string; abhaAddress: string }) =>
+  apiFetch<AbhaIdentity>(`/api/patients/${id}/abha/address`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+/**
+ * The patient's ABHA card as an image.
+ *
+ * Uses fetch directly rather than apiFetch, which expects JSON — this returns
+ * bytes. The token goes in the body, not the URL, so it stays out of logs.
+ */
+export const fetchAbhaCard = async (id: string, abhaToken: string): Promise<Blob> => {
+  const token = localStorage.getItem('auth_token');
+  const res = await fetch(`${API_BASE}/api/patients/${id}/abha/card`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ abhaToken }),
+  });
+  if (!res.ok) throw new Error('Could not download the ABHA card.');
+  return res.blob();
+};

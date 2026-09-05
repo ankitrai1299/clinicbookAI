@@ -4,7 +4,12 @@ import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { recordFromRequest } from '../audit/audit.service.js';
 import { setPatientAbha } from '../../services/abdmIdentity.service.js';
-import { startAbhaEnrolment, finishAbhaEnrolment } from '../../services/abhaEnrolment.service.js';
+import {
+  startAbhaEnrolment,
+  finishAbhaEnrolment,
+  claimAbhaAddress,
+  fetchAbhaCard
+} from '../../services/abhaEnrolment.service.js';
 import { createPatient, deletePatient, getPatients, getSinglePatient, updatePatient } from './patient.service.js';
 import { CreatePatientInput, PatientIdParams, UpdatePatientInput } from './patient.schemas.js';
 
@@ -216,4 +221,57 @@ export const finishAbhaEnrolmentHandler = asyncHandler(async (req: Request, res:
   });
 
   res.json({ success: true, data: result });
+});
+
+/**
+ * Claim a readable ABHA address for the patient (ABDM M1).
+ *
+ * Separate from enrolment because the patient chooses it: enrolment already
+ * produced an address, but it is the ABHA number with the dashes removed.
+ */
+export const claimAbhaAddressHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const { id } = req.params as PatientIdParams;
+  const { txnId, abhaAddress } = (req.body ?? {}) as { txnId?: string; abhaAddress?: string };
+  if (!txnId || !abhaAddress) throw new AppError('The address and its session are both required', 400);
+
+  const patient = await claimAbhaAddress(clinicId, id, txnId, abhaAddress);
+
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id,
+    metadata: { abdm: 'abha-address-claimed' }
+  });
+
+  res.json({ success: true, data: patient });
+});
+
+/**
+ * The patient's ABHA card, streamed straight through.
+ *
+ * The card is not stored: it is ABDM's to render, it can be fetched again at
+ * any time, and keeping a copy would be one more place a person's health
+ * identity sits. The token travels in the body rather than the URL so it stays
+ * out of access logs and browser history.
+ */
+export const abhaCardHandler = asyncHandler(async (req: Request, res: Response) => {
+  getClinicId(req);
+  const { abhaToken } = (req.body ?? {}) as { abhaToken?: string };
+  if (!abhaToken) throw new AppError('The ABHA session token is required', 400);
+
+  const card = await fetchAbhaCard(abhaToken);
+
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: (req.params as PatientIdParams).id,
+    patientId: (req.params as PatientIdParams).id,
+    metadata: { abdm: 'abha-card-downloaded' }
+  });
+
+  res.setHeader('Content-Type', card.contentType);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(card.bytes);
 });

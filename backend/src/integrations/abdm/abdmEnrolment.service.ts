@@ -136,6 +136,20 @@ export interface AbhaCreated {
   gender?: string;
   /** True when ABDM found an existing ABHA rather than minting a new one. */
   alreadyExisted: boolean;
+  /**
+   * Carries the enrolment session into the two steps that follow — choosing a
+   * readable ABHA address, and downloading the card.
+   */
+  txnId: string | null;
+  /**
+   * ABDM's session token FOR THIS PATIENT'S ABHA ACCOUNT. Not ours.
+   *
+   * Deliberately NOT stored anywhere. It is a credential to a person's national
+   * health account, it expires in about half an hour, and the only thing it is
+   * needed for is the rest of this one flow. Storing it would mean holding a
+   * key to somebody's health record long after the reason for holding it ended.
+   */
+  abhaToken: string | null;
 }
 
 /**
@@ -183,7 +197,9 @@ export const enrolByAadhaar = async (
       abhaAddress: profile.phrAddress?.[0] ?? profile.abhaAddress ?? null,
       name: [profile.firstName, profile.middleName, profile.lastName].filter(Boolean).join(' ') || undefined,
       gender: profile.gender,
-      alreadyExisted: Boolean(data?.isNew === false)
+      alreadyExisted: Boolean(data?.isNew === false),
+      txnId: data?.txnId ?? null,
+      abhaToken: data?.tokens?.token ?? null
     };
   } catch (err) {
     throw asAppError(err, 'Could not complete the ABHA enrolment.');
@@ -223,4 +239,81 @@ const asAppError = (err: unknown, fallback: string): AppError => {
       .map(([, v]) => v)
       .join('; ');
   return new AppError(message || fallback, res?.status && res.status < 500 ? res.status : 502);
+};
+
+// ── Step 3: a readable ABHA address ────────────────────────────────
+//
+// Enrolment already produced an address, but it is the ABHA number with the
+// dashes stripped — 9175614088XXXX@sbx. Nobody can say that over a phone or
+// recognise it on a screen, so ABDM lets the patient claim a readable one
+// instead. That is a separate mandatory item in M1, and this is it.
+//
+// The transaction id from enrolment is what ties these calls to that patient;
+// it travels in a HEADER here rather than the body, which is why sending it as
+// `txnId` gets an "invalid request Body" and tells you nothing.
+
+/** Names ABDM offers for this patient, e.g. ["asha.verma", "asha1990"]. */
+export const suggestAbhaAddresses = async (txnId: string): Promise<string[]> => {
+  try {
+    const { data } = await axios.get(`${abhaBase()}/abha/api/v3/enrollment/enrol/suggestion`, {
+      headers: { ...(await headers()), Transaction_Id: txnId },
+      timeout: 20_000
+    });
+    const list = data?.abhaAddressList ?? data?.suggestions ?? [];
+    return Array.isArray(list) ? list.map(String) : [];
+  } catch (err) {
+    throw asAppError(err, 'Could not fetch address suggestions.');
+  }
+};
+
+/**
+ * Claim an ABHA address for this patient.
+ *
+ * `preferred` is the part before the @ — ABDM appends the consent manager
+ * itself, so a caller must not send "asha@sbx" here.
+ */
+export const setAbhaAddress = async (txnId: string, preferred: string): Promise<string | null> => {
+  const wanted = preferred.trim().toLowerCase().split('@')[0];
+  if (!wanted) throw new AppError('An ABHA address is required.', 400);
+
+  try {
+    const { data } = await axios.post(
+      `${abhaBase()}/abha/api/v3/enrollment/enrol/abha-address`,
+      { txnId, abhaAddress: wanted, preferred: 1 },
+      { headers: { ...(await headers()), Transaction_Id: txnId }, timeout: 20_000 }
+    );
+    return data?.preferredAbhaAddress ?? data?.abhaAddress ?? data?.healthIdNumber ?? null;
+  } catch (err) {
+    throw asAppError(err, 'Could not set that ABHA address.');
+  }
+};
+
+// ── Step 4: the ABHA card ─────────────────────────────────────
+
+export interface AbhaCard {
+  bytes: Buffer;
+  contentType: string;
+}
+
+/**
+ * The patient's ABHA card, as an image.
+ *
+ * Authenticated with X-token — NOT the Authorization header, which still
+ * carries our own gateway token. ABDM says "Invalid X-token" when it is
+ * missing, which is the only reason the header name is knowable at all.
+ */
+export const downloadAbhaCard = async (abhaToken: string): Promise<AbhaCard> => {
+  try {
+    const res = await axios.get(`${abhaBase()}/abha/api/v3/profile/account/abha-card`, {
+      headers: { ...(await headers()), 'X-token': `Bearer ${abhaToken}` },
+      responseType: 'arraybuffer',
+      timeout: 30_000
+    });
+    return {
+      bytes: Buffer.from(res.data),
+      contentType: String(res.headers['content-type'] ?? 'image/png')
+    };
+  } catch (err) {
+    throw asAppError(err, 'Could not download the ABHA card.');
+  }
 };

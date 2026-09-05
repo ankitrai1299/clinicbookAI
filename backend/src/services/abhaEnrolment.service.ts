@@ -11,7 +11,14 @@
 //
 // So the controller calls only this, and this reaches both ways.
 
-import { enrolByAadhaar, requestAadhaarOtp } from '../integrations/abdm/abdmEnrolment.service.js';
+import {
+  downloadAbhaCard,
+  enrolByAadhaar,
+  requestAadhaarOtp,
+  setAbhaAddress,
+  suggestAbhaAddresses,
+  type AbhaCard
+} from '../integrations/abdm/abdmEnrolment.service.js';
 import { setPatientAbha, type PatientAbha } from './abdmIdentity.service.js';
 import { AppError } from '../utils/AppError.js';
 
@@ -35,6 +42,14 @@ export const startAbhaEnrolment = async (aadhaar: string): Promise<EnrolmentStar
 export interface EnrolmentFinished extends PatientAbha {
   /** ABDM found an existing ABHA instead of minting one. Worth telling the desk. */
   alreadyExisted: boolean;
+  /**
+   * Handed back so the SAME flow can go on to claim a readable address and
+   * fetch the card. Never persisted — see the note in the integration.
+   */
+  txnId: string | null;
+  abhaToken: string | null;
+  /** Addresses ABDM offers, fetched here so the desk does not wait twice. */
+  suggestions: string[];
 }
 
 /**
@@ -69,5 +84,46 @@ export const finishAbhaEnrolment = async (
     verified: true
   });
 
-  return { ...patient, alreadyExisted: created.alreadyExisted };
+  // Fetched now rather than on the next screen: the desk is already waiting,
+  // and a second round-trip after they have read the number is a pause they
+  // will fill by closing the dialog.
+  const suggestions = created.txnId
+    ? await suggestAbhaAddresses(created.txnId).catch(() => [])
+    : [];
+
+  return {
+    ...patient,
+    alreadyExisted: created.alreadyExisted,
+    txnId: created.txnId,
+    abhaToken: created.abhaToken,
+    suggestions
+  };
 };
+
+/**
+ * Claim a readable ABHA address, and put it on the patient record.
+ *
+ * A separate step because the patient CHOOSES it — enrolment already produced
+ * one, but it is the ABHA number with the dashes taken out, which nobody can
+ * repeat over a phone.
+ */
+export const claimAbhaAddress = async (
+  clinicId: string,
+  patientId: string,
+  txnId: string,
+  preferred: string
+): Promise<PatientAbha> => {
+  const address = await setAbhaAddress(txnId, preferred);
+  if (!address) throw new AppError('ABDM did not confirm the address.', 502);
+
+  return setPatientAbha(clinicId, patientId, {
+    abhaAddress: address,
+    // Issued by ABDM against this patient's own enrolment, so it is verified
+    // by construction — the same reasoning as the number itself.
+    verified: true
+  });
+};
+
+/** The patient's ABHA card, to hand or send to them. */
+export const fetchAbhaCard = (abhaToken: string): Promise<AbhaCard> =>
+  downloadAbhaCard(abhaToken);
