@@ -10,6 +10,7 @@ import {
   claimAbhaAddress,
   fetchAbhaCard
 } from '../../services/abhaEnrolment.service.js';
+import { startLinking } from '../../services/abdmCareLink.service.js';
 import { createPatient, deletePatient, getPatients, getSinglePatient, updatePatient } from './patient.service.js';
 import { CreatePatientInput, PatientIdParams, UpdatePatientInput } from './patient.schemas.js';
 
@@ -274,4 +275,29 @@ export const abhaCardHandler = asyncHandler(async (req: Request, res: Response) 
   res.setHeader('Content-Type', card.contentType);
   res.setHeader('Cache-Control', 'no-store');
   res.send(card.bytes);
+});
+
+/**
+ * Push this patient's completed visits into their national health record.
+ *
+ * Answers as soon as the request is placed. When a stored link token is still
+ * good the push has already happened and the reply says so; otherwise ABDM
+ * calls us back with a token seconds later and the linking finishes there.
+ * Either way the desk is not left holding a spinner.
+ */
+export const linkCareContextsHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const { id } = req.params as PatientIdParams;
+
+  const result = await startLinking(clinicId, id);
+
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id,
+    metadata: { abdm: `care-context-link-${result.status}` }
+  });
+
+  res.json({ success: true, data: result });
 });

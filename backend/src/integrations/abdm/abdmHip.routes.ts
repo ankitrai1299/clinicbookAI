@@ -31,6 +31,7 @@ import { Router, type Request, type Response } from 'express';
 
 import { ABDM_ERROR, postError } from './abdmCallback.js';
 import { handleDiscovery } from './abdmHip.service.js';
+import { completeLinking, patientForAbhaAddress } from '../../services/abdmCareLink.service.js';
 
 const router = Router();
 
@@ -104,6 +105,52 @@ router.post(
   '/v0.5/health-information/hip/request',
   notImplemented('/gateway/v0.5/health-information/hip/on-request')
 );
+
+// ── V3 ─────────────────────────────────────────────────────────────
+//
+// The paths below are NOT ours to choose. ABDM takes the base URL registered
+// against the bridge and appends its own path to it, so the route has to match
+// what the gateway appends, character for character. Registering the endpoint
+// instead of the base URL is the commonest mistake — the gateway then appends
+// again and calls .../on-generate-token/on-generate-token, which nothing serves.
+//
+// Registered base: https://<host>/api/abdm
+
+/**
+ * ABDM delivers the link token here, seconds after generate-token returned 202.
+ *
+ * The token is the whole point of the call, so a body without one is a failure
+ * worth logging rather than a normal outcome.
+ */
+router.post('/api/v3/hip/token/on-generate-token', (req, res) => {
+  const body = (req.body ?? {}) as {
+    linkToken?: string;
+    abhaAddress?: string;
+    error?: { message?: string };
+  };
+  const hipId = hipIdOf(req);
+
+  ack(res, async () => {
+    if (body.error) {
+      console.error('[ABDM] link token refused:', body.error.message ?? 'no reason given');
+      return;
+    }
+    if (!body.linkToken || !body.abhaAddress || !hipId) {
+      console.error('[ABDM] on-generate-token arrived without a token, address or X-HIP-ID');
+      return;
+    }
+
+    // ABDM identifies the patient by ABHA address, not by our id — this is
+    // where the answer finds its way back to the right record.
+    const found = await patientForAbhaAddress(hipId, body.abhaAddress);
+    if (!found) {
+      console.error('[ABDM] link token for an ABHA address no patient here holds');
+      return;
+    }
+
+    await completeLinking(found.clinicId, found.patientId, body.linkToken);
+  });
+});
 
 /**
  * Somewhere to point a browser at while setting the bridge URL up.

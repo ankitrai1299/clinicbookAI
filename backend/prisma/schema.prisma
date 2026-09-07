@@ -344,6 +344,19 @@ model Patient {
   // untrusted rather than trusted.
   abhaVerified Boolean @default(false)
 
+  // ABDM's LINK token for this patient — what lets us push their visits into
+  // their national record.
+  //
+  // Stored, unlike the ABHA session token, and the difference is deliberate.
+  // ABDM blocks a facility for 24 hours after three generate-token calls for the
+  // same ABHA address in one day, and the token it hands back is valid for six
+  // months. Re-fetching it per push would therefore lock the clinic out by the
+  // fourth patient link of the morning.
+  //
+  // It is scoped to (this clinic, this patient) and grants nothing else.
+  abdmLinkToken   String?
+  abdmLinkTokenAt DateTime?
+
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
   waitlistEntry   Waitlist?

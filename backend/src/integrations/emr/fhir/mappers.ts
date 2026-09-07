@@ -126,6 +126,8 @@ export const patientToRecord = (p: FhirPatient, clinicId: string): PatientRecord
     abhaLinkedAt: null,
     // An EMR-sourced patient carries no ABHA we have checked.
     abhaVerified: false,
+    abdmLinkToken: null,
+    abdmLinkTokenAt: null,
     createdAt: new Date(0),
     updatedAt: new Date(0)
   }) as PatientRecord;

@@ -13,6 +13,7 @@ import {
   finishAbhaEnrolmentHandler,
   claimAbhaAddressHandler,
   abhaCardHandler,
+  linkCareContextsHandler,
   updatePatientHandler
 } from './patient.controller.js';
 import { createPatientSchema, patientIdParamsSchema, updatePatientSchema } from './patient.schemas.js';
@@ -73,6 +74,14 @@ patientRouter.post(
   requirePermission('patient.update'),
   validate(patientIdParamsSchema, 'params'),
   abhaCardHandler
+);
+// Push this patient's visits to ABDM (M2). Under patient.update because it
+// changes what the outside world can see about this record.
+patientRouter.post(
+  '/:id/abdm/link',
+  requirePermission('patient.update'),
+  validate(patientIdParamsSchema, 'params'),
+  linkCareContextsHandler
 );
 patientRouter.delete(
   '/:id',

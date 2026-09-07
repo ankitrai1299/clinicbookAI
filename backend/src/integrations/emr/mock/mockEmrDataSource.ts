@@ -99,6 +99,8 @@ const mockPatients = (clinicId: string): PatientPort => {
       abhaAddress: null,
       abhaLinkedAt: null,
       abhaVerified: false,
+      abdmLinkToken: null,
+      abdmLinkTokenAt: null,
       language: data.language,
       patientCode: data.patientCode ?? null,
       source: data.source ?? 'emr',
