@@ -75,13 +75,24 @@ const publicKeyPem = async (now = Date.now()): Promise<string> => {
 /**
  * Encrypt a secret for ABDM.
  *
- * PKCS#1 v1.5 — verified against the live sandbox as the padding it accepts.
- * Used for the Aadhaar number and for the OTP; both are secrets that must not
- * cross the wire in the clear.
+ * RSA/ECB/**OAEPWithSHA-1AndMGF1Padding**, which is what the V3 APIs require.
+ *
+ * This was PKCS#1 v1.5, with a comment claiming the sandbox had confirmed it.
+ * The sandbox had confirmed nothing: every padding returns the same opaque
+ * `{"loginId": "Invalid LoginId"}`, so the test that "verified" it could not
+ * have told the two apart. NHA's own FAQ names this exact error and gives this
+ * exact cause — wrong cipher for V3.
+ *
+ * SHA-1 is not a choice here. OAEP's hash is part of the contract with the
+ * other side, and ABDM's side uses SHA-1; anything else fails to decrypt.
  */
 const encryptForAbdm = async (value: string): Promise<string> =>
   publicEncrypt(
-    { key: await publicKeyPem(), padding: constants.RSA_PKCS1_PADDING },
+    {
+      key: await publicKeyPem(),
+      padding: constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: 'sha1'
+    },
     Buffer.from(value)
   ).toString('base64');
 
