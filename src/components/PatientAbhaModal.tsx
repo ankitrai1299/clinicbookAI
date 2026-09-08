@@ -43,6 +43,8 @@ interface PatientAbhaModalProps {
 }
 
 export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientAbhaModalProps) {
+  const hasAbhaOnOpen = Boolean(patient.abhaNumber || patient.abhaAddress);
+
   const [number, setNumber] = useState(patient.abhaNumber ?? '');
   const [address, setAddress] = useState(patient.abhaAddress ?? '');
   const [saving, setSaving] = useState(false);
@@ -50,7 +52,12 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
   // Creating an ABHA is a different job from typing one in, so it replaces the
   // form rather than sitting beneath it — two sets of boxes for one outcome is
   // how a desk ends up filling in the wrong one.
-  const [creating, setCreating] = useState(false);
+  //
+  // Open on it when there is no ABHA yet, because that is then the ONLY thing
+  // this screen can usefully do. An identity is not something a desk keys in
+  // from memory; it is created with the patient's own Aadhaar, and they are
+  // standing there to read out the OTP.
+  const [creating, setCreating] = useState(!hasAbhaOnOpen);
 
   // Sharing is a separate action with a separate outcome, so it keeps its own
   // busy flag and its own message. Folding it into `saving` would grey out the
@@ -132,7 +139,7 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
                 onSaved(identity);
                 onClose();
               }}
-              onCancel={() => setCreating(false)}
+              onCancel={() => (hasAbhaOnOpen ? setCreating(false) : onClose())}
             />
           </div>
         ) : (
