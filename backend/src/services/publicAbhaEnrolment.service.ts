@@ -258,20 +258,42 @@ export const registerPublicPatientWithAbha = async (
   clinicId: string,
   input: PublicRegisterPatientInput & { abhaTxnId?: string }
 ): Promise<PatientRecord> => {
-  const patient = await createPublicPatient(clinicId, input);
-  if (!input.abhaTxnId) return patient;
+  // Claimed BEFORE the patient is created, not after, and the ordering carries
+  // weight: the record is written with the Aadhaar details from the start, and
+  // the welcome message can name the ABHA. Doing it afterwards would create the
+  // patient under the typed name, send them a message that does not mention
+  // their new ABHA, and then quietly correct the row behind them.
+  const abha = input.abhaTxnId ? await consumeAbhaSession(clinicId, input.abhaTxnId) : null;
 
-  const abha = await consumeAbhaSession(clinicId, input.abhaTxnId);
-  if (!abha) {
-    // Expired, already used, or never verified. Silent on purpose: the patient
-    // is registered, and the desk can record the ABHA later.
+  if (input.abhaTxnId && !abha) {
+    // Expired, already used, or never verified. Not an error to the patient:
+    // they are registered either way, and the alternative is refusing a
+    // registration over the half of it that was optional.
     console.info(`[ABDM] registration quoted an unusable ABHA session for clinic ${clinicId}`);
-    return patient;
   }
+
+  const patient = await createPublicPatient(
+    clinicId,
+    abha
+      ? {
+          ...input,
+          // The Aadhaar record wins over what was typed. That is what it was
+          // asked for — and it is the version ABDM checks a link against.
+          name: abha.name ?? input.name,
+          gender: abha.gender ?? input.gender,
+          age: ageFromYearOfBirth(abha.yearOfBirth) ?? input.age
+        }
+      : input,
+    { abhaNumber: abha?.abhaNumber ?? null }
+  );
+
+  if (!abha) return patient;
 
   try {
     await applyAbhaToPatient(clinicId, patient.id, abha);
   } catch (err) {
+    // The patient exists and has been welcomed; only the ABHA columns are
+    // missing, and the desk can see that on their record.
     console.error('[ABDM] could not attach the ABHA to a new registration:', err);
     return patient;
   }

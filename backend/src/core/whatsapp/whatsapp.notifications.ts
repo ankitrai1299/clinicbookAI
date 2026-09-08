@@ -15,6 +15,7 @@ import {
   appointmentCompletedComponents,
   appointmentMissedComponents,
   bookingConfirmationComponents,
+  registrationWelcomeAbhaComponents,
   registrationWelcomeComponents,
   waitlistOfferComponents
 } from './whatsapp.templates.js';
@@ -206,6 +207,14 @@ export interface PatientRegisteredParams {
   patientName: string;
   clinicName: string;
   patientCode: string;
+  /**
+   * Present only when the patient registered with their Aadhaar.
+   *
+   * Worth putting in the message rather than only on a screen they will close:
+   * this is the one identifier they cannot look up anywhere else, and a
+   * WhatsApp thread is where people actually find things again months later.
+   */
+  abhaNumber?: string | null;
 }
 
 // Builds the exact registration confirmation body from the freshly-created
@@ -254,14 +263,29 @@ export const notifyPatientRegistered = (p: PatientRegisteredParams): void => {
   const to = p.to.replace(/\D/g, '');
   const sessionBody = buildRegistrationBody(p);
 
+  // A patient who has just filled in a web form has almost never messaged the
+  // clinic, so the 24-hour window is shut and it is the TEMPLATE that actually
+  // goes out. Putting the ABHA only in the session body would have meant
+  // writing it for a message nobody receives.
+  const withAbha = Boolean(p.abhaNumber);
+
   void sendTemplatedOrSession({
     to,
-    templateName: WhatsAppTemplate.REGISTRATION_WELCOME,
-    components: registrationWelcomeComponents({
-      patientName: p.patientName,
-      clinicName: p.clinicName,
-      patientCode: p.patientCode
-    }),
+    templateName: withAbha
+      ? WhatsAppTemplate.REGISTRATION_WELCOME_ABHA
+      : WhatsAppTemplate.REGISTRATION_WELCOME,
+    components: withAbha
+      ? registrationWelcomeAbhaComponents({
+          patientName: p.patientName,
+          clinicName: p.clinicName,
+          patientCode: p.patientCode,
+          abhaNumber: p.abhaNumber as string
+        })
+      : registrationWelcomeComponents({
+          patientName: p.patientName,
+          clinicName: p.clinicName,
+          patientCode: p.patientCode
+        }),
     sessionBody,
     clinicId: p.clinicId
   })

@@ -84,7 +84,18 @@ export const getPublicClinicInfo = async (clinicId: string): Promise<PublicClini
 // updates the existing record (preserving its ID/code) instead of failing.
 export const createPublicPatient = async (
   clinicId: string,
-  input: PublicRegisterPatientInput
+  input: PublicRegisterPatientInput,
+  /**
+   * Facts about HOW they registered, for the welcome message and the dashboard
+   * line — not stored here.
+   *
+   * Passed in rather than read back afterwards because both of those happen
+   * inside this function, before an ABHA written by the caller would exist. A
+   * patient told "welcome" without the ABHA they just created, and a dashboard
+   * saying only "self-registered" about someone who proved their identity with
+   * Aadhaar, are both simply less true than they could be.
+   */
+  registeredWith?: { abhaNumber?: string | null }
 ): Promise<PatientRecord> => {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
@@ -112,7 +123,9 @@ export const createPublicPatient = async (
       clinicId,
       patientId: patient.id,
       type: 'registered',
-      title: `${patient.name} self-registered`,
+      title: registeredWith?.abhaNumber
+        ? `${patient.name} self-registered with Aadhaar · ABHA ${registeredWith.abhaNumber}`
+        : `${patient.name} self-registered`,
       actorType: 'patient'
     });
   }
@@ -124,7 +137,8 @@ export const createPublicPatient = async (
       clinicId,
       patientName: patient.name,
       clinicName: clinic.name,
-      patientCode: patient.patientCode
+      patientCode: patient.patientCode,
+      abhaNumber: registeredWith?.abhaNumber ?? null
     });
   }
 
