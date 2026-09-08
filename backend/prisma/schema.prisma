@@ -342,7 +342,7 @@ model Patient {
   // the address really belongs to. Discovery therefore ignores unverified ids
   // entirely, and the default is false so anything that forgets to set it is
   // untrusted rather than trusted.
-  abhaVerified Boolean @default(false)
+  abhaVerified Boolean   @default(false)
 
   // ABDM's LINK token for this patient — what lets us push their visits into
   // their national record.
@@ -356,6 +356,25 @@ model Patient {
   // It is scoped to (this clinic, this patient) and grants nothing else.
   abdmLinkToken   String?
   abdmLinkTokenAt DateTime?
+
+  // The person AS ABDM KNOWS THEM — not as the desk typed them.
+  //
+  // Separate from name/gender/age above, and that separation is the whole
+  // point. Linking sends these three to ABDM, which checks them against the
+  // Aadhaar record; "AnkiT Rai, 2004" typed at a front desk was refused with
+  // "The information you provided does not match the details on record with
+  // Aadhaar", and there is no way to see from our side which field was wrong.
+  //
+  // Filled from ABDM's own enrolment response, which returns the official name
+  // and gender. Null for a patient whose ABHA we did not create — then the
+  // clinic's own fields are all there is, and linking may well be refused.
+  //
+  // The clinic's record is deliberately NOT overwritten with these: the desk
+  // calls the patient by the name they gave, and a government spelling
+  // appearing in its place would be a surprise nobody asked for.
+  abdmName        String?
+  abdmGender      String?
+  abdmYearOfBirth String?
 
   clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments    Appointment[]

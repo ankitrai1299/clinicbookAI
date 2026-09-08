@@ -74,9 +74,17 @@ const headersFor = async (hipId: string): Promise<Record<string, string>> => ({
 export interface LinkTokenRequest {
   hipId: string;
   abhaAddress: string;
+  /**
+   * These three are checked against the AADHAAR record, not merely recorded.
+   *
+   * A mismatch is refused with "The information you provided does not match the
+   * details on record with Aadhaar", which names no field — so the caller must
+   * send ABDM's own version of the person where it has one, and not the desk's.
+   */
   name: string;
   gender: string | null;
-  age: number | null;
+  /** Four digits. Derived by the caller, which knows what it is derived FROM. */
+  yearOfBirth: string;
 }
 
 /**
@@ -90,14 +98,6 @@ export interface LinkTokenRequest {
  * address in one day, so a caller MUST check for a stored token first.
  */
 export const requestLinkToken = async (req: LinkTokenRequest): Promise<void> => {
-  const yearOfBirth = yearOfBirthFromAge(req.age);
-  if (!yearOfBirth) {
-    throw new AppError(
-      "This patient's age is not recorded, and ABDM needs a year of birth to link their records.",
-      400
-    );
-  }
-
   try {
     await axios.post(
       `${gateway()}/hiecm/api/v3/token/generate-token`,
@@ -105,7 +105,7 @@ export const requestLinkToken = async (req: LinkTokenRequest): Promise<void> => 
         abhaAddress: req.abhaAddress,
         name: req.name,
         gender: abdmGender(req.gender),
-        yearOfBirth
+        yearOfBirth: req.yearOfBirth
         // abhaNumber deliberately omitted. It is optional, and ABDM's own FAQ
         // says that sending it here forces it into the carecontext call too —
         // one more thing to keep consistent for no gain.

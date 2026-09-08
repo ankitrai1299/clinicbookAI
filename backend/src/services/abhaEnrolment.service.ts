@@ -20,6 +20,7 @@ import {
   type AbhaCard
 } from '../integrations/abdm/abdmEnrolment.service.js';
 import { setPatientAbha, type PatientAbha } from './abdmIdentity.service.js';
+import { forClinic } from '../config/tenantPrisma.js';
 import { AppError } from '../utils/AppError.js';
 
 export interface EnrolmentStarted {
@@ -83,6 +84,25 @@ export const finishAbhaEnrolment = async (
     // only this patient could read.
     verified: true
   });
+
+  // ABDM's own version of who this is, kept beside the clinic's.
+  //
+  // This is the only moment it is ever offered. Linking later sends a name,
+  // gender and year of birth to be checked against Aadhaar, and the desk's
+  // spelling of a name is not that record — a link refused with "does not match
+  // the details on record with Aadhaar" names no field, so there is nothing to
+  // correct by guessing. Written separately from setPatientAbha, which is about
+  // identifiers and their duplicate check.
+  //
+  // The clinic's own name/gender/age are left exactly as they were.
+  const identity = {
+    ...(created.name ? { abdmName: created.name } : {}),
+    ...(created.gender ? { abdmGender: created.gender } : {}),
+    ...(created.yearOfBirth ? { abdmYearOfBirth: created.yearOfBirth } : {})
+  };
+  if (Object.keys(identity).length) {
+    await forClinic(clinicId).patient.update({ where: { id: patientId }, data: identity });
+  }
 
   // Fetched now rather than on the next screen: the desk is already waiting,
   // and a second round-trip after they have read the number is a pause they

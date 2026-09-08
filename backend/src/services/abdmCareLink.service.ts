@@ -22,6 +22,7 @@ import { AppError } from '../utils/AppError.js';
 import {
   linkCareContexts,
   requestLinkToken,
+  yearOfBirthFromAge,
   type CareContextToLink
 } from '../integrations/abdm/abdmLink.service.js';
 
@@ -49,6 +50,9 @@ interface LinkablePatient {
   abhaVerified: boolean;
   abdmLinkToken: string | null;
   abdmLinkTokenAt: Date | null;
+  abdmName: string | null;
+  abdmGender: string | null;
+  abdmYearOfBirth: string | null;
 }
 
 const loadPatient = async (clinicId: string, patientId: string): Promise<LinkablePatient> => {
@@ -62,7 +66,10 @@ const loadPatient = async (clinicId: string, patientId: string): Promise<Linkabl
       abhaAddress: true,
       abhaVerified: true,
       abdmLinkToken: true,
-      abdmLinkTokenAt: true
+      abdmLinkTokenAt: true,
+      abdmName: true,
+      abdmGender: true,
+      abdmYearOfBirth: true
     }
   });
   if (!patient) throw new AppError('Patient not found', 404);
@@ -154,12 +161,24 @@ export const startLinking = async (clinicId: string, patientId: string): Promise
     return { status: 'ready', message: `${visits.length} visit(s) linked.` };
   }
 
+  // ABDM checks these against Aadhaar. Where we created the ABHA ourselves it
+  // told us its own version of the name and gender, and THAT is what will
+  // match; the clinic's spelling is what the desk calls them, which is a
+  // different thing and was refused once already.
+  const yearOfBirth = patient.abdmYearOfBirth ?? yearOfBirthFromAge(patient.age);
+  if (!yearOfBirth) {
+    throw new AppError(
+      "This patient's age is not recorded, and ABDM needs a year of birth to link their records.",
+      400
+    );
+  }
+
   await requestLinkToken({
     hipId,
     abhaAddress: patient.abhaAddress,
-    name: patient.name,
-    gender: patient.gender,
-    age: patient.age
+    name: patient.abdmName ?? patient.name,
+    gender: patient.abdmGender ?? patient.gender,
+    yearOfBirth
   });
 
   return {

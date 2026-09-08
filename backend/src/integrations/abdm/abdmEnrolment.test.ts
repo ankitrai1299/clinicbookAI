@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { asAppError, toPem } from './abdmEnrolment.service';
+import { asAppError, toPem, yearOfBirthFromProfile } from './abdmEnrolment.service';
 
 /** The shape axios hands us. */
 const failure = (status: number, data: unknown) => ({ response: { status, data } });
@@ -60,5 +60,29 @@ describe('toPem', () => {
     const body = pem.split('\n').slice(1, -1);
     expect(body.every((l) => l.length <= 64)).toBe(true);
     expect(body.join('')).toBe('A'.repeat(200));
+  });
+});
+
+describe('yearOfBirthFromProfile', () => {
+  it('reads each date shape the ABHA profile has been seen to send', () => {
+    expect(yearOfBirthFromProfile({ yearOfBirth: '1990' })).toBe('1990');
+    expect(yearOfBirthFromProfile({ dob: '15-08-1990' })).toBe('1990');
+    expect(yearOfBirthFromProfile({ dob: '1990-08-15' })).toBe('1990');
+    expect(yearOfBirthFromProfile({ dateOfBirth: '1990-08-15T00:00:00Z' })).toBe('1990');
+  });
+
+  it('prefers an explicit year over a date', () => {
+    expect(yearOfBirthFromProfile({ yearOfBirth: '1990', dob: '01-01-1991' })).toBe('1990');
+  });
+
+  it('gives nothing rather than a wrong year', () => {
+    // The caller falls back to the age the clinic recorded. A confident wrong
+    // year is worse than none: ABDM refuses the link either way, but a null is
+    // the only one of the two that says so before the request is spent — and
+    // three refused requests in a day lock the facility out for twenty-four hours.
+    expect(yearOfBirthFromProfile({})).toBeUndefined();
+    expect(yearOfBirthFromProfile({ dob: null })).toBeUndefined();
+    expect(yearOfBirthFromProfile({ dob: 'not a date' })).toBeUndefined();
+    expect(yearOfBirthFromProfile({ dob: '15-08-90' })).toBeUndefined();
   });
 });

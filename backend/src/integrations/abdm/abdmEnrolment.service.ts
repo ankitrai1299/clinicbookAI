@@ -144,8 +144,18 @@ export const requestAadhaarOtp = async (aadhaar: string): Promise<OtpSent> => {
 export interface AbhaCreated {
   abhaNumber: string | null;
   abhaAddress: string | null;
+  /**
+   * The person as ABDM knows them, from the Aadhaar record.
+   *
+   * Worth keeping, and easy to think otherwise: we already have a name and a
+   * gender for this patient. But ABDM checks THESE against Aadhaar when a link
+   * token is requested, and a desk-typed name is refused with a message that
+   * does not say which field was wrong.
+   */
   name?: string;
   gender?: string;
+  /** Four digits. ABDM wants a year; the profile carries a full date. */
+  yearOfBirth?: string;
   /** True when ABDM found an existing ABHA rather than minting a new one. */
   alreadyExisted: boolean;
   /**
@@ -171,6 +181,24 @@ export interface AbhaCreated {
  * often NOT the Aadhaar-linked one — a detail worth surfacing in the UI, since
  * a desk will otherwise assume the OTP number is the answer.
  */
+/**
+ * PURE: the birth YEAR out of whatever the ABHA profile carried.
+ *
+ * ABDM has been seen to send `yearOfBirth` on its own, a `dob` as dd-mm-yyyy,
+ * and an ISO date. Rather than pick one and be wrong later, take the first
+ * four-digit run that could be a year — every one of those shapes contains
+ * exactly one.
+ */
+export const yearOfBirthFromProfile = (profile: Record<string, unknown>): string | undefined => {
+  for (const key of ['yearOfBirth', 'dob', 'dateOfBirth', 'birthdate']) {
+    const raw = profile[key];
+    if (raw === undefined || raw === null) continue;
+    const year = String(raw).match(/(19|20)\d{2}/)?.[0];
+    if (year) return year;
+  }
+  return undefined;
+};
+
 export const enrolByAadhaar = async (
   txnId: string,
   otp: string,
@@ -209,6 +237,7 @@ export const enrolByAadhaar = async (
       abhaAddress: profile.phrAddress?.[0] ?? profile.abhaAddress ?? null,
       name: [profile.firstName, profile.middleName, profile.lastName].filter(Boolean).join(' ') || undefined,
       gender: profile.gender,
+      yearOfBirth: yearOfBirthFromProfile(profile),
       alreadyExisted: Boolean(data?.isNew === false),
       txnId: data?.txnId ?? null,
       abhaToken: data?.tokens?.token ?? null

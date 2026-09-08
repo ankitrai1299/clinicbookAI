@@ -128,6 +128,11 @@ export const patientToRecord = (p: FhirPatient, clinicId: string): PatientRecord
     abhaVerified: false,
     abdmLinkToken: null,
     abdmLinkTokenAt: null,
+    // An EMR-backed patient has no ABDM enrolment of ours behind them, so
+    // there is no Aadhaar-checked identity to carry.
+    abdmName: null,
+    abdmGender: null,
+    abdmYearOfBirth: null,
     createdAt: new Date(0),
     updatedAt: new Date(0)
   }) as PatientRecord;

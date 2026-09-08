@@ -101,6 +101,11 @@ const mockPatients = (clinicId: string): PatientPort => {
       abhaVerified: false,
       abdmLinkToken: null,
       abdmLinkTokenAt: null,
+      // An EMR-backed patient has no ABDM enrolment of ours behind them, so
+      // there is no Aadhaar-checked identity to carry.
+      abdmName: null,
+      abdmGender: null,
+      abdmYearOfBirth: null,
       language: data.language,
       patientCode: data.patientCode ?? null,
       source: data.source ?? 'emr',
