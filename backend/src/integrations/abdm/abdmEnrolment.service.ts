@@ -27,13 +27,13 @@
 // can read it. This is not a form the desk can fill in from a photocopy, and
 // the UI must not pretend otherwise.
 
-import { randomUUID, publicEncrypt, constants } from 'node:crypto';
+import { publicEncrypt, constants } from 'node:crypto';
 
 import axios from 'axios';
 
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
-import { getGatewayToken } from './abdmSession.js';
+import { abdmHeaders, getGatewayToken } from './abdmSession.js';
 
 /** Sandbox ABHA host. Production is a different one, hence a variable. */
 const abhaBase = () => env.ABDM_ABHA_BASE_URL;
@@ -41,9 +41,10 @@ const abhaBase = () => env.ABDM_ABHA_BASE_URL;
 const headers = async (): Promise<Record<string, string>> => ({
   'Content-Type': 'application/json',
   Authorization: `Bearer ${await getGatewayToken()}`,
-  'REQUEST-ID': randomUUID(),
-  TIMESTAMP: new Date().toISOString().replace(/\.\d{3}Z$/, '.000Z'),
-  'X-CM-ID': env.ABDM_CM_ID
+  // Was a second hand-written copy of the same three headers. Sharing one
+  // builder is not tidiness: a header added for the relay, or a rule learned
+  // about X-CM-ID, has to reach every ABDM call or it reaches none usefully.
+  ...abdmHeaders()
 });
 
 // ── Public key ─────────────────────────────────────────────────────────────
@@ -224,10 +225,33 @@ export const enrolByAadhaar = async (
  * desk to start again, where a generic failure tells them nothing. The status
  * is carried through so a 400 does not surface to the clinic as our outage.
  */
-const asAppError = (err: unknown, fallback: string): AppError => {
+/**
+ * Turn an axios failure into something a desk can act on.
+ *
+ * Exported for the tests: the body ABDM sends is the one thing here that
+ * cannot be predicted, and every shape it has taken is worth pinning down.
+ */
+export const asAppError = (err: unknown, fallback: string): AppError => {
   if (err instanceof AppError) return err;
-  const res = (err as { response?: { status?: number; data?: Record<string, unknown> } })?.response;
-  const body = res?.data ?? {};
+  const res = (err as { response?: { status?: number; data?: unknown } })?.response;
+  const raw = res?.data;
+
+  // ABDM does not always answer in JSON. Under load, and behind its gateway, it
+  // returns an HTML error page — and `Object.entries` on a string yields one
+  // entry PER CHARACTER, which the join below turned into
+  //   "<; !; D; O; C; T; Y; P; E; ..."
+  // and put on a clinic's screen. Anything that is not an object is therefore
+  // refused here, before it can be read as one.
+  if (typeof raw !== 'object' || raw === null) {
+    const status = res?.status;
+    return new AppError(
+      status
+        ? `ABDM did not answer properly (HTTP ${status}). This is at their end — try again in a minute.`
+        : 'ABDM could not be reached. Try again in a minute.',
+      502
+    );
+  }
+  const body = raw as Record<string, unknown>;
 
   // The shape ABDM uses for the error a desk will actually hit — a wrong or
   // expired OTP:

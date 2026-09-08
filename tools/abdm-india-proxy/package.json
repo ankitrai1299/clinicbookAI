@@ -1,0 +1,7 @@
+{
+  "name": "abdm-india-proxy",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Forwards this platform's ABDM calls from Mumbai, because ABDM refuses traffic from outside India."
+}

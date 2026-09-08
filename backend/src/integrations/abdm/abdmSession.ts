@@ -33,6 +33,7 @@ import { randomUUID } from 'node:crypto';
 import axios, { AxiosInstance } from 'axios';
 
 import { env } from '../../config/env.js';
+import { AppError } from '../../utils/AppError.js';
 
 /** The gateway rejects a token at its exact expiry, so retire it early. */
 const EXPIRY_MARGIN_MS = 60_000;
@@ -75,12 +76,32 @@ export const expiryFrom = (expiresInSeconds: number | undefined, now: number): n
 export const abdmHeaders = (): Record<string, string> => ({
   'REQUEST-ID': randomUUID(),
   TIMESTAMP: new Date().toISOString().replace(/\.\d{3}Z$/, '.000Z'),
-  'X-CM-ID': env.ABDM_CM_ID
+  'X-CM-ID': env.ABDM_CM_ID,
+  // Only present when the base URLs point at the India relay rather than at
+  // ABDM. ABDM itself ignores headers it does not know, so this is harmless
+  // when it travels the whole way; the relay refuses anything without it.
+  ...(env.ABDM_PROXY_KEY ? { 'X-Proxy-Key': env.ABDM_PROXY_KEY } : {})
 });
 
-export class AbdmNotConfigured extends Error {
+/**
+ * ABDM has no credentials, so nothing can be asked of it.
+ *
+ * An AppError, not a bare Error, and that distinction is the whole point: a
+ * bare Error reaches the client as "Internal server error", which sends whoever
+ * is at the desk looking for a bug in the clinic's own software. The cause is
+ * two missing environment variables on the server, and the message has to say
+ * so — this cost an afternoon once, on a deploy where the variables had been
+ * added to the wrong service.
+ *
+ * 503 rather than 500: the request was fine and will succeed once the server is
+ * configured.
+ */
+export class AbdmNotConfigured extends AppError {
   constructor() {
-    super('ABDM is not configured (ABDM_CLIENT_ID / ABDM_CLIENT_SECRET are unset).');
+    super(
+      'ABDM is not set up on this server yet. Ask an administrator to set ABDM_CLIENT_ID and ABDM_CLIENT_SECRET, then restart it.',
+      503
+    );
   }
 }
 

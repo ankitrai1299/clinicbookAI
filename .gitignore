@@ -41,3 +41,5 @@ novascribe-ai*/
 **/GoogleService-Info.plist
 **/*service-account*.json
 **/firebase-adminsdk-*.json
+
+.vercel

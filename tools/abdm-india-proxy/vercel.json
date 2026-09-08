@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["bom1"],
+  "rewrites": [
+    { "source": "/api/gw/:path*", "destination": "/api/relay?upstream=gw&p=:path*" },
+    { "source": "/api/abha/:path*", "destination": "/api/relay?upstream=abha&p=:path*" }
+  ]
+}

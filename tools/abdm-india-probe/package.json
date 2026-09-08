@@ -1,0 +1,7 @@
+{
+  "name": "abdm-india-probe",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Asks whether ABDM answers a server hosted in Mumbai. No credentials, no dependencies."
+}

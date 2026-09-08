@@ -153,7 +153,21 @@ const envSchema = z.object({
    * the gateway APIs (every one answers 900908) but full access to these — so
    * ABHA creation works while the HIP linking flow waits on NHA.
    */
-  ABDM_ABHA_BASE_URL: z.string().trim().default('https://abhasbx.abdm.gov.in')
+  ABDM_ABHA_BASE_URL: z.string().trim().default('https://abhasbx.abdm.gov.in'),
+  /**
+   * Shared secret for the India relay, when the two base URLs above point at
+   * one instead of at ABDM directly.
+   *
+   * ABDM refuses traffic from outside India — a request from our US host never
+   * reaches them at all, it is turned away by CloudFront with a 403 HTML page.
+   * A small relay in Mumbai forwards the call; these URLs point at it, and this
+   * key is what stops that relay from being an open door to ABDM for anyone who
+   * finds its address.
+   *
+   * Optional: unset when the base URLs point straight at ABDM, which is the
+   * case for anything running inside India (a developer's laptop, for one).
+   */
+  ABDM_PROXY_KEY: z.string().trim().optional()
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
