@@ -73,18 +73,6 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
     example: ['Asha Verma', 'Sunrise Medical Center', 'PT-7K4Q9D']
   },
   {
-    // Same welcome, for a patient who registered with their Aadhaar — the ABHA
-    // is the one thing they cannot look up anywhere else, and the message they
-    // will still have in six months is the one place it survives.
-    //
-    // {{1}} patient · {{2}} clinic · {{3}} patient id · {{4}} ABHA number.
-    name: WhatsAppTemplate.REGISTRATION_WELCOME_ABHA,
-    category: 'UTILITY',
-    bodyText:
-      'Hi {{1}},\n\nWelcome to {{2}}.\n\nYour registration has been completed successfully.\n\nPatient ID: {{3}}\nYour ABHA number: {{4}}\n\nReply:\n1 - Book Appointment\n2 - My Appointments\n3 - Cancel Appointment\n4 - Reschedule Appointment',
-    example: ['Asha Verma', 'Sunrise Medical Center', 'PT-7K4Q9D', '91-1234-5678-9012']
-  },
-  {
     // {{1}} patient · {{2}} medicine line · {{3}} clinic.
     name: WhatsAppTemplate.MEDICINE_REMINDER,
     category: 'UTILITY',

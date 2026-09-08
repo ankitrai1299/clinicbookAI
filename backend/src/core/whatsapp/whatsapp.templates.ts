@@ -14,7 +14,6 @@ export const WhatsAppTemplate = {
   WAITLIST_OFFER: 'waitlist_offer',
   PATIENT_REGISTRATION: 'patient_registration',
   REGISTRATION_WELCOME: 'registration_welcome',
-  REGISTRATION_WELCOME_ABHA: 'registration_welcome_abha',
   MEDICINE_REMINDER: 'medicine_reminder',
   PRESCRIPTION_READY: 'prescription_ready',
   APPOINTMENT_MISSED: 'appointment_missed'
@@ -114,17 +113,6 @@ export const registrationWelcomeComponents = (
   d: RegistrationWelcomeTemplateData
 ): TemplateComponent[] => bodyParams(d.patientName, d.clinicName, d.patientCode);
 
-/**
- * registration_welcome, plus the ABHA the patient just created.
- *
- * A SEPARATE template rather than a fourth variable on the existing one,
- * because most registrations have no ABHA and an approved body cannot leave a
- * variable out — "Your ABHA:" followed by nothing would go to every patient who
- * skipped it.
- */
-export const registrationWelcomeAbhaComponents = (
-  d: RegistrationWelcomeTemplateData & { abhaNumber: string }
-): TemplateComponent[] => bodyParams(d.patientName, d.clinicName, d.patientCode, d.abhaNumber);
 
 export interface MedicineReminderTemplateData {
   patientName: string;

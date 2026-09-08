@@ -15,7 +15,6 @@ import {
   appointmentCompletedComponents,
   appointmentMissedComponents,
   bookingConfirmationComponents,
-  registrationWelcomeAbhaComponents,
   registrationWelcomeComponents,
   waitlistOfferComponents
 } from './whatsapp.templates.js';
@@ -263,41 +262,26 @@ export const notifyPatientRegistered = (p: PatientRegisteredParams): void => {
   const to = p.to.replace(/\D/g, '');
   const sessionBody = buildRegistrationBody(p);
 
-  // A patient who has just filled in a web form has almost never messaged the
-  // clinic, so the 24-hour window is shut and it is the TEMPLATE that actually
-  // goes out. Putting the ABHA only in the session body would have meant
-  // writing it for a message nobody receives.
-  const withAbha = Boolean(p.abhaNumber);
+  // ── The ABHA rides in the patient-id parameter ──────────────────────────
+  //
+  // A separate template with a fourth variable was the clean shape, and it sat
+  // PENDING at Meta while every registration went out without the ABHA. An
+  // approved template is worth more than a tidy one.
+  //
+  // So `registration_welcome` is used as approved, and {{3}} — labelled
+  // "Patient ID:" in the body — carries both. WhatsApp forbids newlines in a
+  // template parameter, hence one line joined by a separator rather than the
+  // two the session text uses.
+  const idParam = p.abhaNumber ? `${p.patientCode} · ABHA ${p.abhaNumber}` : p.patientCode;
 
   void sendTemplatedOrSession({
     to,
-    templateName: withAbha
-      ? WhatsAppTemplate.REGISTRATION_WELCOME_ABHA
-      : WhatsAppTemplate.REGISTRATION_WELCOME,
-    components: withAbha
-      ? registrationWelcomeAbhaComponents({
-          patientName: p.patientName,
-          clinicName: p.clinicName,
-          patientCode: p.patientCode,
-          abhaNumber: p.abhaNumber as string
-        })
-      : registrationWelcomeComponents({
-          patientName: p.patientName,
-          clinicName: p.clinicName,
-          patientCode: p.patientCode
-        }),
-    // If the ABHA variant is not approved on this clinic's WABA yet, the plain
-    // welcome still goes out. The patient loses the ABHA line, not the message.
-    fallback: withAbha
-      ? {
-          templateName: WhatsAppTemplate.REGISTRATION_WELCOME,
-          components: registrationWelcomeComponents({
-            patientName: p.patientName,
-            clinicName: p.clinicName,
-            patientCode: p.patientCode
-          })
-        }
-      : undefined,
+    templateName: WhatsAppTemplate.REGISTRATION_WELCOME,
+    components: registrationWelcomeComponents({
+      patientName: p.patientName,
+      clinicName: p.clinicName,
+      patientCode: idParam
+    }),
     sessionBody,
     clinicId: p.clinicId
   })
