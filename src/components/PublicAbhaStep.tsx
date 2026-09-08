@@ -38,7 +38,14 @@ interface PublicAbhaStepProps {
    * Called once the OTP has been accepted. The txnId is what registration
    * quotes; the name is ABDM's, shown so the patient can confirm it is theirs.
    */
-  onVerified: (result: { txnId: string; name?: string; gender?: string; yearOfBirth?: string }) => void;
+  onVerified: (result: {
+    txnId: string;
+    name?: string;
+    gender?: string;
+    yearOfBirth?: string;
+    /** Passed back so the registration form does not ask for it twice. */
+    mobile: string;
+  }) => void;
   /** Back to the ordinary form — from any state, including mid-OTP. */
   onCancel: () => void;
 }
@@ -51,6 +58,16 @@ export default function PublicAbhaStep({ clinicId, onVerified, onCancel }: Publi
   const [aadhaar, setAadhaar] = useState('');
   const [consent, setConsent] = useState(false);
   const [otp, setOtp] = useState('');
+  /**
+   * ABDM wants the mobile alongside the Aadhaar, and refuses an empty one with
+   * "Invalid Mobile Number" — a message that makes no sense on a form which has
+   * not asked for a phone yet.
+   *
+   * Asked here rather than left to the form below, because registration needs a
+   * phone anyway: taking it now means it is asked once instead of twice, and
+   * the box that caused the error is the box the error is about.
+   */
+  const [mobile, setMobile] = useState('');
   const [txnId, setTxnId] = useState('');
   const [sentTo, setSentTo] = useState<string | undefined>();
   const [result, setResult] = useState<{ abhaNumber: string | null; name?: string; existed: boolean } | null>(null);
@@ -59,6 +76,7 @@ export default function PublicAbhaStep({ clinicId, onVerified, onCancel }: Publi
   const [error, setError] = useState<string | null>(null);
 
   const digits = aadhaar.replace(/\D/g, '');
+  const mobileDigits = mobile.replace(/\D/g, '').slice(-10);
 
   const fail = (e: unknown, fallback: string) =>
     setError(e instanceof ApiError ? e.message : fallback);
@@ -82,7 +100,7 @@ export default function PublicAbhaStep({ clinicId, onVerified, onCancel }: Publi
     setBusy(true);
     setError(null);
     try {
-      const verified = await verifyPublicAbhaOtp(clinicId, { txnId, otp: otp.trim() });
+      const verified = await verifyPublicAbhaOtp(clinicId, { txnId, otp: otp.trim(), mobile: mobileDigits });
       setResult({
         abhaNumber: verified.abhaNumber,
         name: verified.name,
@@ -93,7 +111,8 @@ export default function PublicAbhaStep({ clinicId, onVerified, onCancel }: Publi
         txnId: verified.txnId,
         name: verified.name,
         gender: verified.gender,
-        yearOfBirth: verified.yearOfBirth
+        yearOfBirth: verified.yearOfBirth,
+        mobile: mobileDigits
       });
     } catch (e) {
       fail(e, 'That OTP was not accepted. Please check and try again.');
@@ -144,6 +163,25 @@ export default function PublicAbhaStep({ clinicId, onVerified, onCancel }: Publi
       {stage === 'aadhaar' && (
         <>
           <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5" htmlFor="abha-mobile">
+              Mobile number
+            </label>
+            <input
+              id="abha-mobile"
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value)}
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="10 digits"
+              className={boxClass}
+            />
+            <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">
+              Use the number registered on your Aadhaar — the OTP goes there. This is also where
+              the clinic will message you.
+            </p>
+          </div>
+
+          <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5" htmlFor="abha-aadhaar">
               Aadhaar number
             </label>
@@ -184,7 +222,7 @@ export default function PublicAbhaStep({ clinicId, onVerified, onCancel }: Publi
             <button
               type="button"
               onClick={sendOtp}
-              disabled={busy || digits.length !== 12 || !consent}
+              disabled={busy || digits.length !== 12 || mobileDigits.length !== 10 || !consent}
               className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-bold rounded-xl cursor-pointer flex items-center gap-2"
             >
               {busy && <Loader2 className="w-4 h-4 animate-spin" />}

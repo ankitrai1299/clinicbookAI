@@ -288,7 +288,13 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
           <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-sm">
             <PublicAbhaStep
               clinicId={clinicId}
-              onVerified={({ txnId, name: aadhaarName, gender: aadhaarGender, yearOfBirth }) => {
+              onVerified={({
+                txnId,
+                name: aadhaarName,
+                gender: aadhaarGender,
+                yearOfBirth,
+                mobile: aadhaarMobile
+              }) => {
                 setAbhaTxnId(txnId);
                 // Filled into the boxes the patient can see, so what the server
                 // will save is not a surprise afterwards. The server uses its
@@ -297,6 +303,9 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
                 if (aadhaarGender) setGender(matchGenderOption(aadhaarGender));
                 const derived = ageFromYear(yearOfBirth);
                 if (derived !== null) setAge(String(derived));
+                // Already given, and asking again on the next screen would be
+                // asking the same question twice.
+                if (aadhaarMobile) setPhone(aadhaarMobile);
               }}
               // Not an abandonment — the ordinary form, with what they typed so
               // far intact. The commonest reason to be here is an OTP that
