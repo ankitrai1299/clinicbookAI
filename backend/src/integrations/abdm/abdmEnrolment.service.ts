@@ -199,6 +199,16 @@ export const yearOfBirthFromProfile = (profile: Record<string, unknown>): string
   return undefined;
 };
 
+/**
+ * PURE: the ten digits ABDM wants, or nothing at all.
+ *
+ * Nothing at all is a real answer here — see the call site.
+ */
+export const mobileForAbdm = (mobile: string | null | undefined): string | null => {
+  const digits = String(mobile ?? '').replace(/\D/g, '').slice(-10);
+  return digits.length === 10 ? digits : null;
+};
+
 export const enrolByAadhaar = async (
   txnId: string,
   otp: string,
@@ -217,7 +227,12 @@ export const enrolByAadhaar = async (
           otp: {
             txnId,
             otpValue: await encryptForAbdm(otp),
-            mobile: mobile.replace(/\D/g, '').slice(-10)
+            // OMITTED when we have no mobile, never sent empty. `mobile: ""` is
+            // refused with "Invalid Mobile Number", which reads like the
+            // patient typed something wrong — they had not been asked for one
+            // at all. Left out, ABDM uses the number already on the Aadhaar,
+            // which is the one that just received this OTP.
+            ...(mobileForAbdm(mobile) ? { mobile: mobileForAbdm(mobile) } : {})
           }
         },
         consent: {

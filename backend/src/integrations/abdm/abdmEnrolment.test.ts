@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { asAppError, toPem, yearOfBirthFromProfile } from './abdmEnrolment.service';
+import { asAppError, mobileForAbdm, toPem, yearOfBirthFromProfile } from './abdmEnrolment.service';
 
 /** The shape axios hands us. */
 const failure = (status: number, data: unknown) => ({ response: { status, data } });
@@ -84,5 +84,25 @@ describe('yearOfBirthFromProfile', () => {
     expect(yearOfBirthFromProfile({ dob: null })).toBeUndefined();
     expect(yearOfBirthFromProfile({ dob: 'not a date' })).toBeUndefined();
     expect(yearOfBirthFromProfile({ dob: '15-08-90' })).toBeUndefined();
+  });
+});
+
+describe('mobileForAbdm', () => {
+  it('takes the last ten digits of whatever was typed', () => {
+    expect(mobileForAbdm('9876543210')).toBe('9876543210');
+    expect(mobileForAbdm('+91 98765 43210')).toBe('9876543210');
+    expect(mobileForAbdm('091-9876543210')).toBe('9876543210');
+  });
+
+  it('returns null rather than a short or empty number', () => {
+    // The whole point: the caller OMITS the field on null. Sending mobile: ""
+    // is refused by ABDM with "Invalid Mobile Number", which reads as though
+    // the patient mistyped something they were never asked for — the public
+    // registration flow has no phone yet when this runs.
+    expect(mobileForAbdm('')).toBeNull();
+    expect(mobileForAbdm(null)).toBeNull();
+    expect(mobileForAbdm(undefined)).toBeNull();
+    expect(mobileForAbdm('98765')).toBeNull();
+    expect(mobileForAbdm('not a number')).toBeNull();
   });
 });
