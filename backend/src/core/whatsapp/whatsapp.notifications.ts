@@ -286,6 +286,18 @@ export const notifyPatientRegistered = (p: PatientRegisteredParams): void => {
           clinicName: p.clinicName,
           patientCode: p.patientCode
         }),
+    // If the ABHA variant is not approved on this clinic's WABA yet, the plain
+    // welcome still goes out. The patient loses the ABHA line, not the message.
+    fallback: withAbha
+      ? {
+          templateName: WhatsAppTemplate.REGISTRATION_WELCOME,
+          components: registrationWelcomeComponents({
+            patientName: p.patientName,
+            clinicName: p.clinicName,
+            patientCode: p.patientCode
+          })
+        }
+      : undefined,
     sessionBody,
     clinicId: p.clinicId
   })

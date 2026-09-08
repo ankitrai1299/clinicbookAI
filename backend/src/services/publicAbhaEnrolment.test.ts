@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { ageFromYearOfBirth } from './publicAbhaEnrolment.service';
+import { ageFromYearOfBirth, readableGender } from './publicAbhaEnrolment.service';
 
 describe('ageFromYearOfBirth', () => {
   const now = new Date('2026-09-08T00:00:00Z');
@@ -25,5 +25,22 @@ describe('ageFromYearOfBirth', () => {
     // A future year yields a negative age, which would pass an `age >= 0` check
     // written the obvious way round and then sit in a health record.
     expect(ageFromYearOfBirth('2030', now)).toBeNull();
+  });
+});
+
+describe('readableGender', () => {
+  it('turns ABDM’s letter into the word this app shows', () => {
+    expect(readableGender('M')).toBe('Male');
+    expect(readableGender('f')).toBe('Female');
+    expect(readableGender('O')).toBe('Other');
+    expect(readableGender('Male')).toBe('Male');
+  });
+
+  it('gives nothing for anything else, so the typed answer survives', () => {
+    // The caller falls back to what the patient chose from the form's own list.
+    // Inventing a value here would overwrite a real answer with a guess.
+    expect(readableGender('')).toBeNull();
+    expect(readableGender(null)).toBeNull();
+    expect(readableGender('unknown')).toBeNull();
   });
 });

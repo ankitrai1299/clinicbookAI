@@ -148,6 +148,23 @@ export const verifyPublicAbhaOtp = async (
   };
 };
 
+/**
+ * PURE: ABDM's single letter, as a word the clinic's own screens use.
+ *
+ * The raw letter is kept in abdmGender — that is what goes back to ABDM. This
+ * is the other half of the same fact, written for people: a patient list
+ * reading "M" beside "Female" and "Prefer not to say" is our leak of a wire
+ * format into a place that never asked for one.
+ */
+export const readableGender = (abdm: string | null | undefined): string | null => {
+  const g = String(abdm ?? '').trim().toLowerCase();
+  if (!g) return null;
+  if (g.startsWith('m')) return 'Male';
+  if (g.startsWith('f')) return 'Female';
+  if (g.startsWith('o') || g.startsWith('t')) return 'Other';
+  return null;
+};
+
 /** PURE: an age, from the year ABDM gave us. */
 export const ageFromYearOfBirth = (
   yearOfBirth: string | null | undefined,
@@ -234,9 +251,10 @@ export const applyAbhaToPatient = async (
       ...(abha.name ? { abdmName: abha.name } : {}),
       ...(abha.gender ? { abdmGender: abha.gender } : {}),
       ...(abha.yearOfBirth ? { abdmYearOfBirth: abha.yearOfBirth } : {}),
-      // ...and the clinic's own record, overwritten from Aadhaar.
+      // ...and the clinic's own record, overwritten from Aadhaar — in the
+      // words its own screens use, not ABDM's single letter.
       ...(abha.name ? { name: abha.name } : {}),
-      ...(abha.gender ? { gender: abha.gender } : {}),
+      ...(readableGender(abha.gender) ? { gender: readableGender(abha.gender) as string } : {}),
       ...(age !== null ? { age } : {})
     }
   });
@@ -280,7 +298,7 @@ export const registerPublicPatientWithAbha = async (
           // The Aadhaar record wins over what was typed. That is what it was
           // asked for — and it is the version ABDM checks a link against.
           name: abha.name ?? input.name,
-          gender: abha.gender ?? input.gender,
+          gender: readableGender(abha.gender) ?? input.gender,
           age: ageFromYearOfBirth(abha.yearOfBirth) ?? input.age
         }
       : input,

@@ -672,12 +672,37 @@ export const recordStatusUpdate = async (
 
 // Prefer a free-form session message when the 24h window is open (richer, no
 // template approval needed); otherwise fall back to the approved template.
+/**
+ * PURE: is this Meta error "that template is not usable here"?
+ *
+ * Meta's 1320xx family covers a template that does not exist on this WABA, is
+ * not approved yet, or is paused. All of them mean the same thing to us: this
+ * particular template cannot carry the message, but another one could.
+ *
+ * Narrow on purpose. A fallback on ANY error would resend after failures where
+ * the first message may in fact have gone out.
+ */
+export const isTemplateUnusable = (err: unknown): boolean => {
+  const data = (err as { response?: { data?: unknown } })?.response?.data;
+  const code = (data as { error?: { code?: number } })?.error?.code;
+  return typeof code === 'number' && code >= 132000 && code < 133000;
+};
+
 export const sendTemplatedOrSession = async (params: {
   to: string;
   templateName: WhatsAppTemplateName;
   components?: TemplateComponent[];
   sessionBody: string;
   clinicId?: string | null;
+  /**
+   * A plainer template to use if the first one is not on this clinic's WABA.
+   *
+   * A newly added template is not approved everywhere the moment it ships, and
+   * without this the patient gets NOTHING — which is how a registration
+   * welcome went missing the day the ABHA variant was added. Something correct
+   * but less complete beats silence.
+   */
+  fallback?: { templateName: WhatsAppTemplateName; components?: TemplateComponent[] };
 }): Promise<{ channel: 'session' | 'template'; waMessageId?: string }> => {
   if (await isConversationWindowOpen(params.clinicId, params.to)) {
     const res = await sendWhatsAppTextMessage({
@@ -688,14 +713,30 @@ export const sendTemplatedOrSession = async (params: {
     return { channel: 'session', waMessageId: extractWaMessageId(res.data) };
   }
 
-  const res = await sendWhatsAppTemplateMessage({
-    to: params.to,
-    templateName: params.templateName,
-    components: params.components,
-    bodyForLog: params.sessionBody,
-    clinicId: params.clinicId
-  });
-  return { channel: 'template', waMessageId: extractWaMessageId(res.data) };
+  try {
+    const res = await sendWhatsAppTemplateMessage({
+      to: params.to,
+      templateName: params.templateName,
+      components: params.components,
+      bodyForLog: params.sessionBody,
+      clinicId: params.clinicId
+    });
+    return { channel: 'template', waMessageId: extractWaMessageId(res.data) };
+  } catch (err) {
+    if (!params.fallback || !isTemplateUnusable(err)) throw err;
+
+    console.warn(
+      `[WhatsApp] ${params.templateName} is not available here yet — falling back to ${params.fallback.templateName}`
+    );
+    const res = await sendWhatsAppTemplateMessage({
+      to: params.to,
+      templateName: params.fallback.templateName,
+      components: params.fallback.components,
+      bodyForLog: params.sessionBody,
+      clinicId: params.clinicId
+    });
+    return { channel: 'template', waMessageId: extractWaMessageId(res.data) };
+  }
 };
 
 export const exampleSendMessageFunction = async () => {
