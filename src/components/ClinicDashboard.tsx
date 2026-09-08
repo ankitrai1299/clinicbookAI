@@ -1472,9 +1472,14 @@ export default function ClinicDashboard({
                         <td className="py-3 px-2">
                           <button
                             type="button"
-                            onClick={() => setAbhaPatient(p)}
-                            className="text-left cursor-pointer group"
-                            title="Record this patient's ABHA"
+                            onClick={() => (p.abhaNumber || p.abhaAddress) && setAbhaPatient(p)}
+                            disabled={!p.abhaNumber && !p.abhaAddress}
+                            className="text-left group disabled:cursor-default enabled:cursor-pointer"
+                            title={
+                              p.abhaNumber || p.abhaAddress
+                                ? "View this patient's ABHA and share their visits"
+                                : 'This patient has no ABHA. They can add one when they register.'
+                            }
                           >
                             {p.abhaNumber || p.abhaAddress ? (
                               <span className="block">
@@ -1498,13 +1503,18 @@ export default function ClinicDashboard({
                                 )}
                               </span>
                             ) : (
-                              /* Deliberately not styled as a warning. Most
-                                 patients will never have an ABHA, and a red
-                                 "missing" on every row would train the desk to
-                                 ignore the column entirely. */
-                              <span className="text-[10px] text-slate-300 group-hover:text-sky-600 italic">
-                                + add
-                              </span>
+                              /* Was "+ add", and the desk is no longer where an
+                                 ABHA is added: the patient does it themselves
+                                 when they register, with their own Aadhaar and
+                                 an OTP only they can read. A desk cannot do
+                                 that on their behalf, so offering it here only
+                                 led somewhere that could not finish.
+
+                                 Deliberately not styled as a warning either.
+                                 Most patients will never have an ABHA, and a
+                                 red "missing" on every row would train the desk
+                                 to ignore the column entirely. */
+                              <span className="text-[10px] text-slate-300">&mdash;</span>
                             )}
                           </button>
                         </td>

@@ -70,6 +70,7 @@ export const TENANT_MODELS = new Set<string>([
   'PatientConsent',
   // Per-clinic template approval state on the clinic's own WABA.
   'WhatsAppTemplateStatus',
+  'AbhaEnrolmentSession',
   // The compliance audit trail. Scoped so a clinic admin reading their own audit
   // can never see another clinic's — the audit view would otherwise be the one
   // screen that leaks every tenant at once.

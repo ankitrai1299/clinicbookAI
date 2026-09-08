@@ -60,6 +60,10 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
   const [shareError, setShareError] = useState<string | null>(null);
 
   const hasAbha = Boolean(patient.abhaNumber || patient.abhaAddress);
+  // An ABHA that came back from ABDM against the patient's own Aadhaar OTP.
+  // Nothing on this screen can improve on it, and a box around it invites an
+  // edit that could only make it wrong — so it is shown, not offered.
+  const locked = hasAbha && Boolean(patient.abhaVerified);
 
   const share = async () => {
     setSharing(true);
@@ -141,6 +145,16 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
             patient&rsquo;s records with the government health network.
           </p>
 
+          {locked ? (
+            <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 space-y-2">
+              <Fact label="ABHA number" value={patient.abhaNumber} />
+              <Fact label="ABHA address" value={patient.abhaAddress} />
+              <p className="text-[11px] text-emerald-700 font-semibold pt-1">
+                Verified with Aadhaar by the patient.
+              </p>
+            </div>
+          ) : (
+          <>
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">ABHA number</label>
             <input
@@ -174,6 +188,8 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
           <p className="text-[11px] text-slate-400">
             Clearing a box and saving removes that value.
           </p>
+          </>
+          )}
 
           {/* The whole point of the ask: a patient with no ABHA can get one
               here, rather than being turned away to a government portal.
@@ -183,6 +199,7 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
               enrolment again on an ABHA ABDM already has returns that person's
               official name and year of birth, which is what linking is checked
               against — so the wording changes rather than the button vanishing. */}
+          {!locked && (
           <div className="pt-4 border-t border-slate-100">
             <p className="text-xs text-slate-500 mb-2">
               {hasAbha
@@ -197,6 +214,7 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
               {hasAbha ? 'Confirm with Aadhaar' : 'Create one now'} &rarr;
             </button>
           </div>
+          )}
 
           {/* ── Sharing the visits ──────────────────────────────────────────
               Below the identity, and only once there IS one, because it is the
@@ -249,6 +267,7 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
           >
             Cancel
           </button>
+          {!locked && (
           <button
             onClick={save}
             disabled={saving}
@@ -257,9 +276,18 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Save
           </button>
+          )}
         </div>
         )}
       </div>
     </div>
   );
 }
+
+/** One read-only value, for an ABHA nobody here should be editing. */
+const Fact = ({ label, value }: { label: string; value?: string | null }) => (
+  <div>
+    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+    <p className="text-sm font-mono text-slate-800">{value || '—'}</p>
+  </div>
+);

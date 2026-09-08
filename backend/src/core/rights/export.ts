@@ -72,7 +72,14 @@ export const NOT_PATIENT_DATA: Readonly<Record<string, string>> = {
   ProcessedInboundMessage: 'a de-duplication marker holding only a message id',
   CronLock: 'a background-job lease',
   ExternalIdMap: 'the mapping between our ids and an external EMR’s',
-  SecurityAlert: 'a detected pattern, holding counts rather than patient data'
+  SecurityAlert: 'a detected pattern, holding counts rather than patient data',
+  // Holds a name for at most half an hour, before the person is a patient
+  // at all. The instant a registration uses it the row is DELETED and
+  // everything in it lives on the patient record, which this export does
+  // cover; an unused one belongs to somebody who never finished
+  // registering and so has no record here to attach it to.
+  AbhaEnrolmentSession:
+    'a half-finished ABHA check, deleted the moment it is used — what it held is on your patient record'
 };
 
 export interface PatientExport {

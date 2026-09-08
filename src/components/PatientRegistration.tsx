@@ -8,6 +8,7 @@ import {
   PublicClinic
 } from '../api/publicRegistration';
 import { BRAND } from '../brand';
+import PublicAbhaStep from './PublicAbhaStep';
 
 interface PatientRegistrationProps {
   clinicId: string;
@@ -29,6 +30,9 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [healthConcern, setHealthConcern] = useState('');
+  // Only the transaction id. Whatever the OTP proved stays on the server and is
+  // read back against this — the browser is never given an ABHA to send.
+  const [abhaTxnId, setAbhaTxnId] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -145,7 +149,10 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
         phone: phone.trim(),
         age: ageNum,
         gender,
-        healthConcern: healthConcern.trim()
+        healthConcern: healthConcern.trim(),
+        // Absent for the many patients who skip it, and the registration is
+        // complete either way.
+        ...(abhaTxnId ? { abhaTxnId } : {})
       });
       setSuccess(true);
     } catch (err) {
@@ -351,6 +358,22 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
                 </p>
               )}
             </div>
+
+            {/* Last, and after the reason for the visit, on purpose: the fields
+                above are what the clinic needs to see this person today. This
+                one is for a record that outlives the visit, and putting it
+                first would make an optional government id look like the price
+                of being seen. */}
+            <PublicAbhaStep
+              clinicId={clinicId}
+              onVerified={({ txnId, name: aadhaarName }) => {
+                setAbhaTxnId(txnId);
+                // Shown back in the name box so the patient sees what will be
+                // saved. The server overwrites it from Aadhaar regardless —
+                // this is so that is not a surprise afterwards.
+                if (aadhaarName) setName(aadhaarName);
+              }}
+            />
 
             {submitError && (
               <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 rounded-xl px-4 py-3">

@@ -5,15 +5,21 @@ import { getAvailableSlots } from '../../services/scheduling.service.js';
 import {
   ClinicIdParams,
   PublicAvailabilityQuery,
+  PublicAbhaOtpInput,
+  PublicAbhaVerifyInput,
   PublicBookingInput,
   PublicRegisterPatientInput
 } from './patient.schemas.js';
 import {
   createPublicBooking,
-  createPublicPatient,
   getPublicClinicInfo,
   getPublicDoctors
 } from './patient.service.js';
+import {
+  registerPublicPatientWithAbha,
+  startPublicAbhaOtp,
+  verifyPublicAbhaOtp
+} from '../../services/publicAbhaEnrolment.service.js';
 
 export const getPublicClinicHandler = asyncHandler(async (req: Request, res: Response) => {
   const { clinicId } = req.params as ClinicIdParams;
@@ -27,7 +33,12 @@ export const getPublicClinicHandler = asyncHandler(async (req: Request, res: Res
 
 export const registerPublicPatientHandler = asyncHandler(async (req: Request, res: Response) => {
   const { clinicId } = req.params as ClinicIdParams;
-  const patient = await createPublicPatient(clinicId, req.body as PublicRegisterPatientInput);
+  // Composed in services/ so core/ keeps knowing nothing about ABDM: a clinic
+  // that never touches it runs exactly this registration, minus an ABHA.
+  const patient = await registerPublicPatientWithAbha(
+    clinicId,
+    req.body as PublicRegisterPatientInput & { abhaTxnId?: string }
+  );
 
   res.status(201).json({
     success: true,
@@ -63,4 +74,32 @@ export const bookPublicAppointmentHandler = asyncHandler(async (req: Request, re
     message: 'Appointment booked',
     data: result
   });
+});
+
+
+// ── ABHA, done by the patient ──────────────────────────────────────────────
+//
+// The same two steps the desk has, on a page with no login. What is NOT here is
+// a third step returning the ABHA for the form to post back: registration reads
+// the verified result from the server against the txnId, so this endpoint hands
+// out nothing that could be used to claim someone else's identity.
+
+export const publicAbhaOtpHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { clinicId } = req.params as ClinicIdParams;
+  const { aadhaar } = req.body as PublicAbhaOtpInput;
+
+  const started = await startPublicAbhaOtp(clinicId, aadhaar);
+
+  // txnId and ABDM's own wording (which names the masked mobile the OTP went
+  // to). Nothing derived from the Aadhaar goes back to the browser.
+  res.json({ success: true, data: started });
+});
+
+export const publicAbhaVerifyHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { clinicId } = req.params as ClinicIdParams;
+  const { txnId, otp, mobile } = req.body as PublicAbhaVerifyInput;
+
+  const verified = await verifyPublicAbhaOtp(clinicId, txnId, otp, mobile ?? '');
+
+  res.json({ success: true, data: { ...verified, txnId } });
 });

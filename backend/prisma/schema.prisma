@@ -99,6 +99,7 @@ model Clinic {
   whatsAppChannels  WhatsAppChannel[]
   whatsAppBindings  WhatsAppPatientBinding[]
   whatsAppTemplates WhatsAppTemplateStatus[]
+  abhaSessions      AbhaEnrolmentSession[]
 
   @@index([plan])
   @@index([isSandbox])
@@ -1389,4 +1390,46 @@ model DevicePushToken {
 
   @@index([clinicId, product])
   @@index([userId])
+}
+
+/// An Aadhaar OTP that succeeded on the PUBLIC registration page, held until
+/// the registration it belongs to arrives.
+///
+/// The registration form and the ABHA verification are two requests, and the
+/// second must not be asked to trust the first. If registration simply accepted
+/// `{ abhaNumber, verified: true }` from the browser, anyone with the clinic's
+/// public link could attach any person's ABHA to any patient — and an ABHA the
+/// system believes is verified is one ABDM discovery will hand records to.
+///
+/// So the result of the OTP never goes to the browser as something to send back.
+/// It is written here, and the registration quotes only the txnId.
+///
+/// Short-lived and single-use by design: this is a fragment of a person's
+/// identity, and it exists solely to survive the gap between two requests.
+///
+/// USED MEANS DELETED. Claiming one is a delete that reports how many rows it
+/// removed, which is both the single-use guarantee — two registrations racing
+/// on one txnId, only one deletes it — and the reason nothing personal is left
+/// lying here afterwards. Expired ones are swept on the next OTP.
+model AbhaEnrolmentSession {
+  /// ABDM's own transaction id for the enrolment. The browser holds this and
+  /// nothing else.
+  txnId    String @id
+  clinicId String
+
+  /// What ABDM said, once the OTP proved the person could read it.
+  abhaNumber  String?
+  abhaAddress String?
+  /// As the AADHAAR record has them — what ABDM checks a link against, and what
+  /// the patient record is filled from.
+  name        String?
+  gender      String?
+  yearOfBirth String?
+
+  createdAt DateTime @default(now())
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([createdAt])
 }
