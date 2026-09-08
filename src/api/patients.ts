@@ -54,6 +54,31 @@ export const setPatientAbha = (
     body: JSON.stringify(body),
   });
 
+export interface CareContextLinkResult {
+  /**
+   * 'ready'     the visits are already in the patient's national record
+   * 'requested' ABDM has to confirm the patient first, and finishes it moments
+   *             later on a callback we cannot wait for from here
+   */
+  status: 'requested' | 'ready';
+  message: string;
+}
+
+/**
+ * Put this patient's completed visits into their national health record.
+ *
+ * Two things the caller has to know, because neither is undoable:
+ *
+ * A care context CANNOT be unlinked once pushed — ABDM says so plainly — so
+ * only completed visits are sent, and the server decides that, not the button.
+ *
+ * ABDM blocks the whole FACILITY for 24 hours after three of these for the same
+ * ABHA in one day. So this must not be wired to anything that retries, and the
+ * screen must not invite a second press while the first is in flight.
+ */
+export const linkAbdmCareContexts = (id: string) =>
+  apiFetch<CareContextLinkResult>(`/api/patients/${id}/abdm/link`, { method: 'POST' });
+
 export const getPatients = () => apiFetch<ApiPatient[]>('/api/patients');
 
 export const createPatient = (body: { name: string; phone: string; language: string }) =>

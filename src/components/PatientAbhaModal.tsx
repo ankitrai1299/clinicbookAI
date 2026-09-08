@@ -18,9 +18,9 @@
 // removed by hand — and if blank meant "leave alone", it never could be.
 
 import { useState } from 'react';
-import { X, ShieldCheck, Loader2 } from 'lucide-react';
+import { X, ShieldCheck, Loader2, Share2, CheckCircle2 } from 'lucide-react';
 
-import { setPatientAbha } from '../api/patients';
+import { linkAbdmCareContexts, setPatientAbha } from '../api/patients';
 import AbhaEnrolment from './AbhaEnrolment';
 
 interface PatientAbhaModalProps {
@@ -30,6 +30,13 @@ interface PatientAbhaModalProps {
     phone?: string | null;
     abhaNumber?: string | null;
     abhaAddress?: string | null;
+    /**
+     * Sharing is offered only when this is true. An unverified ABHA is one the
+     * patient typed at us, and pushing a clinic's records against it would
+     * write THIS patient's visits into whoever the address really belongs to —
+     * permanently, because a care context cannot be unlinked.
+     */
+    abhaVerified?: boolean | null;
   };
   onClose: () => void;
   onSaved: (identity: { abhaNumber: string | null; abhaAddress: string | null }) => void;
@@ -44,6 +51,31 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
   // form rather than sitting beneath it — two sets of boxes for one outcome is
   // how a desk ends up filling in the wrong one.
   const [creating, setCreating] = useState(false);
+
+  // Sharing is a separate action with a separate outcome, so it keeps its own
+  // busy flag and its own message. Folding it into `saving` would grey out the
+  // Save button for something Save did not do.
+  const [sharing, setSharing] = useState(false);
+  const [shared, setShared] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+
+  const hasAbha = Boolean(patient.abhaNumber || patient.abhaAddress);
+
+  const share = async () => {
+    setSharing(true);
+    setShareError(null);
+    setShared(null);
+    try {
+      const result = await linkAbdmCareContexts(patient.id);
+      setShared(result.message);
+    } catch (e) {
+      // The server's wording is the useful one: it distinguishes "no completed
+      // visits" from "not verified" from ABDM refusing the patient outright.
+      setShareError(e instanceof Error ? e.message : 'Could not share the visits.');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -144,19 +176,68 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
           </p>
 
           {/* The whole point of the ask: a patient with no ABHA can get one
-              here, rather than being turned away to a government portal. */}
+              here, rather than being turned away to a government portal.
+
+              The question used to be asked flatly, and read as nonsense above a
+              filled-in ABHA. It still has a use once one exists — running
+              enrolment again on an ABHA ABDM already has returns that person's
+              official name and year of birth, which is what linking is checked
+              against — so the wording changes rather than the button vanishing. */}
           <div className="pt-4 border-t border-slate-100">
             <p className="text-xs text-slate-500 mb-2">
-              {patient.name} doesn&rsquo;t have an ABHA yet?
+              {hasAbha
+                ? 'Details out of date? Running this again refreshes them from ABDM.'
+                : `${patient.name} doesn’t have an ABHA yet?`}
             </p>
             <button
               type="button"
               onClick={() => setCreating(true)}
               className="text-sm font-bold text-sky-600 hover:text-sky-700 cursor-pointer"
             >
-              Create one now &rarr;
+              {hasAbha ? 'Confirm with Aadhaar' : 'Create one now'} &rarr;
             </button>
           </div>
+
+          {/* ── Sharing the visits ──────────────────────────────────────────
+              Below the identity, and only once there IS one, because it is the
+              thing the identity is FOR. Absent entirely for an unverified ABHA:
+              a disabled button invites the desk to look for the way to enable
+              it, and the way is to check the card, not to click harder. */}
+          {hasAbha && patient.abhaVerified && (
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-xs font-bold text-slate-700 mb-1">
+                Share visits with the national health record
+              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
+                Completed visits at this clinic become visible to {patient.name} in
+                their ABHA app, and to any doctor they choose to show them to.
+                This cannot be undone &mdash; a shared visit stays in their record.
+              </p>
+
+              {shared ? (
+                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-px" />
+                  {shared}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={share}
+                  disabled={sharing}
+                  className="px-4 py-2 border border-sky-200 text-sky-700 hover:bg-sky-50 disabled:opacity-50 text-sm font-bold rounded-xl cursor-pointer flex items-center gap-2"
+                >
+                  {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                  {sharing ? 'Sharing…' : 'Share visits'}
+                </button>
+              )}
+
+              {shareError && (
+                <p className="mt-2 text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-4 py-3 leading-relaxed">
+                  {shareError}
+                </p>
+              )}
+            </div>
+          )}
         </div>
         )}
 
