@@ -1,14 +1,21 @@
 // The ABHA part of registering yourself — the patient's own hands, no desk.
 //
-// ── Optional, and it has to LOOK optional ──────────────────────────────────
+// ── Reached only by choosing it ────────────────────────────────────────────
 //
-// Most people arriving at a clinic do not have an ABHA and do not want one, and
-// an Aadhaar box sitting open in a registration form reads as required whatever
-// the label says. So it starts closed, behind a question that can be ignored,
-// and every state keeps a way out that does not abandon the registration.
+// This is one of two ways to register, picked on the screen before. That is why
+// there is no "optional" label here and no collapsed state: someone arriving at
+// this panel has already said they want it, and hedging at them now would only
+// read as doubt.
 //
-// This is not only manners. ABHA is voluntary under NHA's own rules, and a
-// patient who cannot produce one must still be able to register and be seen.
+// The choice HAS to come before the Aadhaar, and that is not a layout
+// preference. ABDM gives us no way to check an Aadhaar without also creating or
+// finding an ABHA — one call does both — so by the time anyone could be asked
+// "and do you want the ABHA?", they would already have one, and it cannot be
+// undone. The question therefore belongs on the previous screen.
+//
+// Every state still keeps a way back to the ordinary form. ABHA is voluntary
+// under NHA's own rules, and a patient whose OTP never arrives must still be
+// able to register and be seen.
 //
 // ── What leaves this component ─────────────────────────────────────────────
 //
@@ -18,12 +25,12 @@
 // one.
 
 import { useState, type ReactNode } from 'react';
-import { ShieldCheck, Loader2, CheckCircle2, ChevronDown } from 'lucide-react';
+import { ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
 
 import { ApiError } from '../api/client';
 import { startPublicAbhaOtp, verifyPublicAbhaOtp } from '../api/publicRegistration';
 
-type Stage = 'closed' | 'aadhaar' | 'otp' | 'done';
+type Stage = 'aadhaar' | 'otp' | 'done';
 
 interface PublicAbhaStepProps {
   clinicId: string;
@@ -31,14 +38,16 @@ interface PublicAbhaStepProps {
    * Called once the OTP has been accepted. The txnId is what registration
    * quotes; the name is ABDM's, shown so the patient can confirm it is theirs.
    */
-  onVerified: (result: { txnId: string; name?: string }) => void;
+  onVerified: (result: { txnId: string; name?: string; gender?: string; yearOfBirth?: string }) => void;
+  /** Back to the ordinary form — from any state, including mid-OTP. */
+  onCancel: () => void;
 }
 
 const boxClass =
   'w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono tracking-wide focus:outline-none focus:border-sky-500';
 
-export default function PublicAbhaStep({ clinicId, onVerified }: PublicAbhaStepProps) {
-  const [stage, setStage] = useState<Stage>('closed');
+export default function PublicAbhaStep({ clinicId, onVerified, onCancel }: PublicAbhaStepProps) {
+  const [stage, setStage] = useState<Stage>('aadhaar');
   const [aadhaar, setAadhaar] = useState('');
   const [consent, setConsent] = useState(false);
   const [otp, setOtp] = useState('');
@@ -80,35 +89,18 @@ export default function PublicAbhaStep({ clinicId, onVerified }: PublicAbhaStepP
         existed: verified.alreadyExisted
       });
       setStage('done');
-      onVerified({ txnId: verified.txnId, name: verified.name });
+      onVerified({
+        txnId: verified.txnId,
+        name: verified.name,
+        gender: verified.gender,
+        yearOfBirth: verified.yearOfBirth
+      });
     } catch (e) {
       fail(e, 'That OTP was not accepted. Please check and try again.');
     } finally {
       setBusy(false);
     }
   };
-
-  // ── Closed ───────────────────────────────────────────────────────────────
-  if (stage === 'closed') {
-    return (
-      <button
-        type="button"
-        onClick={() => setStage('aadhaar')}
-        className="w-full flex items-center gap-3 px-4 py-3 border border-dashed border-slate-200 rounded-xl text-left hover:border-sky-300 hover:bg-sky-50/40 cursor-pointer"
-      >
-        <ShieldCheck className="w-5 h-5 text-sky-600 shrink-0" />
-        <span className="flex-1">
-          <span className="block text-sm font-bold text-slate-800">
-            Add your ABHA health ID <span className="font-normal text-slate-400">— optional</span>
-          </span>
-          <span className="block text-[11px] text-slate-500 mt-0.5">
-            Lets this clinic&rsquo;s visits reach your national health record. You can skip this.
-          </span>
-        </span>
-        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-      </button>
-    );
-  }
 
   // ── Verified ─────────────────────────────────────────────────────────────
   if (stage === 'done' && result) {
@@ -198,7 +190,7 @@ export default function PublicAbhaStep({ clinicId, onVerified }: PublicAbhaStepP
               {busy && <Loader2 className="w-4 h-4 animate-spin" />}
               Send OTP
             </button>
-            <SkipButton onClick={() => setStage('closed')} />
+            <SkipButton onClick={onCancel} />
           </div>
         </>
       )}
@@ -235,7 +227,7 @@ export default function PublicAbhaStep({ clinicId, onVerified }: PublicAbhaStepP
               {busy && <Loader2 className="w-4 h-4 animate-spin" />}
               Verify
             </button>
-            <SkipButton onClick={() => setStage('closed')} />
+            <SkipButton onClick={onCancel} />
           </div>
         </>
       )}
@@ -262,6 +254,6 @@ const SkipButton = ({ onClick }: { onClick: () => void }) => (
     onClick={onClick}
     className="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer"
   >
-    Skip this
+    Fill the form instead
   </button>
 );

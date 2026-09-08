@@ -52,8 +52,13 @@ export interface PublicAbhaVerifyResult {
   abhaAddress: string | null;
   /** True when ABDM already had one — nothing new was created. */
   alreadyExisted: boolean;
-  /** The name on the Aadhaar record, so the patient can see whose ABHA this is. */
+  /**
+   * The Aadhaar record's own details, so the form can show what it will save.
+   * The server fills the patient record from its own copy, not from these.
+   */
   name?: string;
+  gender?: string;
+  yearOfBirth?: string;
 }
 
 /**

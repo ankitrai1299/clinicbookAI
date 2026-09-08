@@ -75,11 +75,18 @@ export interface PublicAbhaVerified {
   /** True when ABDM already had one, rather than minting a new one. */
   alreadyExisted: boolean;
   /**
-   * The name on the Aadhaar record, shown so the patient can see WHOSE ABHA
-   * this is before they finish registering. Not a secret — they just proved
-   * they can read the OTP sent to that Aadhaar's own mobile.
+   * The Aadhaar record's own name, gender and year of birth.
+   *
+   * Returned so the form can SHOW what it is about to save. Not a leak: the
+   * person just proved they can read an OTP sent to that Aadhaar's registered
+   * mobile, and this is their own record being shown back to them.
+   *
+   * The form cannot lie with them either — it is the server's stored copy, not
+   * anything posted back, that fills the patient record.
    */
   name?: string;
+  gender?: string;
+  yearOfBirth?: string;
 }
 
 /**
@@ -135,7 +142,9 @@ export const verifyPublicAbhaOtp = async (
     abhaNumber: created.abhaNumber,
     abhaAddress: created.abhaAddress,
     alreadyExisted: created.alreadyExisted,
-    name: created.name
+    name: created.name,
+    gender: created.gender,
+    yearOfBirth: created.yearOfBirth
   };
 };
 

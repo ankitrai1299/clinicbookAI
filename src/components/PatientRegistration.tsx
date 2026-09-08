@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle, HeartPulse, Loader2, AlertTriangle, Mic, Square } from 'lucide-react';
+import { CheckCircle, HeartPulse, Loader2, AlertTriangle, Mic, Square, ShieldCheck } from 'lucide-react';
 
 import { ApiError } from '../api/client';
 import {
@@ -33,6 +33,25 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
   // Only the transaction id. Whatever the OTP proved stays on the server and is
   // read back against this — the browser is never given an ABHA to send.
   const [abhaTxnId, setAbhaTxnId] = useState<string | null>(null);
+  /**
+   * Which of the two ways in the patient picked. Null until they do.
+   *
+   * The choice cannot come later. ABDM has no call that checks an Aadhaar
+   * WITHOUT also creating or finding an ABHA — one request does both — so
+   * asking "and would you like the ABHA?" after the OTP would be asking about
+   * something that already exists and cannot be undone.
+   */
+  const [mode, setMode] = useState<'normal' | 'abha' | null>(null);
+  /**
+   * These three came from the Aadhaar record, so they are not the patient's to
+   * retype here.
+   *
+   * Not fussiness. The server overwrites them from Aadhaar on submit anyway —
+   * they are what ABDM checks a care-context link against — so an editable box
+   * would take an edit and then silently discard it, which is worse than not
+   * offering one.
+   */
+  const fromAadhaar = mode === 'abha' && Boolean(abhaTxnId);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -222,6 +241,69 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
               our team will reach out shortly to confirm your appointment.
             </p>
           </div>
+        ) : mode === null ? (
+          /* Two ways in, asked once, before anything is typed. */
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 space-y-3 shadow-sm">
+            <p className="text-sm text-slate-500 leading-relaxed mb-1">
+              How would you like to register?
+            </p>
+
+            {/* First, and described by what it does for the PATIENT — correct
+                details and a health record they keep — rather than by the
+                government scheme behind it, which means nothing to most people
+                standing in a waiting room. */}
+            <button
+              type="button"
+              onClick={() => setMode('abha')}
+              className="w-full text-left rounded-2xl border-2 border-sky-200 bg-sky-50/50 hover:border-sky-400 px-5 py-4 cursor-pointer"
+            >
+              <span className="flex items-center gap-2 font-display font-extrabold text-slate-900">
+                <ShieldCheck className="w-5 h-5 text-sky-600" />
+                Register with Aadhaar
+              </span>
+              <span className="block text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Your name, age and gender are filled in from your Aadhaar record, so nothing is
+                mistyped. You also get your ABHA health ID, which lets this clinic&rsquo;s visits
+                reach your national health record.
+              </span>
+              <span className="block text-[11px] text-slate-400 mt-1.5">
+                An OTP goes to the mobile registered on your Aadhaar.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMode('normal')}
+              className="w-full text-left rounded-2xl border border-slate-200 hover:border-slate-300 px-5 py-4 cursor-pointer"
+            >
+              <span className="font-display font-extrabold text-slate-900">
+                Fill in the form myself
+              </span>
+              <span className="block text-xs text-slate-500 mt-1.5 leading-relaxed">
+                No Aadhaar needed. The clinic can see you exactly the same way.
+              </span>
+            </button>
+          </div>
+        ) : mode === 'abha' && !abhaTxnId ? (
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-sm">
+            <PublicAbhaStep
+              clinicId={clinicId}
+              onVerified={({ txnId, name: aadhaarName, gender: aadhaarGender, yearOfBirth }) => {
+                setAbhaTxnId(txnId);
+                // Filled into the boxes the patient can see, so what the server
+                // will save is not a surprise afterwards. The server uses its
+                // own stored copy regardless — these are shown, not trusted.
+                if (aadhaarName) setName(aadhaarName);
+                if (aadhaarGender) setGender(matchGenderOption(aadhaarGender));
+                const derived = ageFromYear(yearOfBirth);
+                if (derived !== null) setAge(String(derived));
+              }}
+              // Not an abandonment — the ordinary form, with what they typed so
+              // far intact. The commonest reason to be here is an OTP that
+              // never came, and that patient still needs to be seen.
+              onCancel={() => setMode('normal')}
+            />
+          </div>
         ) : (
           <form
             onSubmit={handleSubmit}
@@ -239,8 +321,10 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Priya Sharma"
                 autoComplete="name"
-                className={inputClass}
+                readOnly={fromAadhaar}
+                className={`${inputClass} ${fromAadhaar ? 'bg-slate-50 text-slate-600' : ''}`}
               />
+              {fromAadhaar && <FromAadhaar />}
             </div>
 
             <div>
@@ -276,7 +360,8 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
                   onChange={(e) => setAge(e.target.value)}
                   placeholder="e.g. 34"
                   inputMode="numeric"
-                  className={inputClass}
+                  readOnly={fromAadhaar}
+                  className={`${inputClass} ${fromAadhaar ? 'bg-slate-50 text-slate-600' : ''}`}
                 />
               </div>
               <div>
@@ -287,7 +372,10 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
                   id="reg-gender"
                   value={gender}
                   onChange={(e) => setGender(e.target.value)}
-                  className={`${inputClass} ${gender ? 'text-slate-900' : 'text-slate-400'}`}
+                  disabled={fromAadhaar}
+                  className={`${inputClass} ${gender ? 'text-slate-900' : 'text-slate-400'} ${
+                    fromAadhaar ? 'bg-slate-50 text-slate-600' : ''
+                  }`}
                 >
                   <option value="" disabled>
                     Select
@@ -359,22 +447,6 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
               )}
             </div>
 
-            {/* Last, and after the reason for the visit, on purpose: the fields
-                above are what the clinic needs to see this person today. This
-                one is for a record that outlives the visit, and putting it
-                first would make an optional government id look like the price
-                of being seen. */}
-            <PublicAbhaStep
-              clinicId={clinicId}
-              onVerified={({ txnId, name: aadhaarName }) => {
-                setAbhaTxnId(txnId);
-                // Shown back in the name box so the patient sees what will be
-                // saved. The server overwrites it from Aadhaar regardless —
-                // this is so that is not a surprise afterwards.
-                if (aadhaarName) setName(aadhaarName);
-              }}
-            />
-
             {submitError && (
               <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 rounded-xl px-4 py-3">
                 <AlertTriangle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
@@ -405,3 +477,33 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
     </div>
   );
 }
+
+/** Why a box on this form cannot be typed in. */
+const FromAadhaar = () => (
+  <p className="text-[11px] text-emerald-600 font-semibold mt-1.5">
+    From your Aadhaar record.
+  </p>
+);
+
+/**
+ * PURE: ABDM sends a single letter; this form has a list of words.
+ *
+ * An unrecognised value returns '' rather than a guess, which leaves the box
+ * empty and the patient able to answer it themselves — better than a health
+ * record quietly saying the wrong thing.
+ */
+export const matchGenderOption = (abdm: string, options: readonly string[] = GENDER_OPTIONS): string => {
+  const g = abdm.trim().toLowerCase();
+  const first = g[0];
+  if (first === 'm') return options.find((o) => o.toLowerCase().startsWith('m')) ?? '';
+  if (first === 'f') return options.find((o) => o.toLowerCase().startsWith('f')) ?? '';
+  return options.find((o) => o.toLowerCase().startsWith('o')) ?? '';
+};
+
+/** PURE: the age the form wants, from the year ABDM gives. */
+export const ageFromYear = (yearOfBirth: string | undefined, now = new Date()): number | null => {
+  const year = Number(yearOfBirth);
+  if (!Number.isInteger(year) || year < 1900) return null;
+  const age = now.getFullYear() - year;
+  return age >= 0 && age <= 120 ? age : null;
+};
