@@ -36,7 +36,17 @@ interface DiscoveryRequest {
  * can legitimately be about it.
  */
 const clinicForHipId = async (hipId: string): Promise<{ id: string; name: string } | null> =>
-  prisma.clinic.findFirst({ where: { hfrId: hipId }, select: { id: true, name: true } });
+  prisma.clinic
+    .findMany({ where: { hfrId: hipId }, select: { id: true, name: true }, take: 2 })
+    // Same rule as the linking path: one id names one facility, and two rows
+    // would let a discovery answer for one clinic be built from another's
+    // patients. Better to answer "not found" than to answer for the wrong one.
+    .then((rows) => {
+      if (rows.length > 1) {
+        console.error(`[ABDM] ${rows.length} clinics claim HFR id ${hipId} — refusing to pick one`);
+      }
+      return rows.length === 1 ? rows[0] : null;
+    });
 
 /**
  * Patients who could plausibly be the person described.

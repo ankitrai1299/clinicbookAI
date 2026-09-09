@@ -91,8 +91,41 @@ export const getRegistryStatus = async (clinicId: string): Promise<RegistryStatu
   };
 };
 
+/**
+ * Record this clinic's HFR id — the facility identity ABDM knows it by.
+ *
+ * ── Why the duplicate check is not optional ────────────────────────────────
+ *
+ * One HFR id belongs to exactly one facility, and the whole platform serves
+ * every clinic through ONE bridge and ONE callback URL. Which clinic a callback
+ * is FOR is decided solely by looking this id up (`patientForAbhaAddress`). So
+ * two clinics holding the same id is not an untidy row — it is a fork in the
+ * road with no signpost: ABDM's answer for one clinic's patient would be
+ * delivered to whichever row the query happened to return, and that clinic
+ * would push its own patients' visits under the other facility's identity.
+ *
+ * There is no unique index behind this (a partial unique on a nullable column
+ * has to be applied by hand — `prisma db push` refuses it), so this check IS
+ * the constraint. It names the other clinic, because "already in use" without
+ * saying where sends an admin looking through a list they may not be able to see.
+ */
 export const setFacilityId = async (clinicId: string, hfrId: unknown): Promise<RegistryStatus> => {
-  await prisma.clinic.update({ where: { id: clinicId }, data: { hfrId: cleanRegistryId(hfrId) } });
+  const value = cleanRegistryId(hfrId);
+
+  if (value) {
+    const taken = await prisma.clinic.findFirst({
+      where: { hfrId: value, id: { not: clinicId } },
+      select: { name: true }
+    });
+    if (taken) {
+      throw new AppError(
+        `That HFR id is already recorded for ${taken.name}. One facility id belongs to one clinic — check the id on the ABDM facility portal.`,
+        409
+      );
+    }
+  }
+
+  await prisma.clinic.update({ where: { id: clinicId }, data: { hfrId: value } });
   return getRegistryStatus(clinicId);
 };
 

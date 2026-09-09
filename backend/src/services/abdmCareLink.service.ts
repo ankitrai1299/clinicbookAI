@@ -239,8 +239,22 @@ export const patientForAbhaAddress = async (
   hipId: string,
   abhaAddress: string
 ): Promise<{ clinicId: string; patientId: string } | null> => {
-  const clinic = await prisma.clinic.findFirst({ where: { hfrId: hipId }, select: { id: true } });
-  if (!clinic) return null;
+  // Two rows here would mean ABDM's answer for one clinic's patient could be
+  // handed to another clinic. setFacilityId refuses to create that, but rows
+  // written before it did could still exist — so this refuses to GUESS, which
+  // costs one link and protects both clinics' records.
+  const clinics = await prisma.clinic.findMany({
+    where: { hfrId: hipId },
+    select: { id: true },
+    take: 2
+  });
+  if (clinics.length !== 1) {
+    if (clinics.length > 1) {
+      console.error(`[ABDM] ${clinics.length} clinics claim HFR id ${hipId} — refusing to pick one`);
+    }
+    return null;
+  }
+  const clinic = clinics[0];
 
   const patient = await prisma.patient.findFirst({
     where: {
