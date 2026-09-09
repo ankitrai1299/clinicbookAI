@@ -198,7 +198,14 @@ describe('every authenticated route is authorized', () => {
 describe('the clinical routes of the scribe are authorized too', () => {
   // MediScribe is one large router rather than many *.routes.ts files, so its
   // most sensitive endpoints are pinned by name.
-  const router = fs.readFileSync(path.join(SRC, 'products/mediscribe/router.ts'), 'utf8');
+  // Newlines normalised because one needle below spans two lines, and a
+  // working copy checked out with CRLF would fail this test while the route
+  // it guards was perfectly fine — a false alarm on the one test that must
+  // be believed when it fires.
+  const router = fs
+    .readFileSync(path.join(SRC, 'products/mediscribe/router.ts'), 'utf8')
+    .split('\r\n')
+    .join('\n');
 
   const guardFor = (needle: string): string | null => {
     const at = router.indexOf(needle);

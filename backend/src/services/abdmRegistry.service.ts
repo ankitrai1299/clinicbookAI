@@ -172,3 +172,82 @@ export const setProfessionalId = async (
   await db.doctor.update({ where: { id: doctorId }, data: { hprId: cleanRegistryId(hprId) } });
   return getRegistryStatus(clinicId);
 };
+
+// ── A doctor's OWN registration ────────────────────────────────────────────
+//
+// An HPR id cannot be obtained by anybody but the doctor: it is their Aadhaar,
+// their council number, their OTP. The admin screen can only record an id the
+// doctor has already been given, which leaves the actual work — going and
+// registering — with the one person nothing in this product ever tells.
+//
+// So the doctor gets the same job in their own login, and the id they save is
+// theirs by construction: resolved from the session, never taken from a request.
+
+export interface MyProfessionalRegistration {
+  /** False when the login is not tied to a doctor record — then there is nothing to register. */
+  linked: boolean;
+  doctorName: string | null;
+  hprId: string | null;
+  /** Where they go to get one. Sandbox and production are different registries. */
+  portalUrl: string;
+}
+
+export const getMyProfessionalRegistration = async (
+  clinicId: string,
+  doctorId: string | null
+): Promise<MyProfessionalRegistration> => {
+  const sandbox = env.ABDM_GATEWAY_BASE_URL.includes('dev.abdm.gov.in');
+  const portalUrl = sandbox ? 'https://hprsbx.abdm.gov.in' : 'https://hpr.abdm.gov.in';
+
+  if (!doctorId) return { linked: false, doctorName: null, hprId: null, portalUrl };
+
+  const doctor = await forClinic(clinicId).doctor.findFirst({
+    where: { id: doctorId },
+    select: { name: true, hprId: true }
+  });
+  if (!doctor) return { linked: false, doctorName: null, hprId: null, portalUrl };
+
+  return { linked: true, doctorName: doctor.name, hprId: doctor.hprId, portalUrl };
+};
+
+/**
+ * A doctor records their own HPR id.
+ *
+ * `doctorId` comes from the session, NOT from the request body — that is the
+ * whole security property. A doctor editing "their" id can only ever reach the
+ * row their login resolves to, so no id parameter exists to tamper with.
+ *
+ * Returns only their own registration. The admin view lists every doctor and is
+ * not a doctor's to see.
+ */
+export const setMyProfessionalId = async (
+  clinicId: string,
+  doctorId: string | null,
+  hprId: unknown
+): Promise<MyProfessionalRegistration> => {
+  if (!doctorId) {
+    throw new AppError(
+      'This login is not linked to a doctor record yet, so there is nothing to register. Ask the clinic admin to link it.',
+      400
+    );
+  }
+
+  const value = cleanRegistryId(hprId);
+  if (value) {
+    // Same reasoning as the facility id: one registration belongs to one person,
+    // and a duplicate would mean two doctors sharing a professional identity.
+    const taken = await forClinic(clinicId).doctor.findFirst({
+      where: { hprId: value, id: { not: doctorId } },
+      select: { name: true }
+    });
+    if (taken) {
+      throw new AppError(
+        `That HPR id is already recorded for ${taken.name}. One registration belongs to one professional.`,
+        409
+      );
+    }
+  }
+
+  await forClinic(clinicId).doctor.update({ where: { id: doctorId }, data: { hprId: value } });
+  return getMyProfessionalRegistration(clinicId, doctorId);
+};

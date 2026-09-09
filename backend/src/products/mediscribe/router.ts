@@ -45,6 +45,10 @@ import {
   listUpcomingAppointments,
   findDoctorForLogin
 } from './clinicData.js';
+import {
+  getMyProfessionalRegistration,
+  setMyProfessionalId
+} from '../../services/abdmRegistry.service.js';
 import { syncFromScribeConsultation } from '../../services/medicineReminder.service.js';
 import { sendPrescriptionOnFinalize, deliverPrescription } from './services/prescriptionDelivery.js';
 import { emitEvent, getPatientTimeline } from '../../core/timeline/patientTimeline.service.js';
@@ -443,6 +447,40 @@ mediscribeRouter.get('/appointments/upcoming', async (req: AuthedRequest, res: R
 // queue is ambiguous — no bookings, or a broken link — and the dashboard cannot
 // tell the difference without asking. Admins are never "unlinked" (they see
 // every doctor's appointments), so they always report linked.
+// ── A doctor's own ABDM registration ───────────────────────────────────────
+//
+// The admin screen can record an HPR id; it cannot obtain one. That takes the
+// doctor's own Aadhaar and council number, and until now nothing in this product
+// ever told them so. These two routes put the job in front of the person who
+// has to do it.
+//
+// No doctor id is accepted from the caller. It is resolved from the session, so
+// a doctor can only ever reach their own row — there is no parameter to tamper
+// with, which is a stronger guarantee than checking one.
+const myDoctorId = async (req: AuthedRequest): Promise<string | null> => {
+  const email = req.auth?.email ?? '';
+  const doctor = await findDoctorForLogin(currentClinicId(), email, req.auth?.userId);
+  return doctor?.id ?? null;
+};
+
+mediscribeRouter.get('/abdm/me', async (req: AuthedRequest, res: Response) => {
+  try {
+    res.json(await getMyProfessionalRegistration(currentClinicId(), await myDoctorId(req)));
+  } catch (error) {
+    console.error('[mediscribe:abdm:me]', error);
+    res.status(500).json({ error: 'Could not load your ABDM registration' });
+  }
+});
+
+mediscribeRouter.put('/abdm/me', async (req: AuthedRequest, res: Response) => {
+  try {
+    res.json(await setMyProfessionalId(currentClinicId(), await myDoctorId(req), req.body?.hprId));
+  } catch (error: any) {
+    console.error('[mediscribe:abdm:me:save]', error);
+    res.status(error?.statusCode || 400).json({ error: error?.message || 'Could not save your HPR id' });
+  }
+});
+
 mediscribeRouter.get('/appointments/link-status', async (req: AuthedRequest, res: Response) => {
   try {
     const me = await resolvePrincipal(req);

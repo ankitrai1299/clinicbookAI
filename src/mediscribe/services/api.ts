@@ -412,6 +412,36 @@ export interface DoctorLinkStatus {
   doctorName?: string | null;
 }
 
+/**
+ * A doctor's OWN ABDM registration.
+ *
+ * No doctor id travels either way — the server resolves it from the session,
+ * so this can only ever read or write the caller's own row.
+ */
+export interface MyAbdmRegistration {
+  linked: boolean;
+  doctorName: string | null;
+  hprId: string | null;
+  portalUrl: string;
+}
+
+export async function getMyAbdmRegistration(): Promise<MyAbdmRegistration> {
+  const res = await fetch(`${BASE}/abdm/me`, { cache: 'no-store', headers: authHeader() });
+  if (!res.ok) throw new Error('Could not load your ABDM registration');
+  return res.json();
+}
+
+export async function saveMyHprId(hprId: string): Promise<MyAbdmRegistration> {
+  const res = await fetch(`${BASE}/abdm/me`, {
+    method: 'PUT',
+    headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hprId }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error ?? 'Could not save your HPR id');
+  return body;
+}
+
 export async function getDoctorLinkStatus(): Promise<DoctorLinkStatus> {
   try {
     const res = await fetch(`${BASE}/appointments/link-status`, { cache: 'no-store', headers: authHeader() });

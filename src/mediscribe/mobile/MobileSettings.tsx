@@ -4,6 +4,7 @@ import { usePrefs, type Lang, type Appearance } from './prefs';
 import { Avatar, Card } from './ui';
 import { loadDoctorProfile, saveDoctorProfile, loadLanguage, saveLanguage, LANGUAGES, type DoctorProfile } from '../utils/settings';
 import { BRAND } from '../../brand';
+import { getMyAbdmRegistration, saveMyHprId, type MyAbdmRegistration } from '../services/api';
 
 // Settings, as its own tab.
 //
@@ -231,6 +232,8 @@ export default function MobileSettings({
         </Card>
       </Section>
 
+      <MyAbdmRegistrationCard />
+
       {(onNavigate || canViewAdmin) && (
         <Section title={t('settings.more')}>
           <Card className="overflow-hidden">
@@ -284,5 +287,110 @@ export default function MobileSettings({
 
       <p className="text-center text-[11.5px] text-slate-400 pb-2">{BRAND.scribe.plain} · v{appVersion}</p>
     </div>
+  );
+}
+
+/**
+ * The doctor's own ABDM registration.
+ *
+ * An HPR id cannot be obtained by the clinic on a doctor's behalf — it needs
+ * their Aadhaar, their council number, their OTP. The admin screen could only
+ * ever record an id the doctor had already been given, which left the actual
+ * work with the one person the product never spoke to.
+ *
+ * Absent entirely for a login that is not a doctor, and quiet once the id is
+ * there: this is a task, and a finished task should stop asking.
+ */
+function MyAbdmRegistrationCard() {
+  const [state, setState] = React.useState<MyAbdmRegistration | null>(null);
+  const [value, setValue] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    getMyAbdmRegistration()
+      .then((r) => {
+        if (!alive) return;
+        setState(r);
+        setValue(r.hprId ?? '');
+      })
+      // Silent: an admin has no doctor row, and a failed lookup must not put an
+      // error on a settings screen about something they cannot act on.
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!state?.linked) return null;
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await saveMyHprId(value.trim());
+      setState(saved);
+      setValue(saved.hprId ?? '');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save your HPR id.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const done = Boolean(state.hprId);
+
+  return (
+    <Section title="ABDM registration">
+      <Card className="p-4 space-y-3">
+        {done ? (
+          <p className="text-sm text-slate-600 leading-relaxed">
+            You are on the Healthcare Professional Registry. Records you sign can carry your
+            registration.
+          </p>
+        ) : (
+          <p className="text-sm text-slate-600 leading-relaxed">
+            You are not on the Healthcare Professional Registry yet. Only you can register &mdash;
+            it uses your own Aadhaar and council registration number, and the clinic cannot do it
+            for you.
+          </p>
+        )}
+
+        {!done && (
+          <a
+            href={state.portalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-sm font-semibold text-sky-600 hover:text-sky-700"
+          >
+            Open the HPR portal &rarr;
+          </a>
+        )}
+
+        <div className="flex items-center gap-2">
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="HPR ID"
+            className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:border-sky-500"
+          />
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy}
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:bg-sky-300 text-white text-sm font-bold rounded-xl cursor-pointer"
+          >
+            Save
+          </button>
+        </div>
+
+        {error && (
+          <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2 leading-relaxed">
+            {error}
+          </p>
+        )}
+      </Card>
+    </Section>
   );
 }
