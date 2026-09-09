@@ -816,6 +816,12 @@ export interface ProfessionalRegistration {
 
 export interface RegistryStatus {
   facility: { clinicName: string; hfrId: string | null };
+  /**
+   * Served by the API, never written here: the bridge id and the portal differ
+   * between the ABDM sandbox and production, and a value hardcoded in the
+   * frontend would be right in one and quietly wrong in the other.
+   */
+  linkage: { bridgeId: string | null; portalUrl: string; sandbox: boolean };
   doctors: ProfessionalRegistration[];
   complete: boolean;
 }

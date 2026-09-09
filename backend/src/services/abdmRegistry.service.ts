@@ -25,6 +25,7 @@
 // a wrongly-typed id could never be removed. Being able to correct a mistake
 // matters more here than the convenience of a partial update.
 
+import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { forClinic } from '../config/tenantPrisma.js';
 import { AppError } from '../utils/AppError.js';
@@ -42,6 +43,23 @@ export interface RegistryStatus {
   facility: {
     clinicName: string;
     hfrId: string | null;
+  };
+  /**
+   * What the clinic needs in front of them to finish the linkage step, served
+   * from here rather than written into the screen.
+   *
+   * The bridge id and the portal are DIFFERENT in sandbox and in production, so
+   * a value typed into the frontend would be right in one deployment and
+   * quietly wrong in the other — and "quietly wrong" here means a clinic linking
+   * their facility to somebody else's software.
+   */
+  linkage: {
+    /** Our ABDM client id, which the clinic enters as the Software Bridge ID. */
+    bridgeId: string | null;
+    /** Where the facility is registered and linked. */
+    portalUrl: string;
+    /** True while we are on the ABDM sandbox — the screen must say so. */
+    sandbox: boolean;
   };
   doctors: ProfessionalRegistration[];
   /**
@@ -84,8 +102,19 @@ export const getRegistryStatus = async (clinicId: string): Promise<RegistryStatu
   ]);
   if (!clinic) throw new AppError('Clinic not found', 404);
 
+  // Sandbox and production are different hosts AND different registries. Read
+  // from the gateway URL because that is the one setting that must already be
+  // right for anything else to work — a screen deriving it separately could
+  // disagree with the code making the calls.
+  const sandbox = env.ABDM_GATEWAY_BASE_URL.includes('dev.abdm.gov.in');
+
   return {
     facility: { clinicName: clinic.name, hfrId: clinic.hfrId },
+    linkage: {
+      bridgeId: env.ABDM_CLIENT_ID ?? null,
+      portalUrl: sandbox ? 'https://hspsbx.abdm.gov.in' : 'https://facility.abdm.gov.in',
+      sandbox,
+    },
     doctors,
     complete: isRegistrationComplete(clinic.hfrId, doctors),
   };

@@ -26,6 +26,7 @@ import React, { FC } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Landmark,
+  Link2,
   Stethoscope,
   CheckCircle2,
   ExternalLink,
@@ -53,7 +54,6 @@ import {
   ErrorState,
 } from '../ui';
 
-const HFR_PORTAL = 'https://facility.abdm.gov.in';
 const HPR_PORTAL = 'https://hpr.abdm.gov.in';
 
 export default function AbdmSection() {
@@ -108,6 +108,7 @@ export default function AbdmSection() {
 
       <div className="space-y-6">
         <FacilityStep status={status} canManage={canManage} onSaved={setStatus} token={token} />
+        <LinkageStep status={status} />
         <ProfessionalStep status={status} canManage={canManage} onSaved={setStatus} token={token} />
       </div>
 
@@ -165,7 +166,7 @@ function FacilityStep({
             ]}
           />
           <PortalLink
-            href={HFR_PORTAL}
+            href={status.linkage.portalUrl}
             label="Open the facility portal"
             note="About 20–30 minutes, then verification"
           />
@@ -183,7 +184,110 @@ function FacilityStep({
   );
 }
 
-/* ── Step 2: every doctor ───────────────────────────────────────────────── */
+
+/* ── Step 2: point the facility at THIS software ────────────────────────── */
+
+/**
+ * The step everybody misses, including us.
+ *
+ * A facility id on its own does nothing. ABDM also has to be told WHICH
+ * software is allowed to send data for that facility, and until it is, every
+ * call for the clinic is refused — with an error that says nothing about
+ * linkage. We lost most of a day to exactly this, with the id sitting correctly
+ * in the box above.
+ *
+ * There is nothing to save here: the linkage lives on ABDM's side, not ours.
+ * The screen's whole job is to put the bridge id in front of the person, in a
+ * form they can copy without retyping.
+ */
+function LinkageStep({ status }: { status: RegistryStatus }) {
+  const [copied, setCopied] = useState(false);
+  const { bridgeId, portalUrl, sandbox } = status.linkage;
+
+  return (
+    <Card>
+      <StepHeader
+        n={2}
+        icon={Link2}
+        title="Connect the facility to this software"
+        subtitle="Software Linkage · done once, on the ABDM portal"
+        // Deliberately never ticked. ABDM does not tell us whether the linkage
+        // was done, and a tick we cannot verify would be a claim we invented.
+        done={false}
+      />
+
+      <div className="mt-5 grid gap-6 lg:grid-cols-2">
+        <div>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            The facility id above identifies the clinic. This step tells ABDM that{' '}
+            <span className="font-medium text-slate-800">this software</span> may send records for
+            it. Without it the id is accepted here and ABDM still refuses every request.
+          </p>
+          <Checklist
+            items={[
+              'Open the facility on the portal and choose "Software Linkage"',
+              'Paste the Software Bridge ID below',
+              'Tick the acknowledgement and press "Register HIP"',
+            ]}
+          />
+          <PortalLink
+            href={portalUrl}
+            label="Open the facility portal"
+            note="Two minutes, once per clinic"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Software Bridge ID
+          </label>
+          {bridgeId ? (
+            <>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-slate-800">
+                  {bridgeId}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(bridgeId).then(
+                      () => { setCopied(true); setTimeout(() => setCopied(false), 2000); },
+                      () => undefined
+                    );
+                  }}
+                  className="shrink-0 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-slate-500 leading-relaxed">
+                The same id for every clinic on this platform &mdash; it identifies the software,
+                not the clinic.
+              </p>
+              {sandbox && (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+                  This platform is on ABDM&rsquo;s <strong>sandbox</strong>. Records shared here do
+                  not reach a patient&rsquo;s real national health record, and the portal above is
+                  the sandbox one.
+                </p>
+              )}
+            </>
+          ) : (
+            /* Says whose problem it is. A clinic staring at an empty box would
+               otherwise assume they had missed a step of their own. */
+            <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500 leading-relaxed">
+              ABDM is not configured on this server yet, so there is no bridge id to link to.
+              Nothing for the clinic to do here &mdash; this is ours.
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ── Step 3: every doctor ──────────────────────────────────────────────── */
+
 
 function ProfessionalStep({
   status,
@@ -201,7 +305,7 @@ function ProfessionalStep({
   return (
     <Card>
       <StepHeader
-        n={2}
+        n={3}
         icon={Stethoscope}
         title="Each doctor registers themselves — HPR"
         subtitle="Healthcare Professional Registry · one id per doctor"
@@ -443,7 +547,18 @@ function Pitfalls() {
       <div className="flex gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
         <div className="space-y-2.5 text-sm text-amber-900">
-          <p className="font-semibold">Two things that get applications rejected</p>
+          <p className="font-semibold">Three things that go wrong</p>
+          <p>
+            {/* The portal shows the manager's own HPID at the top of the page,
+                in bigger type than the facility id, and it is the first thing a
+                person copies. It looks like an id and is accepted by the box
+                above, and then nothing works with no error that says why. */}
+            <span className="font-medium">The id at the top of the portal is not the facility id.</span>{' '}
+            That one belongs to the person who registered (it looks like{' '}
+            <span className="font-mono">71-6561-7137-7883</span>). The facility id looks like{' '}
+            <span className="font-mono">IN2010000906</span> and appears against the clinic in the
+            dashboard.
+          </p>
           <p>
             <span className="font-medium">Do not upload a scanned PDF</span> of the council
             certificate. The portal wants an image — a clear phone photo works.
