@@ -80,26 +80,28 @@ The code today does not commit to either. The privacy policy at `public/privacy.
 
 ## 3. Framework-by-framework status
 
+_Re-verified against the code on 9 Sep 2026; rows that had gone stale are corrected below._
+
 Legend: ✅ implemented · 🟡 partial · ❌ missing · ⚪ not applicable (today) · ⚖️ legal confirmation required
 
 ### 3.1 DPDP Act 2023
 
 | § | Requirement | Status | Evidence |
 |---|---|---|---|
-| 4 | Lawful basis for processing | ❌ | No consent record exists anywhere in the schema. No "legitimate use" determination documented. |
+| 4 | Lawful basis for processing | ✅ | `PatientConsent` records purpose, status, notice version, channel and evidence, with `grantedAt`/`withdrawnAt` (`core/consent/`). The "legitimate use" determination for care delivery is still a legal question, not a code one. |
 | 5 | Itemised notice at/ before collection | 🟡 | `public/privacy.html` exists and is readable, but it is a website policy, not an itemised notice given at the point of collection. Patients booking on WhatsApp are never shown it. |
-| 6 | Free, specific, informed, unconditional, unambiguous consent | ❌ | Nothing captures consent. Grep for `consent` in `prisma/schema.prisma` returns nothing. |
-| 6(4)–(6) | Withdrawal as easy as giving | ❌ | No withdrawal mechanism. No WhatsApp STOP/opt-out handler. |
+| 6 | Free, specific, informed, unconditional, unambiguous consent | ✅ | Captured per PURPOSE against a versioned notice (`core/consent/notice.ts`), so a consent given to an older notice is not read as consent to what a newer one added. |
+| 6(4)–(6) | Withdrawal as easy as giving | ✅ | STOP on WhatsApp — the same channel consent was given on — sets `withdrawnAt` and the send layer refuses that number thereafter (`whatsapp.inbound.ts`, `whatsapp.service.ts`). |
 | 7 | Legitimate uses | ⚖️ | Arguably covers some appointment processing; must be assessed, not assumed. |
 | 8(4) | Reasonable security safeguards | 🟡 | Good: TLS, bcrypt(12), helmet, rate limits, HMAC webhooks, tenant-scoped Prisma, signed audio URLs, token encryption. Missing: RBAC in ClinicBook core, audit logging, MFA, log hygiene. |
-| 8(5) | Breach notification to Board and affected principals | ❌ | No incident process, no contact list, no template, no detection. |
-| 8(7) | Erase when purpose is served / consent withdrawn | ❌ | No retention policy, no deletion job. Data is kept forever. |
+| 8(5) | Breach notification to Board and affected principals | 🟡 | `docs/compliance/INCIDENT_RESPONSE.md` documents the process and the notification templates. Detection is still manual — nothing raises an alarm on its own. |
+| 8(7) | Erase when purpose is served / consent withdrawn | 🟡 | An erasure request is recorded, clocked and decided by a human (`core/rights/`). There is still **no retention policy and no automatic deletion job** — data is kept until someone acts. Deliberate for now: clinical records carry statutory retention that DPDP's erasure right yields to, and deleting one is irreversible. |
 | 8(9) | Publish contact of DPO / responsible person | 🟡 | An email exists in the policy; no named person, no designated grievance officer. |
-| 9 | Children — verifiable parental consent, no tracking/ads | ❌ | India defines a child as **under 18**. Paediatric patients are routine in clinics. `Patient.age` exists but nothing gates on it. |
+| 9 | Children — verifiable parental consent, no tracking/ads | ❌ | Unchanged, and the most substantial gap left. India defines a child as **under 18**; paediatric patients are routine. `Patient.age` exists and nothing gates on it. |
 | 10 | Significant Data Fiduciary obligations (DPIA, audit, DPO) | ⚖️ | Applies only if notified as an SDF. Volume of health data makes this worth asking about. |
-| 11 | Right to access information about processing | ❌ | No patient-facing access path. Patients have no login (by product design). |
+| 11 | Right to access information about processing | ✅ | A patient asks over WhatsApp, from the number the clinic already knows (`core/rights/whatsappRights.ts`); the export is assembled by `core/rights/export.ts`. No patient login was needed to get there. |
 | 12 | Right to correction and erasure | 🟡 | Staff can edit/delete a patient via the dashboard; there is no *patient-initiated* route and no verified-identity request flow. |
-| 13 | Right to grievance redressal | ❌ | No grievance officer named, no SLA, no ticket trail. |
+| 13 | Right to grievance redressal | 🟡 | `PatientRightsRequest` gives the ticket trail and a response clock (`RIGHTS_KINDS` includes `grievance`). A **named** officer is still owed — the clinic has to supply the person. |
 | 14 | Right to nominate | ❌ | Not implemented. |
 
 ### 3.2 DPDP Rules 2025
@@ -108,12 +110,12 @@ The Rules were notified in **November 2025** with phased commencement; several o
 
 | Requirement | Status | Note |
 |---|---|---|
-| Notice in plain language, itemised, standalone | ❌ | Current policy is prose, not itemised per-purpose. |
-| Consent record — what, when, for which purpose, version | ❌ | Nothing stored. |
+| Notice in plain language, itemised, standalone | 🟡 | `core/consent/notice.ts` is itemised per purpose and versioned, and is shown on WhatsApp in the patient's own language. The website policy is still prose. |
+| Consent record — what, when, for which purpose, version | ✅ | `PatientConsent`: purpose, status, `noticeVersion`, channel, evidence, `grantedAt`, `withdrawnAt`. |
 | Consent Manager integration | ⚪ / ⚖️ | Only required if you route consent through a registered Consent Manager. Not applicable if you take consent directly — confirm. |
 | Reasonable security: encryption, access control, logging, monitoring | 🟡 | Encryption in transit ✅; at rest depends on Railway (confirm) ; access control partial; **logging and monitoring effectively absent**. |
 | Log retention **one year** for breach investigation | ❌ | Railway stdout logs only, short retention, no archive. |
-| Breach intimation to affected principals "without delay" + to the Board (initial and detailed) | ❌ | No process. |
+| Breach intimation to affected principals "without delay" + to the Board (initial and detailed) | 🟡 | Process and templates in `INCIDENT_RESPONSE.md`. Untested, and detection is manual. |
 | Erasure after defined period of inactivity, with prior notice | ❌ | No inactivity tracking, no erasure job, no pre-erasure notice. |
 | Contact of DPO published on website and in every notice | 🟡 | Email only. |
 
