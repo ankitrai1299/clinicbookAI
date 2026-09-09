@@ -54,6 +54,24 @@ export const setPatientAbha = (
     body: JSON.stringify(body),
   });
 
+/**
+ * Prove a recorded ABHA belongs to this patient.
+ *
+ * Two calls, because the patient reads an OTP off their own phone in between.
+ * `start` also answers the question nobody can answer offline — whether the
+ * number exists at all: a wrong one is refused (404) before any OTP is sent.
+ */
+export const startAbhaVerification = (id: string) =>
+  apiFetch<{ txnId: string; message?: string }>(`/api/patients/${id}/abha/verify/start`, {
+    method: 'POST',
+  });
+
+export const finishAbhaVerification = (id: string, body: { txnId: string; otp: string }) =>
+  apiFetch<AbhaIdentity>(`/api/patients/${id}/abha/verify/confirm`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
 export interface CareContextLinkResult {
   /**
    * 'ready'     the visits are already in the patient's national record

@@ -11,6 +11,10 @@ import {
   fetchAbhaCard
 } from '../../services/abhaEnrolment.service.js';
 import { startLinking } from '../../services/abdmCareLink.service.js';
+import {
+  completeAbhaVerification,
+  startAbhaVerification
+} from '../../services/abdmIdentity.service.js';
 import { createPatient, deletePatient, getPatients, getSinglePatient, updatePatient } from './patient.service.js';
 import { CreatePatientInput, PatientIdParams, UpdatePatientInput } from './patient.schemas.js';
 
@@ -275,6 +279,49 @@ export const abhaCardHandler = asyncHandler(async (req: Request, res: Response) 
   res.setHeader('Content-Type', card.contentType);
   res.setHeader('Cache-Control', 'no-store');
   res.send(card.bytes);
+});
+
+/**
+ * Prove a recorded ABHA belongs to this patient (two steps, like enrolment).
+ *
+ * The OTP goes to the mobile on that ABHA's Aadhaar record, so the patient has
+ * to be present — which is the whole reason the resulting flag is worth
+ * anything to linking and discovery.
+ */
+export const startAbhaVerificationHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const { id } = req.params as PatientIdParams;
+
+  const started = await startAbhaVerification(clinicId, id);
+
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id,
+    metadata: { abdm: 'abha-verification-started' }
+  });
+
+  res.json({ success: true, data: started });
+});
+
+export const finishAbhaVerificationHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const { id } = req.params as PatientIdParams;
+  const { txnId, otp } = (req.body ?? {}) as { txnId?: string; otp?: string };
+  if (!txnId || !otp) throw new AppError('The OTP and its session are both required', 400);
+
+  const patient = await completeAbhaVerification(clinicId, id, txnId, otp);
+
+  recordFromRequest(req, {
+    action: 'PATIENT_UPDATED',
+    resourceType: 'patient',
+    resourceId: id,
+    patientId: id,
+    metadata: { abdm: 'abha-verified' }
+  });
+
+  res.json({ success: true, data: patient });
 });
 
 /**

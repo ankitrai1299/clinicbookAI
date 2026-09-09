@@ -24,6 +24,7 @@
 
 import { forClinic } from '../config/tenantPrisma.js';
 import { AppError } from '../utils/AppError.js';
+import { requestAbhaLoginOtp, verifyAbhaLoginOtp } from '../integrations/abdm/abdmVerify.service.js';
 
 /**
  * PURE: an ABHA number is 14 digits, usually written 12-3456-7890-1234.
@@ -191,4 +192,109 @@ export const getPatientAbha = async (clinicId: string, patientId: string): Promi
   });
   if (!patient) throw new AppError('Patient not found', 404);
   return patient;
+};
+
+// ── Proving an ABHA belongs to this patient ────────────────────────────────
+//
+// Everything above records an ABHA. This turns a recorded one into a TRUSTED
+// one, which is a different thing: `abhaVerified` is what linking and discovery
+// gate on, and until it is true a stored ABHA does nothing at all.
+//
+// The proof is an OTP to the mobile on that ABHA's own Aadhaar record. The desk
+// cannot receive it and cannot guess it, so the patient has to be present —
+// which is exactly the property that makes the flag worth trusting.
+
+export interface AbhaVerificationStarted {
+  txnId: string;
+  message?: string;
+}
+
+/**
+ * Send the OTP.
+ *
+ * Refuses an ABHA that ABDM has never heard of, before anything is sent — which
+ * catches a mistyped number while the card is still on the counter.
+ */
+export const startAbhaVerification = async (
+  clinicId: string,
+  patientId: string
+): Promise<AbhaVerificationStarted> => {
+  const patient = await forClinic(clinicId).patient.findFirst({
+    where: { id: patientId },
+    select: { abhaNumber: true, abhaVerified: true }
+  });
+  if (!patient) throw new AppError('Patient not found', 404);
+
+  if (!patient.abhaNumber) {
+    // The address alone is not enough: ABDM's login flow is keyed by the
+    // 14-digit number, and asking for one we do not have would fail with a
+    // message about the number rather than about what is missing here.
+    throw new AppError(
+      'This patient has no ABHA number recorded. Enter the 14-digit number from their ABHA card first.',
+      400
+    );
+  }
+  if (patient.abhaVerified) {
+    throw new AppError('This ABHA is already verified.', 409);
+  }
+
+  return requestAbhaLoginOtp(patient.abhaNumber);
+};
+
+/**
+ * Finish, and record what ABDM said this person is called.
+ *
+ * The returned ABHA must be the one on the record. Without that check, a
+ * patient could authenticate against a DIFFERENT ABHA — their own, honestly —
+ * and we would stamp "verified" on the wrong number sitting in our row, which
+ * is precisely the mistake the flag exists to prevent.
+ */
+export const completeAbhaVerification = async (
+  clinicId: string,
+  patientId: string,
+  txnId: string,
+  otp: string
+): Promise<PatientAbha> => {
+  const db = forClinic(clinicId);
+  const patient = await db.patient.findFirst({
+    where: { id: patientId },
+    select: { abhaNumber: true }
+  });
+  if (!patient?.abhaNumber) throw new AppError('Patient not found, or has no ABHA number.', 404);
+
+  const identity = await verifyAbhaLoginOtp(txnId, otp);
+
+  const digits = (v: string | null | undefined) => String(v ?? '').replace(/\D/g, '');
+  if (digits(identity.abhaNumber) !== digits(patient.abhaNumber)) {
+    throw new AppError(
+      'That OTP verified a different ABHA from the one on this record. Check the number on the card.',
+      409
+    );
+  }
+
+  const updated = await db.patient.update({
+    where: { id: patientId },
+    data: {
+      abhaVerified: true,
+      // ABDM's own version of the person, which is what a care-context link is
+      // checked against. A desk-typed name is refused there with a message that
+      // does not say which field was wrong.
+      ...(identity.name ? { abdmName: identity.name } : {}),
+      ...(identity.gender ? { abdmGender: identity.gender } : {}),
+      ...(identity.yearOfBirth ? { abdmYearOfBirth: identity.yearOfBirth } : {}),
+      // ABDM may hold a readable address we were never told about.
+      ...(identity.abhaAddress ? { abhaAddress: identity.abhaAddress } : {})
+    },
+    select: {
+      id: true,
+      name: true,
+      abhaNumber: true,
+      abhaAddress: true,
+      abhaLinkedAt: true,
+      abhaVerified: true
+    }
+  });
+
+  console.info(`[ABDM] patient ${patientId} ABHA verified by OTP at clinic ${clinicId}`);
+  return updated;
 };

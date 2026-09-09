@@ -13,6 +13,8 @@ import {
   finishAbhaEnrolmentHandler,
   claimAbhaAddressHandler,
   abhaCardHandler,
+  finishAbhaVerificationHandler,
+  startAbhaVerificationHandler,
   linkCareContextsHandler,
   updatePatientHandler
 } from './patient.controller.js';
@@ -62,6 +64,20 @@ patientRouter.post(
   requirePermission('patient.update'),
   validate(patientIdParamsSchema, 'params'),
   finishAbhaEnrolmentHandler
+);
+// Proving an ABHA the desk was HANDED, rather than one we created. Same two
+// steps and the same reason: the OTP goes to the patient's own phone.
+patientRouter.post(
+  '/:id/abha/verify/start',
+  requirePermission('patient.update'),
+  validate(patientIdParamsSchema, 'params'),
+  startAbhaVerificationHandler
+);
+patientRouter.post(
+  '/:id/abha/verify/confirm',
+  requirePermission('patient.update'),
+  validate(patientIdParamsSchema, 'params'),
+  finishAbhaVerificationHandler
 );
 patientRouter.post(
   '/:id/abha/address',

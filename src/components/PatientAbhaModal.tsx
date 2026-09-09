@@ -18,9 +18,14 @@
 // removed by hand — and if blank meant "leave alone", it never could be.
 
 import { useState } from 'react';
-import { X, ShieldCheck, Loader2, Share2, CheckCircle2 } from 'lucide-react';
+import { X, ShieldCheck, Loader2, Share2, CheckCircle2, BadgeCheck } from 'lucide-react';
 
-import { linkAbdmCareContexts, setPatientAbha } from '../api/patients';
+import {
+  finishAbhaVerification,
+  linkAbdmCareContexts,
+  setPatientAbha,
+  startAbhaVerification,
+} from '../api/patients';
 import AbhaEnrolment from './AbhaEnrolment';
 
 interface PatientAbhaModalProps {
@@ -67,10 +72,57 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
   const [shareError, setShareError] = useState<string | null>(null);
 
   const hasAbha = Boolean(patient.abhaNumber || patient.abhaAddress);
+
+  // ── Proving the ABHA ─────────────────────────────────────────────────────
+  //
+  // Its own state, and its own two steps, because the patient reads an OTP off
+  // their own phone in between. Verified locally as well as on the server so
+  // the panel can turn into the sharing panel without a reload.
+  const [verified, setVerified] = useState(Boolean(patient.abhaVerified));
+  const [verifyTxn, setVerifyTxn] = useState<string | null>(null);
+  const [verifyOtp, setVerifyOtp] = useState('');
+  const [verifyNote, setVerifyNote] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  const sendVerifyOtp = async () => {
+    setVerifyBusy(true);
+    setVerifyError(null);
+    try {
+      const started = await startAbhaVerification(patient.id);
+      setVerifyTxn(started.txnId);
+      setVerifyNote(started.message ?? null);
+    } catch (e) {
+      // The server's wording matters here: "ABDM has no record of that ABHA
+      // number" is something the desk can fix by reading the card again.
+      setVerifyError(e instanceof Error ? e.message : 'Could not start verification.');
+    } finally {
+      setVerifyBusy(false);
+    }
+  };
+
+  const confirmVerifyOtp = async () => {
+    if (!verifyTxn) return;
+    setVerifyBusy(true);
+    setVerifyError(null);
+    try {
+      const saved = await finishAbhaVerification(patient.id, { txnId: verifyTxn, otp: verifyOtp.trim() });
+      onSaved({ abhaNumber: saved.abhaNumber, abhaAddress: saved.abhaAddress });
+      setVerified(true);
+      setVerifyTxn(null);
+      setVerifyOtp('');
+    } catch (e) {
+      setVerifyError(e instanceof Error ? e.message : 'Could not verify the ABHA.');
+    } finally {
+      setVerifyBusy(false);
+    }
+  };
   // An ABHA that came back from ABDM against the patient's own Aadhaar OTP.
   // Nothing on this screen can improve on it, and a box around it invites an
   // edit that could only make it wrong — so it is shown, not offered.
-  const locked = hasAbha && Boolean(patient.abhaVerified);
+  // Reads the live flag, not the one the modal opened with, so the boxes lock
+  // the moment verification succeeds rather than on the next reload.
+  const locked = hasAbha && verified;
 
   const share = async () => {
     setSharing(true);
@@ -223,12 +275,67 @@ export default function PatientAbhaModal({ patient, onClose, onSaved }: PatientA
           </div>
           )}
 
+          {/* ── Proving it is theirs ────────────────────────────────────────
+              Only while it is unproven, and above sharing because it is the
+              gate sharing waits on. An unverified ABHA is not a smaller
+              version of a verified one — it does nothing at all. */}
+          {hasAbha && !verified && (
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-xs font-bold text-slate-700 mb-1">Confirm this ABHA is theirs</p>
+              <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
+                Until it is confirmed, this ABHA does nothing &mdash; visits cannot be shared
+                against it. ABDM sends a code to the mobile on the patient&rsquo;s Aadhaar, so they
+                need to be here to read it out.
+              </p>
+
+              {verifyTxn ? (
+                <div className="space-y-2">
+                  <input
+                    value={verifyOtp}
+                    onChange={(e) => setVerifyOtp(e.target.value)}
+                    placeholder="6-digit code"
+                    inputMode="numeric"
+                    autoFocus
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:border-sky-500"
+                  />
+                  {verifyNote && <p className="text-[11px] text-slate-400">{verifyNote}</p>}
+                  <button
+                    type="button"
+                    onClick={confirmVerifyOtp}
+                    disabled={verifyBusy || verifyOtp.trim().length < 4}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-bold rounded-xl cursor-pointer flex items-center gap-2"
+                  >
+                    {verifyBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
+                    Confirm
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={sendVerifyOtp}
+                  disabled={verifyBusy || !patient.abhaNumber}
+                  className="px-4 py-2 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 text-sm font-bold rounded-xl cursor-pointer flex items-center gap-2"
+                  title={patient.abhaNumber ? undefined : 'Needs the 14-digit ABHA number from the card'}
+                >
+                  {verifyBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
+                  {verifyBusy ? 'Sending…' : 'Send code to the patient'}
+                </button>
+              )}
+
+              {verifyError && (
+                <p className="mt-2 text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-4 py-3 leading-relaxed">
+                  {verifyError}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* ── Sharing the visits ──────────────────────────────────────────
               Below the identity, and only once there IS one, because it is the
               thing the identity is FOR. Absent entirely for an unverified ABHA:
               a disabled button invites the desk to look for the way to enable
               it, and the way is to check the card, not to click harder. */}
-          {hasAbha && patient.abhaVerified && (
+          {hasAbha && verified && (
             <div className="pt-4 border-t border-slate-100">
               <p className="text-xs font-bold text-slate-700 mb-1">
                 Share visits with the national health record

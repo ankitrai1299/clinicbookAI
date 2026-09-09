@@ -36,9 +36,9 @@ import { AppError } from '../../utils/AppError.js';
 import { abdmHeaders, getGatewayToken } from './abdmSession.js';
 
 /** Sandbox ABHA host. Production is a different one, hence a variable. */
-const abhaBase = () => env.ABDM_ABHA_BASE_URL;
+export const abhaBase = () => env.ABDM_ABHA_BASE_URL;
 
-const headers = async (): Promise<Record<string, string>> => ({
+export const abhaHeaders = async (): Promise<Record<string, string>> => ({
   'Content-Type': 'application/json',
   Authorization: `Bearer ${await getGatewayToken()}`,
   // Was a second hand-written copy of the same three headers. Sharing one
@@ -65,7 +65,7 @@ export const toPem = (base64: string): string =>
 const publicKeyPem = async (now = Date.now()): Promise<string> => {
   if (cachedKey && now - cachedKey.fetchedAt < KEY_TTL_MS) return cachedKey.pem;
   const { data } = await axios.get(`${abhaBase()}/abha/api/v3/profile/public/certificate`, {
-    headers: await headers(),
+    headers: await abhaHeaders(),
     timeout: 20_000
   });
   if (!data?.publicKey) throw new AppError('ABDM did not return a public key', 502);
@@ -87,7 +87,7 @@ const publicKeyPem = async (now = Date.now()): Promise<string> => {
  * SHA-1 is not a choice here. OAEP's hash is part of the contract with the
  * other side, and ABDM's side uses SHA-1; anything else fails to decrypt.
  */
-const encryptForAbdm = async (value: string): Promise<string> =>
+export const encryptForAbdm = async (value: string): Promise<string> =>
   publicEncrypt(
     {
       key: await publicKeyPem(),
@@ -130,7 +130,7 @@ export const requestAadhaarOtp = async (aadhaar: string): Promise<OtpSent> => {
         otpSystem: 'aadhaar',
         loginId: await encryptForAbdm(digits)
       },
-      { headers: await headers(), timeout: 30_000 }
+      { headers: await abhaHeaders(), timeout: 30_000 }
     );
     if (!data?.txnId) throw new AppError('ABDM did not start an enrolment session', 502);
     return { txnId: data.txnId, mobileHint: data.message, message: data.message };
@@ -243,7 +243,7 @@ export const enrolByAadhaar = async (
           version: '1.4'
         }
       },
-      { headers: await headers(), timeout: 30_000 }
+      { headers: await abhaHeaders(), timeout: 30_000 }
     );
 
     const profile = data?.ABHAProfile ?? data?.abhaProfile ?? {};
@@ -335,7 +335,7 @@ export const asAppError = (err: unknown, fallback: string): AppError => {
 export const suggestAbhaAddresses = async (txnId: string): Promise<string[]> => {
   try {
     const { data } = await axios.get(`${abhaBase()}/abha/api/v3/enrollment/enrol/suggestion`, {
-      headers: { ...(await headers()), Transaction_Id: txnId },
+      headers: { ...(await abhaHeaders()), Transaction_Id: txnId },
       timeout: 20_000
     });
     const list = data?.abhaAddressList ?? data?.suggestions ?? [];
@@ -359,7 +359,7 @@ export const setAbhaAddress = async (txnId: string, preferred: string): Promise<
     const { data } = await axios.post(
       `${abhaBase()}/abha/api/v3/enrollment/enrol/abha-address`,
       { txnId, abhaAddress: wanted, preferred: 1 },
-      { headers: { ...(await headers()), Transaction_Id: txnId }, timeout: 20_000 }
+      { headers: { ...(await abhaHeaders()), Transaction_Id: txnId }, timeout: 20_000 }
     );
     return data?.preferredAbhaAddress ?? data?.abhaAddress ?? data?.healthIdNumber ?? null;
   } catch (err) {
@@ -384,7 +384,7 @@ export interface AbhaCard {
 export const downloadAbhaCard = async (abhaToken: string): Promise<AbhaCard> => {
   try {
     const res = await axios.get(`${abhaBase()}/abha/api/v3/profile/account/abha-card`, {
-      headers: { ...(await headers()), 'X-token': `Bearer ${abhaToken}` },
+      headers: { ...(await abhaHeaders()), 'X-token': `Bearer ${abhaToken}` },
       responseType: 'arraybuffer',
       timeout: 30_000
     });
