@@ -20,6 +20,14 @@ export interface PublicRegistrationInput {
    * person's identity to any patient.
    */
   abhaTxnId?: string;
+  /**
+   * Who is consenting, when the patient is under eighteen.
+   *
+   * India's DPDP Act makes a child's consent the parent's to give, so a
+   * registration for someone under 18 is refused without these.
+   */
+  guardianName?: string;
+  guardianRelation?: 'mother' | 'father' | 'guardian';
 }
 
 export interface PublicRegistrationResult {

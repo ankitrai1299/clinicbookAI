@@ -384,6 +384,23 @@ model Patient {
   // The clinic's record is deliberately NOT overwritten with these: the desk
   // calls the patient by the name they gave, and a government spelling
   // appearing in its place would be a surprise nobody asked for.
+  // ── A patient under 18 ──────────────────────────────────────────────────
+  //
+  // India's DPDP Act defines a child as under EIGHTEEN, and forbids processing
+  // their data without verifiable consent from a parent or guardian. Paediatric
+  // patients are routine in a clinic, so this is not an edge case.
+  //
+  // `phone` on a child's record is ALREADY the guardian's — a seven-year-old
+  // has no phone, and whoever registered them typed their own number. What was
+  // missing is the record of WHOSE it is and WHO consented. These two fields are
+  // that record; the messaging path needs no change because it was always
+  // writing to the guardian.
+  //
+  // Null for an adult, and null for a child registered before this existed —
+  // absence means "not recorded", never "no guardian".
+  guardianName     String?
+  guardianRelation String? // mother | father | guardian
+
   abdmName        String?
   abdmGender      String?
   abdmYearOfBirth String?

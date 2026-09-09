@@ -34,7 +34,16 @@ export const publicRegisterPatientSchema = z.object({
    * could post `{ abhaNumber, verified: true }` would let anyone attach any
    * person's ABHA to any patient.
    */
-  abhaTxnId: z.string().trim().min(6).max(120).optional()
+  abhaTxnId: z.string().trim().min(6).max(120).optional(),
+  /**
+   * Who is consenting, when the patient is under eighteen.
+   *
+   * Optional HERE and required LATER, by `guardianRequiredFor`, because whether
+   * they are needed depends on the age in the same request. A schema that
+   * demanded them unconditionally would ask every adult who their mother is.
+   */
+  guardianName: z.string().trim().min(2).max(150).optional(),
+  guardianRelation: z.enum(['mother', 'father', 'guardian']).optional()
 });
 
 /**

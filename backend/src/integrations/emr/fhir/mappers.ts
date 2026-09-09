@@ -130,6 +130,10 @@ export const patientToRecord = (p: FhirPatient, clinicId: string): PatientRecord
     abdmLinkTokenAt: null,
     // An EMR-backed patient has no ABDM enrolment of ours behind them, so
     // there is no Aadhaar-checked identity to carry.
+    // An EMR-backed patient is registered in the EMR, not through our
+    // public form, so no guardian was captured here.
+    guardianName: null,
+    guardianRelation: null,
     abdmName: null,
     abdmGender: null,
     abdmYearOfBirth: null,

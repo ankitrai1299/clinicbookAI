@@ -5,6 +5,8 @@ import { isSlotAvailable } from '../../services/scheduling.service.js';
 import { dataSourceFor } from '../datasource/index.js';
 import { notifyPatientRegistered } from '../whatsapp/whatsapp.notifications.js';
 import { emitEvent } from '../timeline/patientTimeline.service.js';
+import { childConsentEvidence, guardianRequiredFor } from '../consent/childConsent.js';
+import { grantConsent } from '../consent/consent.service.js';
 import {
   CreatePatientInput,
   PublicBookingInput,
@@ -105,6 +107,17 @@ export const createPublicPatient = async (
     throw new AppError('Clinic not found', 404);
   }
 
+  // Checked HERE rather than in the schema because whether a guardian is needed
+  // depends on the age in the same request — and because by this point the age
+  // is the FINAL one: an Aadhaar-verified registration has already replaced what
+  // was typed, and it is that age the law cares about.
+  let guardian;
+  try {
+    guardian = guardianRequiredFor(input.age, input);
+  } catch (err) {
+    throw new AppError(err instanceof Error ? err.message : 'A guardian is required', 400);
+  }
+
   const patients = dataSourceFor(clinicId).patients;
   const fields = {
     name: input.name.trim(),
@@ -117,6 +130,29 @@ export const createPublicPatient = async (
   const patient = existing
     ? await patients.update(existing.id, fields)
     : await patients.create({ phone: input.phone, language: 'English', source: 'public', ...fields });
+
+  // Written straight to our own row: a guardian is not clinical data and not an
+  // EMR's to own, the same reasoning as an ABHA. Only ever set, never cleared —
+  // a patient who has had a birthday does not stop having had a guardian when
+  // they were nine, and the consent given then was still given.
+  if (guardian) {
+    await prisma.patient.update({
+      where: { id: patient.id },
+      data: { guardianName: guardian.name, guardianRelation: guardian.relation }
+    });
+
+    // The consent for a child is the GUARDIAN's, and the record has to say so.
+    // "Patient agreed" against a nine-year-old is not something anyone should be
+    // able to read out of this table later.
+    await grantConsent({
+      clinicId,
+      patientId: patient.id,
+      phone: input.phone,
+      purpose: 'privacy_notice',
+      channel: 'web',
+      evidence: childConsentEvidence(guardian, fields.name)
+    });
+  }
 
   if (!existing) {
     emitEvent({

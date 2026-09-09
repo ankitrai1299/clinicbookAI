@@ -30,6 +30,12 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [healthConcern, setHealthConcern] = useState('');
+  // Asked only of a patient under eighteen. India's DPDP Act makes a child's
+  // consent the parent's to give, so the questions appear when the age says
+  // they are needed and never otherwise — an adult should not be asked who
+  // their mother is.
+  const [guardianName, setGuardianName] = useState('');
+  const [guardianRelation, setGuardianRelation] = useState('');
   // Only the transaction id. Whatever the OTP proved stays on the server and is
   // read back against this — the browser is never given an ABHA to send.
   const [abhaTxnId, setAbhaTxnId] = useState<string | null>(null);
@@ -135,6 +141,11 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
     };
   }, [clinicId]);
 
+  // Mirrors the server's rule (isChild in core/consent/childConsent.ts). The
+  // server is the one that enforces it; this exists so the questions appear
+  // while the age is being typed, not after the form is rejected.
+  const isChildAge = age !== '' && Number(age) >= 0 && Number(age) < 18;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -160,6 +171,12 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
       setSubmitError('Please describe your health concern or reason for visit.');
       return;
     }
+    if (isChildAge && (!guardianName.trim() || !guardianRelation)) {
+      setSubmitError(
+        'For a patient under 18, please give the parent or guardian’s name and their relationship.'
+      );
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -171,7 +188,13 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
         healthConcern: healthConcern.trim(),
         // Absent for the many patients who skip it, and the registration is
         // complete either way.
-        ...(abhaTxnId ? { abhaTxnId } : {})
+        ...(abhaTxnId ? { abhaTxnId } : {}),
+        ...(isChildAge
+          ? {
+              guardianName: guardianName.trim(),
+              guardianRelation: guardianRelation as 'mother' | 'father' | 'guardian',
+            }
+          : {})
       });
       setSuccess(true);
     } catch (err) {
@@ -397,6 +420,53 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
                 </select>
               </div>
             </div>
+
+            {/* Appears the moment the age says it is needed, and never
+                otherwise. India's DPDP Act makes a child's consent the
+                parent's to give — under 18, not 13 or 16 — so this is a
+                normal part of registering a paediatric patient, not an
+                obstacle. Said in one line so nobody has to guess why. */}
+            {isChildAge && (
+              <div className="rounded-2xl border border-sky-100 bg-sky-50/50 p-4 space-y-4">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  This patient is under 18, so a parent or guardian gives consent on their
+                  behalf. The clinic will contact you on the number above.
+                </p>
+
+                <div>
+                  <label className={labelClass} htmlFor="reg-guardian-name">
+                    Parent or guardian&rsquo;s full name
+                  </label>
+                  <input
+                    id="reg-guardian-name"
+                    type="text"
+                    value={guardianName}
+                    onChange={(e) => setGuardianName(e.target.value)}
+                    placeholder="e.g. Asha Verma"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass} htmlFor="reg-guardian-relation">
+                    Relationship to the patient
+                  </label>
+                  <select
+                    id="reg-guardian-relation"
+                    value={guardianRelation}
+                    onChange={(e) => setGuardianRelation(e.target.value)}
+                    className={`${inputClass} ${guardianRelation ? 'text-slate-900' : 'text-slate-400'}`}
+                  >
+                    <option value="" disabled>
+                      Select
+                    </option>
+                    <option value="mother" className="text-slate-900">Mother</option>
+                    <option value="father" className="text-slate-900">Father</option>
+                    <option value="guardian" className="text-slate-900">Guardian</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
