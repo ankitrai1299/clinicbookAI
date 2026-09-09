@@ -6,6 +6,7 @@ import { connectDatabase, disconnectDatabase } from './config/prisma.js';
 import { startReminderCron } from './cron/reminder.cron.js';
 import { startMedicineReminderCron } from './cron/medicineReminder.cron.js';
 import { startAutoCompleteVisitsCron } from './cron/autoCompleteVisits.cron.js';
+import { startRetentionCron } from './cron/retention.cron.js';
 import { startWaitlistCron } from './cron/waitlist.cron.js';
 import { startWebhookCron } from './cron/webhook.cron.js';
 import { startSecurityScanCron } from './cron/securityScan.cron.js';
@@ -55,6 +56,7 @@ const startServer = async () => {
   startReminderCron();
   startMedicineReminderCron();
   startAutoCompleteVisitsCron();
+  startRetentionCron();
   startWaitlistCron();
   startWebhookCron();
   startSecurityScanCron();

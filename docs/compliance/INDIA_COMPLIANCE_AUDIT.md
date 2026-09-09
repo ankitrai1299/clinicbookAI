@@ -95,9 +95,9 @@ Legend: ✅ implemented · 🟡 partial · ❌ missing · ⚪ not applicable (to
 | 7 | Legitimate uses | ⚖️ | Arguably covers some appointment processing; must be assessed, not assumed. |
 | 8(4) | Reasonable security safeguards | 🟡 | Good: TLS, bcrypt(12), helmet, rate limits, HMAC webhooks, tenant-scoped Prisma, signed audio URLs, token encryption. Missing: RBAC in ClinicBook core, audit logging, MFA, log hygiene. |
 | 8(5) | Breach notification to Board and affected principals | 🟡 | `docs/compliance/INCIDENT_RESPONSE.md` documents the process and the notification templates. Detection is still manual — nothing raises an alarm on its own. |
-| 8(7) | Erase when purpose is served / consent withdrawn | 🟡 | An erasure request is recorded, clocked and decided by a human (`core/rights/`). There is still **no retention policy and no automatic deletion job** — data is kept until someone acts. Deliberate for now: clinical records carry statutory retention that DPDP's erasure right yields to, and deleting one is irreversible. |
+| 8(7) | Erase when purpose is served / consent withdrawn | ✅ | `core/retention/` states a period and a reason per table and sweeps nightly. The line it draws: OPERATIONAL data ages out automatically; CLINICAL data never does — an erasure request for a patient record goes through `core/rights/` and is decided by a person, because statutory retention outranks DPDP's erasure right and the deletion is irreversible. **`RETENTION_ENABLED=true` must be set** — off by default so the first sweep is somebody's decision, not a deploy's side effect. |
 | 8(9) | Publish contact of DPO / responsible person | 🟡 | An email exists in the policy; no named person, no designated grievance officer. |
-| 9 | Children — verifiable parental consent, no tracking/ads | ❌ | Unchanged, and the most substantial gap left. India defines a child as **under 18**; paediatric patients are routine. `Patient.age` exists and nothing gates on it. |
+| 9 | Children — verifiable parental consent, no tracking/ads | 🟡 | Registration refuses a patient under 18 without a parent or guardian's name and relationship, and stores the consent as THEIRS with evidence naming both (`core/consent/childConsent.ts`). Two limits, stated in that file rather than hidden: an unrecorded age is treated as adult, and this does not prove the phone's holder is a parent. No tracking or advertising exists anywhere in the product. |
 | 10 | Significant Data Fiduciary obligations (DPIA, audit, DPO) | ⚖️ | Applies only if notified as an SDF. Volume of health data makes this worth asking about. |
 | 11 | Right to access information about processing | ✅ | A patient asks over WhatsApp, from the number the clinic already knows (`core/rights/whatsappRights.ts`); the export is assembled by `core/rights/export.ts`. No patient login was needed to get there. |
 | 12 | Right to correction and erasure | 🟡 | Staff can edit/delete a patient via the dashboard; there is no *patient-initiated* route and no verified-identity request flow. |
@@ -116,7 +116,7 @@ The Rules were notified in **November 2025** with phased commencement; several o
 | Reasonable security: encryption, access control, logging, monitoring | 🟡 | Encryption in transit ✅; at rest depends on Railway (confirm) ; access control partial; **logging and monitoring effectively absent**. |
 | Log retention **one year** for breach investigation | ❌ | Railway stdout logs only, short retention, no archive. |
 | Breach intimation to affected principals "without delay" + to the Board (initial and detailed) | 🟡 | Process and templates in `INCIDENT_RESPONSE.md`. Untested, and detection is manual. |
-| Erasure after defined period of inactivity, with prior notice | ❌ | No inactivity tracking, no erasure job, no pre-erasure notice. |
+| Erasure after defined period of inactivity, with prior notice | 🟡 | Periods are defined and applied per table (`core/retention/`). Pre-erasure notice is NOT implemented, and inactivity is measured per row rather than per data principal. |
 | Contact of DPO published on website and in every notice | 🟡 | Email only. |
 
 ### 3.3 CERT-In Directions, 2022 (applies to any body corporate in India)
