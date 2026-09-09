@@ -60,7 +60,18 @@ model Clinic {
   // the clinic is registered there; the FHIR document names the organisation by
   // this when present and omits the identifier entirely when it is not, rather
   // than inventing one.
-  hfrId            String?
+  // @unique because this is how ABDM's callbacks find the clinic they are for:
+  // X-HIP-ID carries it, and nothing else in the request names a tenant. Two
+  // clinics holding one id would let one clinic's answer be delivered to the
+  // other, which would then push its patients' visits under a facility identity
+  // that is not its own — and a care context cannot be unlinked.
+  //
+  // Nullable, and Postgres treats NULLs as distinct, so every clinic that has
+  // not registered a facility keeps a null here without colliding.
+  //
+  // The index was created on production by hand before this line existed, so
+  // `db push` finds it already in place rather than building it during a deploy.
+  hfrId            String?    @unique
   plan             ClinicPlan @default(STARTER)
   // WHICH products this clinic bought — a different axis from `plan`, which is
   // the tier (how much they pay). A clinic can be on GROWTH with only the scribe.
