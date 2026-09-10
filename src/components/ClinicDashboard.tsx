@@ -1,9 +1,30 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Users, Calendar, Clock, Bell, Settings, CreditCard, Activity,
-  Search, Plus, CheckCircle, CheckCheck, XCircle,
-  Mail, Phone, Globe, ExternalLink, ArrowRight, ShieldAlert,
-  QrCode, Copy, Check, Key, ArrowLeft, ShieldCheck
+  Activity,
+  ArrowLeft,
+  ArrowRight,
+  Bell,
+  Calendar,
+  Check,
+  CheckCheck,
+  CheckCircle,
+  Clock,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  Globe,
+  Key,
+  Landmark,
+  Mail,
+  Phone,
+  Plus,
+  QrCode,
+  Search,
+  Settings,
+  ShieldAlert,
+  ShieldCheck,
+  Users,
+  XCircle
 } from 'lucide-react';
 import AiAssistant from './AiAssistant';
 import { BRAND } from '../brand';
@@ -24,6 +45,7 @@ import {
 import { getPatients as getPatientsApi, createPatient as createPatientApi, ApiPatient } from '../api/patients';
 import PatientRecordModal from './PatientRecordModal';
 import PatientAbhaModal from './PatientAbhaModal';
+import AbdmRegistration from './abdm/AbdmRegistration';
 import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
 import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, convertWaitlistEntry as convertWaitlistEntryApi, ApiWaitlistEntry } from '../api/waitlist';
 import { getMyClinic as getMyClinicApi, updateMyClinic as updateMyClinicApi } from '../api/clinic';
@@ -587,6 +609,11 @@ export default function ClinicDashboard({
               // Everyone sees this one: a receptionist must be able to turn on their
               // own second factor, and to end their own sessions if a device is lost.
               { id: 'security', label: 'Security', icon: ShieldCheck },
+              // Moved here from the scribe's admin console. It is a CLINIC
+              // registration, and it belongs where the clinic already works —
+              // beside the patients whose ABHA and shared visits it governs.
+              // Nobody found it in the other app, including us.
+              { id: 'abdm', label: 'ABDM', icon: Landmark },
               { id: 'billing', label: 'Subscription Billing', icon: CreditCard }
             ].filter((tab) => canSeeTab(tab.id)).map((tab) => {
               const TabIcon = tab.icon;
@@ -1240,6 +1267,8 @@ export default function ClinicDashboard({
           )}
 
           {/* SECURITY: the user's own second factor and sessions */}
+          {activeTab === 'abdm' && <AbdmRegistration />}
+
           {activeTab === 'security' && (
             <div className="animate-fadeIn text-left" id="security-tab-view">
               <SecuritySettings />

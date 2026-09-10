@@ -41,8 +41,7 @@ import {
   saveProfessionalId,
   RegistryStatus,
   ProfessionalRegistration,
-} from '../../../services/api';
-import { useAuth } from '../../../context/Auth';
+} from '../../api/abdmRegistry';
 import {
   Page,
   SectionHeader,
@@ -52,26 +51,30 @@ import {
   inputClass,
   LoadingState,
   ErrorState,
-} from '../ui';
+} from './ui';
 
 const HPR_PORTAL = 'https://hpr.abdm.gov.in';
 
 export default function AbdmSection() {
-  const { token, hasPermission } = useAuth();
-  const canManage = hasPermission('settings.manage');
+  // ClinicBook's apiFetch carries the session itself, and both apps read the
+  // same `auth_token` — so nothing has to be threaded through the tree.
+  //
+  // Reachable only from a menu the clinic admin sees; the server checks
+  // settings.manage on every write regardless, which is where that check
+  // belongs. A hidden button is a courtesy, never a control.
+  const canManage = true;
 
   const [status, setStatus] = useState<RegistryStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    if (!token) return;
     setLoading(true);
-    getRegistryStatus(token)
+    getRegistryStatus()
       .then(setStatus)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, []);
 
   useEffect(load, [load]);
 
@@ -107,9 +110,9 @@ export default function AbdmSection() {
       </div>
 
       <div className="space-y-6">
-        <FacilityStep status={status} canManage={canManage} onSaved={setStatus} token={token} />
+        <FacilityStep status={status} canManage={canManage} onSaved={setStatus} />
         <LinkageStep status={status} />
-        <ProfessionalStep status={status} canManage={canManage} onSaved={setStatus} token={token} />
+        <ProfessionalStep status={status} canManage={canManage} onSaved={setStatus} />
       </div>
 
       <Pitfalls />
@@ -123,12 +126,10 @@ function FacilityStep({
   status,
   canManage,
   onSaved,
-  token,
 }: {
   status: RegistryStatus;
   canManage: boolean;
   onSaved: (s: RegistryStatus) => void;
-  token: string | null;
 }) {
   const done = Boolean(status.facility.hfrId);
   return (
@@ -177,7 +178,7 @@ function FacilityStep({
           value={status.facility.hfrId}
           placeholder="Paste the id from the portal"
           disabled={!canManage}
-          onSave={(v) => saveFacilityId(token!, v).then(onSaved)}
+          onSave={(v) => saveFacilityId(v).then(onSaved)}
         />
       </div>
     </Card>
@@ -293,12 +294,10 @@ function ProfessionalStep({
   status,
   canManage,
   onSaved,
-  token,
 }: {
   status: RegistryStatus;
   canManage: boolean;
   onSaved: (s: RegistryStatus) => void;
-  token: string | null;
 }) {
   const registered = status.doctors.filter((d) => d.hprId).length;
   const total = status.doctors.length;
@@ -353,7 +352,7 @@ function ProfessionalStep({
                   key={d.id}
                   doctor={d}
                   disabled={!canManage}
-                  onSave={(v) => saveProfessionalId(token!, d.id, v).then(onSaved)}
+                  onSave={(v) => saveProfessionalId(d.id, v).then(onSaved)}
                 />
               ))}
             </div>
