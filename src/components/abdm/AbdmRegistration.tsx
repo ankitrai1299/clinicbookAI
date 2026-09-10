@@ -87,15 +87,7 @@ export default function AbdmSection() {
       <SectionHeader
         title="ABDM registration"
         description="What this clinic still needs before health records can be shared with ABDM."
-        action={
-          status.complete ? (
-            <Badge tone="emerald">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Registered
-            </Badge>
-          ) : (
-            <Badge tone="amber">Not registered yet</Badge>
-          )
-        }
+        action={<RegistrationBadge status={status} />}
       />
 
       {/* Said before anything else, because the list below looks like a set of
@@ -569,5 +561,35 @@ function Pitfalls() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * What is actually outstanding, rather than "done / not done".
+ *
+ * `complete` means the clinic AND every doctor, so a clinic that has finished
+ * its own registration was still told "Not registered yet" — directly above a
+ * green tick on the step it had just completed. Two things on one screen
+ * contradicting each other, and the one in larger type was wrong.
+ *
+ * Counting the doctors also makes it actionable: "8 doctors to register" says
+ * what to do next, which "not registered yet" never did.
+ */
+function RegistrationBadge({ status }: { status: RegistryStatus }) {
+  if (status.complete) {
+    return (
+      <Badge tone="emerald">
+        <CheckCircle2 className="w-3.5 h-3.5" /> Registered
+      </Badge>
+    );
+  }
+
+  if (!status.facility.hfrId) return <Badge tone="amber">Clinic not registered yet</Badge>;
+
+  const pending = status.doctors.filter((d) => !d.hprId).length;
+  return (
+    <Badge tone="amber">
+      Clinic registered &middot; {pending} {pending === 1 ? 'doctor' : 'doctors'} to go
+    </Badge>
   );
 }
