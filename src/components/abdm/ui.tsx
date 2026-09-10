@@ -41,12 +41,10 @@ export function SectionHeader({
 }
 
 export function Page({ children }: { children: ReactNode }) {
+  // The entrance animation came from framer-motion, which this side of the app
+  // does not carry, so the wrapper is a plain div.
   return (
-    <div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="p-6 sm:p-8 max-w-7xl mx-auto"
-    >
+    <div className="p-6 sm:p-8 max-w-7xl mx-auto">
       {children}
     </div>
   );

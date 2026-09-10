@@ -92,6 +92,21 @@ export const isRegistrationComplete = (
   doctors: readonly { hprId: string | null }[]
 ): boolean => Boolean(hfrId) && doctors.length > 0 && doctors.every((d) => Boolean(d.hprId));
 
+/**
+ * PURE-ish: are we talking to ABDM's sandbox?
+ *
+ * Read from the Consent Manager id, NOT from the gateway URL. That URL was the
+ * obvious signal and it broke the day the calls started going through the India
+ * relay: the host became a vercel.app address and the check quietly answered
+ * "production", which would have sent clinics to the live facility portal and
+ * hidden the warning that records shared here reach nobody's real record.
+ *
+ * X-CM-ID is 'sbx' for the sandbox and something else in production, it is sent
+ * on every single call, and no proxy can change it without breaking those calls
+ * first — so it cannot drift away from the truth unnoticed.
+ */
+const isSandbox = (): boolean => env.ABDM_CM_ID.trim().toLowerCase() === 'sbx';
+
 export const getRegistryStatus = async (clinicId: string): Promise<RegistryStatus> => {
   const [clinic, doctors] = await Promise.all([
     prisma.clinic.findUnique({ where: { id: clinicId }, select: { name: true, hfrId: true } }),
@@ -102,11 +117,7 @@ export const getRegistryStatus = async (clinicId: string): Promise<RegistryStatu
   ]);
   if (!clinic) throw new AppError('Clinic not found', 404);
 
-  // Sandbox and production are different hosts AND different registries. Read
-  // from the gateway URL because that is the one setting that must already be
-  // right for anything else to work — a screen deriving it separately could
-  // disagree with the code making the calls.
-  const sandbox = env.ABDM_GATEWAY_BASE_URL.includes('dev.abdm.gov.in');
+  const sandbox = isSandbox();
 
   return {
     facility: { clinicName: clinic.name, hfrId: clinic.hfrId },
@@ -196,7 +207,7 @@ export const getMyProfessionalRegistration = async (
   clinicId: string,
   doctorId: string | null
 ): Promise<MyProfessionalRegistration> => {
-  const sandbox = env.ABDM_GATEWAY_BASE_URL.includes('dev.abdm.gov.in');
+  const sandbox = isSandbox();
   const portalUrl = sandbox ? 'https://hprsbx.abdm.gov.in' : 'https://hpr.abdm.gov.in';
 
   if (!doctorId) return { linked: false, doctorName: null, hprId: null, portalUrl };
