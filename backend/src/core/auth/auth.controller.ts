@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 
 import { AppError } from '../../utils/AppError.js';
 import { record, recordFromRequest } from '../audit/audit.service.js';
+import { requestPasswordReset, resetPassword } from './passwordReset.service.js';
 import { toNativeAppUser, withNativeAppAuth } from './nativeAppCompat.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import {
@@ -134,5 +135,48 @@ export const me = asyncHandler(async (req: Request, res: Response) => {
     user: toNativeAppUser(user),
     success: true,
     data: user
+  });
+});
+
+/**
+ * "I have forgotten my password."
+ *
+ * Always answers the same thing. Whether or not that address belongs to
+ * anybody, whether or not mail is configured, whether or not a code was
+ * actually sent — one response. An endpoint that distinguishes those cases is a
+ * way to ask "is this person a customer of yours?" one guess at a time.
+ */
+export const forgotPasswordHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { email } = req.body as { email: string };
+
+  await requestPasswordReset(email);
+
+  res.json({
+    success: true,
+    message: 'If that email belongs to an account, a reset code has been sent to it.'
+  });
+});
+
+/** Spending the code. Audited, because a password change is worth a trail. */
+export const resetPasswordHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { email, code, password } = req.body as { email: string; code: string; password: string };
+
+  await resetPassword(email, code, password);
+
+  record({
+    clinicId: null,
+    actorType: 'anonymous',
+    action: 'PASSWORD_RESET',
+    resourceType: 'user',
+    outcome: 'success',
+    ip: req.ip ?? null,
+    userAgent: req.get('user-agent') ?? null,
+    requestId: req.requestId ?? null,
+    metadata: { email }
+  });
+
+  res.json({
+    success: true,
+    message: 'Your password has been changed, and you have been signed out everywhere.'
   });
 });

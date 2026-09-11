@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowLeft, ArrowRight, Key, Mail, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, Key, Mail } from 'lucide-react';
 
 import { BRAND } from '../brand';
 import AnvayaLogo from './AnvayaLogo';
-import { isMfaChallenge, loginUser, verifyMfaCode } from '../api/auth';
+import { forgotPassword, isMfaChallenge, loginUser, resetPassword, verifyMfaCode } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { PageType } from '../types';
 
@@ -24,12 +24,61 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** A one-line success message, shown where the error would be. */
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Second factor. Non-null once the password has been accepted and a code is
   // owed — the password is NOT kept, so this token is the only thing carrying
   // the half-finished sign-in forward.
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
+
+  // ── Getting back in ──────────────────────────────────────────────────────
+  //
+  // Its own small state machine rather than another page: somebody locked out
+  // is already on this screen with their email typed, and sending them
+  // elsewhere loses that and the thread of what they were doing.
+  const [recover, setRecover] = useState<'no' | 'ask' | 'code'>('no');
+  const [recoverCode, setRecoverCode] = useState('');
+  const [recoverPassword, setRecoverPassword] = useState('');
+  const [recoverBusy, setRecoverBusy] = useState(false);
+  const [recoverNote, setRecoverNote] = useState<string | null>(null);
+  const [recoverError, setRecoverError] = useState<string | null>(null);
+
+  const sendResetCode = async () => {
+    setRecoverBusy(true);
+    setRecoverError(null);
+    try {
+      await forgotPassword(email.trim());
+      setRecover('code');
+      // Careful wording. The server answers the same for an address nobody
+      // holds, so this must NOT say a mail was sent to a real account.
+      setRecoverNote('If that email belongs to an account, a 6-digit code is on its way to it.');
+    } catch (e) {
+      setRecoverError(e instanceof Error ? e.message : 'Could not send a reset code.');
+    } finally {
+      setRecoverBusy(false);
+    }
+  };
+
+  const applyNewPassword = async () => {
+    setRecoverBusy(true);
+    setRecoverError(null);
+    try {
+      await resetPassword({ email: email.trim(), code: recoverCode.trim(), password: recoverPassword });
+      setRecover('no');
+      setRecoverCode('');
+      setRecoverPassword('');
+      setPassword('');
+      setError(null);
+      setRecoverNote(null);
+      setNotice('Password changed. Sign in with the new one.');
+    } catch (e) {
+      setRecoverError(e instanceof Error ? e.message : 'Could not change the password.');
+    } finally {
+      setRecoverBusy(false);
+    }
+  };
 
   const handleMfaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +168,16 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
           <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {/* Same slot as the error, because it answers the same question: what
+            just happened. Green rather than red, and cleared by the next
+            attempt like the error is. */}
+        {notice && !error && (
+          <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{notice}</span>
           </div>
         )}
 
@@ -223,6 +282,87 @@ export default function LoginPage({ setCurrentPage, onNeedVerification, product 
             )}
           </button>
         </form>
+        )}
+
+        {/* ── Locked out ────────────────────────────────────────────────
+            Below the form and above the sign-up line, because that is the
+            order somebody in trouble looks in: try again, get back in, and
+            only then wonder if they ever had an account. */}
+        {recover === 'no' ? (
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => { setRecover('ask'); setRecoverError(null); setRecoverNote(null); }}
+              className="text-xs text-slate-500 hover:text-sky-600 cursor-pointer"
+            >
+              Forgot your password?
+            </button>
+          </div>
+        ) : (
+          <div className="mt-5 pt-5 border-t border-slate-100 space-y-3">
+            <p className="text-xs font-bold text-slate-700">Reset your password</p>
+
+            {recover === 'ask' ? (
+              <>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  We&rsquo;ll send a 6-digit code to{' '}
+                  <span className="font-mono text-slate-600">{email.trim() || 'your email'}</span>.
+                  Change it above if that isn&rsquo;t right.
+                </p>
+                <button
+                  type="button"
+                  onClick={sendResetCode}
+                  disabled={recoverBusy || !email.trim()}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white text-sm font-bold rounded-xl cursor-pointer"
+                >
+                  {recoverBusy ? 'Sending…' : 'Send code'}
+                </button>
+              </>
+            ) : (
+              <>
+                {recoverNote && <p className="text-[11px] text-slate-500 leading-relaxed">{recoverNote}</p>}
+                <input
+                  value={recoverCode}
+                  onChange={(e) => setRecoverCode(e.target.value)}
+                  placeholder="6-digit code"
+                  inputMode="numeric"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:border-sky-500"
+                />
+                <input
+                  value={recoverPassword}
+                  onChange={(e) => setRecoverPassword(e.target.value)}
+                  type="password"
+                  placeholder="New password (at least 8 characters)"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-sky-500"
+                />
+                <button
+                  type="button"
+                  onClick={applyNewPassword}
+                  disabled={recoverBusy || recoverCode.trim().length < 4 || recoverPassword.length < 8}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white text-sm font-bold rounded-xl cursor-pointer"
+                >
+                  {recoverBusy ? 'Changing…' : 'Change password'}
+                </button>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Changing it signs you out everywhere else.
+                </p>
+              </>
+            )}
+
+            {recoverError && (
+              <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2 leading-relaxed">
+                {recoverError}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => { setRecover('no'); setRecoverError(null); }}
+              className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              Back to sign in
+            </button>
+          </div>
         )}
 
         <div className="mt-6 text-center text-xs text-slate-400">

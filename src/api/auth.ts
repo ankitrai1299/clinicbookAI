@@ -179,3 +179,23 @@ export const resendOtp = (body: { email: string }) =>
   });
 
 export const getMe = () => apiFetch<AuthUser>('/api/auth/me');
+
+/**
+ * Ask for a reset code.
+ *
+ * Succeeds whether or not that email belongs to an account — the server answers
+ * identically on purpose, so the screen must not promise that a mail was sent
+ * to a real address.
+ */
+export const forgotPassword = (email: string) =>
+  apiFetch<{ message: string }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+
+/** Spend the code. Every existing session ends when this succeeds. */
+export const resetPassword = (body: { email: string; code: string; password: string }) =>
+  apiFetch<{ message: string }>('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });

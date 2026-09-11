@@ -11,6 +11,10 @@ export const AUDIT_ACTIONS = [
   'LOGIN',
   'LOGOUT',
   'FAILED_LOGIN',
+  // A password changed by someone who could read the account's mailbox, not
+  // by someone who knew the old password. Worth its own action: it is the
+  // one way into an account that does not require the account.
+  'PASSWORD_RESET',
   'AUTHORIZATION_DENIED',
 
   // ── Patients ────────────────────────────────────────────────────

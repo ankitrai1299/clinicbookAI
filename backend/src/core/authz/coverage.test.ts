@@ -38,6 +38,10 @@ const UNGATED_BY_DESIGN: Readonly<Record<string, string>> = {
   'core/auth/auth.routes.ts:/partner-login': 'same, behind a shared partner secret',
   'core/auth/auth.routes.ts:/verify-otp': 'completes signup verification before any role is assigned',
   'core/auth/auth.routes.ts:/resend-otp': 'reissues that verification code, also before any role exists',
+  'core/auth/auth.routes.ts:/forgot-password':
+    'asks for a reset code before any identity is established; answers identically whether or not the account exists',
+  'core/auth/auth.routes.ts:/reset-password':
+    'spends that code — the caller has no session yet, which is the whole reason they are here',
   'core/clinics/clinic.routes.ts:/register': 'creates the clinic and its first user; nothing to authorize against',
 
   // Meta calls this one, not a person. It is verified by the X-Hub-Signature-256

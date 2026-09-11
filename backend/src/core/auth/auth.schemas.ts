@@ -37,3 +37,23 @@ export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 export type ResendOtpInput = z.infer<typeof resendOtpSchema>;
+
+/**
+ * Asking for a reset code. Email only — nothing else is known yet, and nothing
+ * else should be accepted.
+ */
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().email().max(254)
+});
+
+/**
+ * Spending the code.
+ *
+ * `min(8)` matches signup, so a reset cannot quietly set a password that signup
+ * would have refused.
+ */
+export const resetPasswordSchema = z.object({
+  email: z.string().trim().email().max(254),
+  code: z.string().trim().min(4).max(10),
+  password: z.string().min(8).max(128)
+});

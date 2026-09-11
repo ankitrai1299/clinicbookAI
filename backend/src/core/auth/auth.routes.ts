@@ -6,8 +6,23 @@ import { requirePermission } from '../authz/requirePermission.js';
 import { authLimiter } from '../../middleware/rateLimiters.js';
 import { requirePartnerSecret } from '../../middleware/partnerSso.js';
 import { validate } from '../../middleware/validate.js';
-import { login, me, resendOtp, signup, verifyOtp } from './auth.controller.js';
-import { loginSchema, resendOtpSchema, signupSchema, verifyOtpSchema } from './auth.schemas.js';
+import {
+  forgotPasswordHandler,
+  login,
+  me,
+  resendOtp,
+  resetPasswordHandler,
+  signup,
+  verifyOtp
+} from './auth.controller.js';
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  resendOtpSchema,
+  resetPasswordSchema,
+  signupSchema,
+  verifyOtpSchema
+} from './auth.schemas.js';
 
 const authRouter = Router();
 
@@ -26,6 +41,20 @@ authRouter.post('/partner-login', requirePartnerSecret, validate(loginSchema), l
 authRouter.post('/verify-otp', authLimiter, validate(verifyOtpSchema), verifyOtp);
 authRouter.post('/resend-otp', authLimiter, validate(resendOtpSchema), resendOtp);
 authRouter.get('/me', requireAuth, me);
+
+// ── Getting back in ────────────────────────────────────────────────────────
+//
+// Rate limited with the same limiter as login, and for the same reason: both
+// take an email and a secret, and both are worth guessing at in bulk. The
+// request endpoint also sends mail, which makes an unlimited one a way to use
+// this platform to flood somebody's inbox.
+authRouter.post(
+  '/forgot-password',
+  authLimiter,
+  validate(forgotPasswordSchema),
+  forgotPasswordHandler
+);
+authRouter.post('/reset-password', authLimiter, validate(resetPasswordSchema), resetPasswordHandler);
 
 // Two-factor authentication (opt-in per user) and session revocation.
 authRouter.use('/mfa', mfaRouter);
