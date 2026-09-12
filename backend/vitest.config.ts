@@ -7,6 +7,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
+    // Runs before every test file, so `config/env.ts` has what it validates
+    // even where no .env exists (i.e. CI). See the file for why.
+    setupFiles: ['./vitest.setup.ts'],
     include: ['src/**/*.test.ts']
   }
 });

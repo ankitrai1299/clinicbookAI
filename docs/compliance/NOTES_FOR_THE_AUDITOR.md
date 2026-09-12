@@ -41,31 +41,34 @@ This is re-examined before production, where ABDM signs its requests.
 
 ---
 
-## 2. Five dependency advisories remain open
+## 2. Dependency advisories: none open in shipped code
 
-`npm audit --omit=dev` reports 5 (2 moderate, 3 high), down from 29. The
-remaining five stay open because both fixes npm offers carry more risk than the
-advisories do.
+`npm audit` reports **0 vulnerabilities** in the frontend and **2 moderate** in
+the backend, down from 29. Both remaining findings are in `@vitest/mocker` — the
+test runner. It is a devDependency: it is not installed on the production image
+and no line of it executes in the running service.
 
-### express → qs (moderate, CWE: array-limit bypass)
+This position was reached without either of the two changes npm proposed, both
+of which carried more risk than the advisories did. npm's remedy for the high
+findings was to move Prisma **backwards**, 6.19 to 6.12, and for the moderate
+ones to take express 5 — a rewrite of routing, path matching and async error
+handling across every route in the application, in the week before an audit.
 
-The fix is express 5, which changes routing, path matching and async error
-handling across every route in the application. The advisory concerns query
-string parsing; every route here validates its input against a schema before the
-handler runs, so a malformed query is rejected before it reaches application
-logic.
+Instead both are pinned forward at the transitive level, in `overrides` in each
+`package.json`:
 
-### prisma → @prisma/config → deepmerge-ts (high, stack exhaustion)
+| | | |
+| --- | --- | --- |
+| `deepmerge-ts` | `^8.0.2` | stack exhaustion on recursive object graphs (high) — reached via `prisma` → `@prisma/config` |
+| `qs` | `^6.16.0` | array-limit bypass and attacker-controlled `isBuffer` (moderate) — reached via `express` |
 
-npm's remedy is to move prisma **backwards**, from 6.19 to 6.12 — it reports
-this as a major change because it is a downgrade. The advisory is stack
-exhaustion when merging recursive object graphs, inside the Prisma CLI's config
-loader. That loader reads a configuration file we ship; it is not on the query
-path, and no attacker-controlled input reaches it.
+Prisma stays at 6.19 and express at 4.22; only the vulnerable packages move.
+Verified after the change: `prisma generate`, the backend typecheck, all 818
+backend tests, the frontend typecheck and the production build.
 
-A downgraded database client and a rewritten router, taken in the week before an
-audit, is how a working production system breaks. We would rather carry both as
-stated risk and take them in a planned release.
+CI (`.github/workflows/ci.yml`) reports every advisory and fails the build on
+high or critical, on every push and weekly on a schedule — so a newly published
+advisory against unchanged code is still found.
 
 ---
 
