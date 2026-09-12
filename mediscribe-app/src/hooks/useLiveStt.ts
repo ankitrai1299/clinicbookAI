@@ -49,7 +49,14 @@ export type MeaningLanguage = 'off' | 'hi' | 'en';
 const RECORD_RATE = 48_000;
 
 /**
- * Base64 PCM16 at 48 kHz → an ArrayBuffer of PCM16 at 24 kHz.
+ * Float32 samples at 48 kHz → an ArrayBuffer of PCM16 at 24 kHz.
+ *
+ * Float32 rather than the recorder's default base64: on Android's new
+ * architecture the samples arrive over JSI as a real Float32Array, so there is
+ * no base64 to encode on one side and decode on the other, a hundred times a
+ * minute, for the length of a consultation. It also removes a dependency on
+ * `atob` being present in the JS runtime, which is a thing to discover on a
+ * doctor's phone rather than here.
  *
  * Averaging each adjacent pair rather than keeping every second sample. Keeping
  * one and discarding the other is a line shorter and aliases: the discarded
@@ -57,19 +64,14 @@ const RECORD_RATE = 48_000;
  * fricatives — स, श, ph, kh — which is where Indian-language recognition is
  * decided.
  */
-export const halveTo24k = (base64: string): ArrayBuffer => {
-  const bin = globalThis.atob(base64);
-  const inSamples = Math.floor(bin.length / 2);
-  const outSamples = Math.floor(inSamples / 2);
+export const halveTo24k = (samples: Float32Array): ArrayBuffer => {
+  const outSamples = Math.floor(samples.length / 2);
   const out = new DataView(new ArrayBuffer(outSamples * 2));
 
-  const sampleAt = (i: number): number => {
-    const v = bin.charCodeAt(i * 2) | (bin.charCodeAt(i * 2 + 1) << 8);
-    return v >= 0x8000 ? v - 0x10000 : v;
-  };
-
   for (let i = 0; i < outSamples; i++) {
-    out.setInt16(i * 2, Math.round((sampleAt(i * 2) + sampleAt(i * 2 + 1)) / 2), true);
+    const avg = (samples[i * 2] + samples[i * 2 + 1]) / 2;
+    const clamped = Math.max(-1, Math.min(1, avg));
+    out.setInt16(i * 2, Math.round(clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff), true);
   }
   return out.buffer;
 };
@@ -161,16 +163,27 @@ export const useLiveStt = (): LiveStt => {
     await recorder.startRecording({
       sampleRate: RECORD_RATE,
       channels: 1,
-      encoding: 'pcm_16bit',
+      encoding: 'pcm_32bit',
+      streamFormat: 'float32',
       // 100 ms per callback. Longer batches the words into visible jumps;
       // shorter spends more time crossing the bridge than in the microphone.
       interval: 100,
       onAudioStream: async (event) => {
         const socket = wsRef.current;
         if (!socket || socket.readyState !== WebSocket.OPEN) return;
-        if (typeof event.data !== 'string') return;
+        const data = event.data as unknown;
+        // iOS hands over a plain Array; Android new-arch a Float32Array. Both
+        // are accepted rather than assumed, because the wrong one here is
+        // silence that looks like a broken microphone.
+        const samples =
+          data instanceof Float32Array
+            ? data
+            : Array.isArray(data)
+              ? Float32Array.from(data as number[])
+              : null;
+        if (!samples) return;
         try {
-          socket.send(halveTo24k(event.data));
+          socket.send(halveTo24k(samples));
         } catch {
           /* a frame lost to a closing socket is not worth an error on screen */
         }
