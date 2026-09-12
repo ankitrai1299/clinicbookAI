@@ -7,6 +7,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -154,11 +155,17 @@ export function AuthScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Brand mark + heading on the plain canvas — no coloured banner. */}
+          {/* Brand mark + heading on the plain canvas — no coloured banner.
+              The mark used to be a generic medkit glyph: the comment promised a
+              brand and the screen showed a stock icon, on the one screen every
+              doctor sees before they have signed in to anything. */}
           <View className="items-center pt-6 pb-2">
-            <View className="w-14 h-14 rounded-2xl bg-brand-50 items-center justify-center mb-4">
-              <Ionicons name="medkit-outline" size={26} color={colors.brand} />
-            </View>
+            <Image
+              source={require('../../assets/brand/anvaya-scribe.png')}
+              style={{ width: 190, height: 60, marginBottom: 14 }}
+              resizeMode="contain"
+              accessibilityLabel="Anvaya Scribe"
+            />
             <Text className="text-[24px] font-bold text-slate-900 tracking-tight">
               {isForgot ? t('auth.resetPassword') : isSignup ? t('auth.createAccount') : t('auth.welcomeBack')}
             </Text>
