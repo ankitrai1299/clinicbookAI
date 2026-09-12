@@ -42,6 +42,11 @@ export interface Consultation {
   // URL of an uploaded audio file attached to this session (empty/undefined for
   // live recordings). Persisted so it survives a page refresh.
   audioUrl?: string;
+  // The ClinicBook appointment this session documents, when it was opened from
+  // Today's Queue. Without it the server has to GUESS which visit a finished
+  // note closes — and it refuses to guess when the patient has more than one
+  // booking that day, so the visit stays open and nobody is told why.
+  appointmentId?: string;
   // Session lifecycle timestamps (ISO). `id` doubles as the session id.
   createdAt?: string;
   updatedAt?: string;

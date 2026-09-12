@@ -206,7 +206,7 @@ export default function Dashboard() {
   // The whole point of showing the appointment: the session opens already
   // attached to that patient, so nobody re-types a name that is already known.
   const scribeAppointment = (a: UpcomingAppointment) => {
-    const con = startSessionForPatient(a.patientId, a.patientName);
+    const con = startSessionForPatient(a.patientId, a.patientName, a.id);
     router.push(`/consultation/${con.id}?mode=record`);
   };
 

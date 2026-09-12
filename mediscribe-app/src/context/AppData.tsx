@@ -76,7 +76,7 @@ interface AppDataValue {
   loading: boolean;
   reload: () => Promise<void>;
   addPatient: (name: string, age: number, gender: string, phone: string) => Patient;
-  startSessionForPatient: (patientId: string, patientName: string) => Consultation;
+  startSessionForPatient: (patientId: string, patientName: string, appointmentId?: string) => Consultation;
   updateSession: (updated: Consultation) => void;
 }
 
@@ -157,12 +157,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // Create a fresh Draft session, add it to state, and persist immediately so a
   // crash/refresh before the first save doesn't lose it. (Mirrors web.)
   const startSessionForPatient = useCallback(
-    (patientId: string, patientName: string): Consultation => {
+    (patientId: string, patientName: string, appointmentId?: string): Consultation => {
       const now = new Date().toISOString();
       const newCon: Consultation = {
         id: uid('con'),
         patientId,
         patientName,
+        ...(appointmentId ? { appointmentId } : {}),
         date: new Date().toLocaleDateString(),
         status: 'Draft',
         transcript: [],
