@@ -11,6 +11,7 @@ import {
   Patient,
 } from '../types';
 import { loadDoctorProfile, loadLanguage } from '../utils/settings';
+import { startLiveStt, type LiveLine, type LiveSttSession, type MeaningLanguage } from '../services/liveSttClient';
 import { Mic, Square, FileText, CheckCircle, Printer, AlertCircle, Plus, Trash2, Download, Upload, Search, Clock, Pause, Play, Activity, ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Users, Send } from 'lucide-react';
 import Logo from './Logo';
 import UploadedAudioPlayer from './UploadedAudioPlayer';
@@ -283,6 +284,23 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   const initialText = (consultation.transcript || []).map(l => l.text).join(' ').trim();
   const [originalTranscript, setOriginalTranscript] = useState<string>(initialText);
   const [displayedTranscript, setDisplayedTranscript] = useState<string>(initialText);
+
+  // ── The live transcript, as spoken ────────────────────────────────────
+  //
+  // The browser's own SpeechRecognition takes ONE locale, fixed before anybody
+  // speaks, and "Auto" resolved to en-IN — so a doctor who left it alone had
+  // Hindi and Bhojpuri transcribed as Indian English. That is why the live
+  // transcript was unusable, and why the audio now goes to our own gateway,
+  // where a model identifies the language itself and keeps it.
+  //
+  // Lines are held with their meaning attached rather than as one string,
+  // because the meaning arrives a second or two after the line it belongs to —
+  // by which point the doctor is already two sentences further on.
+  const [liveLines, setLiveLines] = useState<LiveLine[]>([]);
+  const [livePartial, setLivePartial] = useState('');
+  const [meaningLang, setMeaningLang] = useState<MeaningLanguage>('off');
+  const [sttNote, setSttNote] = useState<string | null>(null);
+  const sttRef = useRef<LiveSttSession | null>(null);
 
   // Normalize on load so older saved reports are migrated into the Premium
   // structure and every section/field always exists.
@@ -805,8 +823,48 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     // transcript only appeared (from the backend) after Stop. Capturing first
     // restores continuous word-by-word streaming. If capture fails, recognition
     // still starts so the live transcript works regardless.
+    setLiveLines([]);
+    setLivePartial('');
+    setSttNote(null);
+
     void startAudioCapture().finally(() => {
-      if (liveActiveRef.current && shouldListenRef.current) beginRecognition();
+      if (!liveActiveRef.current || !shouldListenRef.current) return;
+      // Our own gateway first. The browser recogniser stays as the fallback —
+      // it is poor at Indian languages, but a poor transcript a doctor can
+      // correct beats a blank screen if the socket cannot be reached.
+      void startLiveStt(
+        {
+          onPartial: setLivePartial,
+          onFinal: (line) => {
+            setLivePartial('');
+            setLiveLines((prev) => [...prev, line]);
+            // The existing pipeline — auto-save, report generation, the saved
+            // transcript — reads committedRef/displayedTranscript. It is fed the
+            // SPOKEN words, never the meaning: the record must hold what was
+            // said, and the second row is a reading aid, not the record.
+            committedRef.current = (committedRef.current
+              ? `${committedRef.current} ${line.text}`
+              : line.text
+            ).trim();
+            setDisplayedTranscript(committedRef.current);
+          },
+          onMeaning: (id, text) =>
+            setLiveLines((prev) => prev.map((l) => (l.id === id ? { ...l, meaning: text } : l))),
+          onStatus: (status, detail) => {
+            if (status === 'error') setSttNote(detail ?? 'Live transcription stopped.');
+            if (status === 'live') setSttNote(null);
+          }
+        },
+        { meaning: meaningLang }
+      )
+        .then((session) => {
+          sttRef.current = session;
+        })
+        .catch((err) => {
+          console.warn('[liveStt] falling back to the browser recogniser:', err);
+          setSttNote('Using the browser transcriber — the live service could not be reached.');
+          if (shouldListenRef.current) beginRecognition();
+        });
     });
   };
 
@@ -1056,6 +1114,12 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   };
 
   const stopRecording = () => {
+    // Ours first, and not awaited: it keeps its socket open for a few seconds so
+    // the provider can release the last sentence, and the doctor must not be
+    // made to wait through that with a live-looking screen.
+    void sttRef.current?.stop();
+    sttRef.current = null;
+    setLivePartial('');
     if (liveActiveRef.current) stopLiveRecording();
     else stopWhisperRecording();
   };
@@ -1069,6 +1133,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   useEffect(() => () => {
     shouldListenRef.current = false;
     try { recognitionRef.current?.stop(); } catch { /* noop */ }
+    void sttRef.current?.stop();
     streamRef.current?.getTracks().forEach(t => t.stop());
   }, []);
 
@@ -2615,6 +2680,62 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
               <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100">
                 Speakers identified by AI — please verify. Switch to plain text to edit.
               </p>
+            </div>
+          ) : isRecording && (liveLines.length > 0 || livePartial) ? (
+            /* ── Live: what was said, and under it what it means ──────────
+               Two rows per line, on purpose. The top row is the record — the
+               patient's own words, in their own language, because that is what a
+               clinical note of a conversation should be. The row under it is a
+               reading aid for a doctor who does not speak that language, and it
+               is never what gets saved. */
+            <div className="flex-1 w-full bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-24 flex flex-col">
+              <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3 bg-slate-50/60">
+                <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-red-600">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Live
+                </span>
+                <span className="ml-auto text-[11px] font-semibold text-slate-400">Meaning</span>
+                {/* Off by default: a doctor working in the patient's own language
+                    needs no second row, and one that repeats the line above it is
+                    noise pretending to be a feature. */}
+                <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                  {(['off', 'hi', 'en'] as MeaningLanguage[]).map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => { setMeaningLang(opt); sttRef.current?.setMeaning(opt); }}
+                      className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        meaningLang === opt ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt === 'off' ? 'Off' : opt === 'hi' ? 'हिंदी' : 'English'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {sttNote && (
+                <div className="px-5 py-2 text-[12px] text-amber-800 bg-amber-50 border-b border-amber-100">
+                  {sttNote}
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-3">
+                {liveLines.map((line) => (
+                  <div key={line.id}>
+                    <p className="text-[15px] leading-relaxed text-slate-800">{line.text}</p>
+                    {meaningLang !== 'off' && line.meaning && (
+                      <p className="text-[13px] leading-relaxed text-slate-500 mt-0.5 pl-3 border-l-2 border-slate-200">
+                        {line.meaning}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {livePartial && (
+                  /* The tail still being spoken. Greyed because it can still
+                     change — showing it as settled text would have the screen
+                     rewriting sentences the doctor has already read. */
+                  <p className="text-[15px] leading-relaxed text-slate-400 italic">{livePartial}</p>
+                )}
+              </div>
             </div>
           ) : (
             <textarea
