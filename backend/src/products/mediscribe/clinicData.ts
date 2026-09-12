@@ -9,7 +9,8 @@ import { forClinic } from '../../config/tenantPrisma.js';
 import { getPatients, createPatient } from '../../core/patients/patient.service.js';
 import { getDoctors, createDoctor, updateDoctor, deleteDoctor } from '../../core/doctors/doctor.service.js';
 import { getAppointments } from '../../core/appointments/appointment.service.js';
-import { clinicNow, labelToMinutes, clinicLocalInstant } from '../../services/slotMath.js';
+import { clinicNow, labelToMinutes, clinicLocalInstant, formatSlot } from '../../services/slotMath.js';
+import { AppError } from '../../utils/AppError.js';
 import { AppointmentStatus } from '@prisma/client';
 
 // MediScribe frontend patient shape.
@@ -382,6 +383,54 @@ export const scribeWindow = (
 /** When a doctor's schedule says nothing, a visit is half an hour. Same default
  *  the no-show sweep uses — the two must not disagree about when a slot ended. */
 const DEFAULT_SLOT_MIN = 30;
+
+/**
+ * Refuse to OPEN a session outside its visit's slot.
+ *
+ * The button rule lives in the app, which means it holds only for the version a
+ * doctor happens to have installed — an older build offers Start whenever it
+ * likes, and did. This is the same rule where it cannot be out of date.
+ *
+ * Checked on CREATION ONLY, and that is the whole design. A doctor who starts at
+ * 3:29 and writes for twenty minutes is still saving at 3:50; if the window were
+ * checked on every save, those saves would fail and the note would be lost —
+ * enforcing the rule by destroying the work it was meant to organise. The
+ * question this answers is "may this consultation BEGIN", asked once.
+ *
+ * Silent when the caller names no appointment: a walk-in has no slot, and
+ * refusing one would ban the commonest visit in an Indian clinic.
+ */
+export const assertScribeWindowOpen = async (clinicId: string, appointmentId?: string): Promise<void> => {
+  if (!appointmentId) return;
+
+  const appt = await forClinic(clinicId).appointment.findFirst({
+    where: { id: String(appointmentId) },
+    select: { doctorId: true, appointmentDate: true, appointmentTime: true }
+  });
+  // Not ours, or gone. Not this function's business to say so — the save path
+  // has its own answer for that, and inventing a second one here would give the
+  // same mistake two different error messages.
+  if (!appt) return;
+
+  const schedule = await forClinic(clinicId).doctorSchedule.findFirst({
+    where: { doctorId: appt.doctorId, dayOfWeek: appt.appointmentDate.getUTCDay(), isActive: true },
+    select: { slotMinutes: true }
+  });
+  const opens = clinicLocalInstant(appt.appointmentDate, appt.appointmentTime);
+  const closes = new Date(opens.getTime() + (schedule?.slotMinutes ?? DEFAULT_SLOT_MIN) * 60_000);
+
+  const state = scribeWindow(opens.toISOString(), closes.toISOString());
+  if (state === 'open') return;
+
+  const slotMin = schedule?.slotMinutes ?? DEFAULT_SLOT_MIN;
+  const endLabel = formatSlot((labelToMinutes(appt.appointmentTime) ?? 0) + slotMin);
+  throw new AppError(
+    state === 'early'
+      ? `This visit can be recorded from ${appt.appointmentTime}. It is not ${appt.appointmentTime} yet.`
+      : `The recording window for this visit (${appt.appointmentTime} to ${endLabel}) has closed.`,
+    409
+  );
+};
 
 export const listUpcomingAppointments = async (
   clinicId: string,

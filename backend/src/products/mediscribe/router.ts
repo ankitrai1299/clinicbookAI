@@ -37,12 +37,14 @@ import {
   usersRepo
 } from './repositories/index.js';
 import { logUsage, pushNotification } from './services/events.js';
+import { AppError } from '../../utils/AppError.js';
 import {
   listClinicPatients,
   createClinicPatient,
   findClinicPatientByPhone,
   listClinicDoctors,
   listUpcomingAppointments,
+  assertScribeWindowOpen,
   findDoctorForLogin
 } from './clinicData.js';
 import {
@@ -744,6 +746,12 @@ mediscribeRouter.post('/save-consultation', requirePermission('consultation.writ
     const existing = await consultationsRepo.findById(consultation.id);
     const isNew = !existing;
 
+    // May this consultation BEGIN? Asked once, at creation, and never again —
+    // see assertScribeWindowOpen. Checking it on every save would fail the
+    // auto-saves of a note started inside its window and written up after it,
+    // which is to say it would destroy the work the rule exists to organise.
+    if (isNew) await assertScribeWindowOpen(currentClinicId(), consultation.appointmentId);
+
     // Stamp the attending doctor once (the user who first records the session), and
     // backfill any legacy record that predates attribution. Never reassigned after.
     if (!(existing as { doctorId?: string } | null)?.doctorId && !consultation.doctorId) {
@@ -870,8 +878,15 @@ mediscribeRouter.post('/save-consultation', requirePermission('consultation.writ
       .catch((e) => console.error('[mediscribe:save-consultation] prescription send failed:', e));
     return res.json({ success: true });
   } catch (error) {
-    console.error('[mediscribe:save-consultation]', error);
-    return res.status(500).json({ error: 'Failed to save consultation' });
+    // A deliberate refusal must reach the doctor in its own words. This used to
+    // flatten everything into "Failed to save consultation" with a 500 — so the
+    // window guard, which has a specific and actionable message, would have
+    // arrived as a generic failure and read like a broken app.
+    const status = error instanceof AppError ? error.statusCode : 500;
+    if (status >= 500) console.error('[mediscribe:save-consultation]', error);
+    return res
+      .status(status)
+      .json({ error: status < 500 ? (error as AppError).message : 'Failed to save consultation' });
   }
 });
 
