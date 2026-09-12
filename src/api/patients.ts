@@ -97,6 +97,17 @@ export interface CareContextLinkResult {
 export const linkAbdmCareContexts = (id: string) =>
   apiFetch<CareContextLinkResult>(`/api/patients/${id}/abdm/link`, { method: 'POST' });
 
+/**
+ * Remove a patient who has no clinical history.
+ *
+ * The server refuses — 409, with a readable reason — for anyone who has an
+ * appointment on record: a visit that happened is part of the clinical record
+ * and is not a button's to delete. This is for duplicates, typos and the test
+ * entries somebody made while learning the screen.
+ */
+export const deletePatient = (id: string) =>
+  apiFetch<{ deleted: true }>(`/api/patients/${id}`, { method: 'DELETE' });
+
 export const getPatients = () => apiFetch<ApiPatient[]>('/api/patients');
 
 export const createPatient = (body: { name: string; phone: string; language: string }) =>

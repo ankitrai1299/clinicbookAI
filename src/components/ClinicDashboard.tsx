@@ -23,6 +23,7 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   Users,
   XCircle
 } from 'lucide-react';
@@ -42,7 +43,12 @@ import {
   completeAppointment as completeAppointmentApi,
   ApiAppointment
 } from '../api/appointments';
-import { getPatients as getPatientsApi, createPatient as createPatientApi, ApiPatient } from '../api/patients';
+import {
+  ApiPatient,
+  createPatient as createPatientApi,
+  deletePatient as deletePatientApi,
+  getPatients as getPatientsApi
+} from '../api/patients';
 import PatientRecordModal from './PatientRecordModal';
 import PatientAbhaModal from './PatientAbhaModal';
 import AbdmRegistration from './abdm/AbdmRegistration';
@@ -211,6 +217,31 @@ export default function ClinicDashboard({
   // Patient 360 record modal — the patient whose full record is open (id/code).
   const [recordPatientId, setRecordPatientId] = useState<string | null>(null);
   const [abhaPatient, setAbhaPatient] = useState<Patient | null>(null);
+
+  // Deleting a patient, for the records that are not history: a duplicate, a
+  // typo, a test entry from somebody learning the screen. The SERVER refuses
+  // anyone with an appointment — a visit that happened is a clinical record —
+  // so this button cannot destroy a history even if somebody means it to.
+  const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null);
+
+  const removePatient = async (p: Patient) => {
+    // A plain confirm, naming the person. The irreversible half of this is the
+    // server's to refuse; what a dialog can prevent is the misclick.
+    if (!window.confirm(`Delete ${p.name}? This cannot be undone.`)) return;
+
+    setDeletingPatientId(p.id);
+    try {
+      await deletePatientApi(p.id);
+      setPatients((list) => list.filter((x) => x.id !== p.id));
+      triggerToast(`${p.name} removed`);
+    } catch (e) {
+      // The server's wording is the useful one: it says how many appointments
+      // are on the record and why that stops the deletion.
+      triggerToast(e instanceof Error ? e.message : 'Could not delete this patient');
+    } finally {
+      setDeletingPatientId(null);
+    }
+  };
   const [apiDoctors, setApiDoctors] = useState<ApiDoctor[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
@@ -1556,12 +1587,29 @@ export default function ClinicDashboard({
                           </span>
                         </td>
                         <td className="py-3 px-2 text-right">
-                          <button
-                            onClick={() => setRecordPatientId(p.id)}
-                            className="px-2.5 py-1 bg-sky-600 border border-sky-600 text-white rounded text-[9px] cursor-pointer hover:bg-sky-700 font-bold"
-                          >
-                            View Record
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setRecordPatientId(p.id)}
+                              className="px-2.5 py-1 bg-sky-600 border border-sky-600 text-white rounded text-[9px] cursor-pointer hover:bg-sky-700 font-bold"
+                            >
+                              View Record
+                            </button>
+                            {/* Owners only, and quiet: an icon rather than a
+                                red button, because most rows are never meant to
+                                be deleted and a loud control on every one of
+                                them is an invitation. */}
+                            {!isStaff && (
+                              <button
+                                onClick={() => removePatient(p)}
+                                disabled={deletingPatientId === p.id}
+                                title={`Delete ${p.name}`}
+                                aria-label={`Delete ${p.name}`}
+                                className="p-1 text-slate-300 hover:text-rose-600 disabled:opacity-40 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

@@ -147,9 +147,34 @@ export const nativePatients = (clinicId: string): PatientPort => {
       });
     },
 
+    /**
+     * Remove a patient who has no clinical history.
+     *
+     * A patient WITH appointments cannot be deleted, and that is enforced by the
+     * database: Appointment.patient has no `onDelete`, so it restricts. That is
+     * the right place for the rule — a visit that happened is a clinical record
+     * the clinic is required to keep, and no button should be able to remove it.
+     *
+     * So this is for the records that are not history: a duplicate, a typo, a
+     * test entry made while learning the system. Erasing a real patient's record
+     * goes through core/rights instead, where a person decides in writing.
+     *
+     * The refusal is translated here because Prisma's own is a foreign-key
+     * violation naming a constraint, which tells a receptionist nothing.
+     */
     remove: async (id: string): Promise<void> => {
       const existing = await db.patient.findFirst({ where: { id, clinicId }, select: { id: true } });
       if (!existing) throw new AppError('Patient not found', 404);
+
+      const visits = await db.appointment.count({ where: { patientId: id } });
+      if (visits > 0) {
+        throw new AppError(
+          `This patient has ${visits} appointment${visits === 1 ? '' : 's'} on record and cannot be deleted. ` +
+            'A visit that happened is part of the clinical record.',
+          409
+        );
+      }
+
       await db.patient.delete({ where: { id, clinicId } });
     }
   };
