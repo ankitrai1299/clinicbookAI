@@ -20,7 +20,16 @@
  */
 
 const APPLY = process.argv.includes('--apply');
-const PRUNE = process.argv.includes('--prune');
+// Deleting accounts is named, never inferred. `--prune` on its own would mean
+// "remove whatever this run happens to consider orphaned", and what a run
+// considers orphaned depends on what it just did. `--delete=a@x,b@y` states the
+// exact addresses, they are checked against the orphan list before anything is
+// removed, and an address that is NOT an orphan is refused rather than obeyed.
+const DELETE_ARG = process.argv.find((a) => a.startsWith('--delete='))?.slice('--delete='.length);
+const TO_DELETE = (DELETE_ARG ?? '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
 const CLINIC_ARG = process.argv.find((a) => a.startsWith('--clinic='))?.slice('--clinic='.length);
 const PASSWORD = process.env.DOCTOR_PASSWORD || '123456';
 const DOMAIN = process.env.DOCTOR_EMAIL_DOMAIN || 'nextdoc.in';
@@ -141,14 +150,30 @@ const main = async () => {
   console.log(`\n  ${orphans.length} DOCTOR account(s) linked to no doctor:`);
   for (const o of orphans) console.log(`      ${o.email}  (${o.name})`);
 
-  if (orphans.length && PRUNE && APPLY) {
-    // Safe at the schema level: Doctor.userId is SetNull, and EmailOtp,
-    // AiConversation and AppPassword cascade. AuditLog keeps a plain string, so
-    // the trail of what these accounts did survives them.
-    const { count } = await prisma.user.deleteMany({ where: { id: { in: orphans.map((o) => o.id) } } });
-    console.log(`  deleted ${count}`);
-  } else if (orphans.length && !PRUNE) {
-    console.log('  (add --prune to delete them)');
+  if (TO_DELETE.length) {
+    const byEmail = new Map(orphans.map((o) => [o.email.toLowerCase(), o]));
+    const unknown = TO_DELETE.filter((e) => !byEmail.has(e));
+    if (unknown.length) {
+      console.error('');
+      console.error(`  REFUSED — not on the orphan list above: ${unknown.join(', ')}`);
+      console.error('  Only accounts that no doctor is linked to can be deleted here.');
+      console.error('');
+      process.exitCode = 1;
+      return;
+    }
+    const targets = TO_DELETE.map((e) => byEmail.get(e)!);
+    console.log('');
+    console.log(`  ${APPLY ? 'Deleting' : 'Would delete'} ${targets.length}:`);
+    for (const t of targets) console.log(`      ${t.email}`);
+    if (APPLY) {
+      // Safe at the schema level: Doctor.userId is SetNull, and EmailOtp,
+      // AiConversation and AppPassword cascade. AuditLog keeps a plain string,
+      // so the trail of what these accounts did survives them.
+      const { count } = await prisma.user.deleteMany({ where: { id: { in: targets.map((t) => t.id) } } });
+      console.log(`  deleted ${count}`);
+    }
+  } else if (orphans.length) {
+    console.log('  (pass --delete=<email,email> to remove them)');
   }
 
   console.log('');
