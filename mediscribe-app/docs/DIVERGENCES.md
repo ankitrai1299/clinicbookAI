@@ -69,10 +69,44 @@ needs its **own** Firebase Android app. One is not enough for both.
 
 ---
 
+## The booked day on the dashboard (12 Sep 2026)
+
+**This is a screen change, and the rule above says screens are not touched. It
+was taken deliberately, and here is the reason.**
+
+ClinicBook takes the booking; this app writes the note. The two halves had never
+met: a patient booked over WhatsApp appeared NOWHERE in this app. The doctor was
+told out loud that somebody was coming, then opened "New Consultation" and found
+or re-typed a patient the system already knew about. The web scribe has had the
+queue for months; the Android app, which is what doctors actually carry, did not
+— and that gap cost two rounds of "the doctor can't see the booking", each of
+which looked like a bug in the backend and was not.
+
+What was added, and nothing else:
+
+- `src/services/api.ts` — `getUpcomingAppointments()` and `getDoctorLinkStatus()`
+  against `/api/doctor/appointments/*`. Both swallow failure and return a safe
+  default: an unreachable network must leave the dashboard standing.
+- `app/(tabs)/index.tsx` — two sections between the hero and Practice Overview:
+  **Today's Queue** (tap starts a session already attached to that patient) and
+  a read-only **Upcoming Appointments**. Plus a warning when the login matches no
+  doctor record, because an empty queue and a broken link look identical and only
+  one of them is the doctor's fault.
+
+No new dependency, no navigation change, no restyling, and the printed report is
+untouched. Strings go through `t(key, 'English default')` so untranslated locales
+read English rather than a raw key.
+
+Backend: none needed. `/api/doctor` and `/api/mediscribe` are the same router, so
+these routes already existed and already scope themselves to the signed-in
+doctor. Verified live against production before shipping.
+
+---
+
 ## What has NOT been changed, and must not be
 
 - **The printed report.** Untouched. It is the most fragile part of this app and
   the reason the byte-for-byte rule exists.
-- Screens, navigation, styling, fonts, spacing.
+- Navigation, styling, fonts, spacing. (Screens: one, above, with its reason.)
 - Any dependency version. Both additions came from `npx expo install`, which
   resolves against the pinned SDK rather than the latest.

@@ -11,7 +11,13 @@ import { loadSettings } from '../../src/services/storage';
 import { useDateFilter } from '../../src/context/DateFilter';
 import DateRangeBar from '../../src/components/DateRangeBar';
 import { rangeQuery, previousRange } from '../../src/utils/dateRange';
-import { fetchAnalytics, type DoctorAnalytics } from '../../src/services/api';
+import {
+  fetchAnalytics,
+  getUpcomingAppointments,
+  getDoctorLinkStatus,
+  type DoctorAnalytics,
+  type UpcomingAppointment,
+} from '../../src/services/api';
 import {
   Card,
   SearchBar,
@@ -46,7 +52,7 @@ const greetingKey = (): string => {
 export default function Dashboard() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { consultations, loading, reload } = useAppData();
+  const { consultations, loading, reload, startSessionForPatient } = useAppData();
   const [query, setQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [profileName, setProfileName] = useState('');
@@ -76,6 +82,19 @@ export default function Dashboard() {
   // trend simply appears once this resolves, and its absence never blocks them.
   const [prevAnalytics, setPrevAnalytics] = useState<DoctorAnalytics | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+
+  // ── The booked day ─────────────────────────────────────────
+  // Loaded beside the analytics and refreshed by the same pull-to-refresh. It is
+  // the doctor's actual starting point — one tap opens a session already
+  // attached to the right patient, instead of finding them in a list.
+  const [upcoming, setUpcoming] = useState<UpcomingAppointment[]>([]);
+  const [linked, setLinked] = useState(true);
+  useEffect(() => {
+    let active = true;
+    getUpcomingAppointments().then((a) => { if (active) setUpcoming(a); });
+    getDoctorLinkStatus().then((s) => { if (active) setLinked(s.linked !== false); });
+    return () => { active = false; };
+  }, [loading, consultations.length]);
   const analyticsQuery = rangeQuery(range);
   const prevQuery = rangeQuery(previousRange(range));
 
@@ -145,6 +164,27 @@ export default function Dashboard() {
 
   const firstName = (doctorName || 'Doctor').replace(/^Dr\.?\s*/i, '').split(' ')[0] || 'Doctor';
 
+  // 'en-CA' is the shortest honest way to get a local YYYY-MM-DD; toISOString()
+  // would answer in UTC, which after 05:30 IST is a different day.
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todaysQueue = upcoming.filter((a) => a.date === todayStr);
+  const laterAppointments = upcoming.filter((a) => a.date !== todayStr).slice(0, 5);
+
+  // "2026-09-12" -> "12 Sep". Rendered in UTC so the day cannot slip backwards.
+  const prettyDate = (ymd: string): string => {
+    const d = new Date(`${ymd}T00:00:00Z`);
+    return Number.isNaN(d.getTime())
+      ? ymd
+      : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  };
+
+  // The whole point of showing the appointment: the session opens already
+  // attached to that patient, so nobody re-types a name that is already known.
+  const scribeAppointment = (a: UpcomingAppointment) => {
+    const con = startSessionForPatient(a.patientId, a.patientName);
+    router.push(`/consultation/${con.id}?mode=record`);
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={['top']}>
       <ScrollView
@@ -200,6 +240,87 @@ export default function Dashboard() {
             </View>
           </Card>
         </TouchableOpacity>
+
+        {/* This login matches no doctor record. Without saying so, the queue
+            below is simply empty — which reads as "nobody booked today" and is
+            the one failure the doctor can neither see nor fix. */}
+        {!linked && (
+          <Card className="p-4 mt-4 flex-row items-start" elevation="sm">
+            <Ionicons name="warning-outline" size={18} color={colors.warningDark} />
+            <View className="flex-1 ml-2.5">
+              <Text className="font-bold text-slate-900 text-[14px]">
+                {t('dashboard.notLinkedTitle', 'Your appointments aren’t linked yet')}
+              </Text>
+              <Text className="text-[12.5px] text-slate-500 mt-1 leading-5">
+                {t(
+                  'dashboard.notLinkedBody',
+                  'This login isn’t matched to a doctor record, so your booked patients can’t be shown. Ask your clinic admin to link it.',
+                )}
+              </Text>
+            </View>
+          </Card>
+        )}
+
+        {/* Today's queue — the booked patients, soonest first. One tap starts
+            that patient's consultation. */}
+        {todaysQueue.length > 0 && (
+          <View className="mt-6">
+            <SectionHeader
+              icon="calendar-outline"
+              title={t('dashboard.todaysQueue', "Today's Queue")}
+            />
+            <View className="gap-2.5">
+              {todaysQueue.map((a) => (
+                <TouchableOpacity key={a.id} onPress={() => scribeAppointment(a)} activeOpacity={0.7}>
+                  <Card className="flex-row items-center p-3.5" elevation="sm">
+                    <Avatar name={a.patientName} />
+                    <View className="flex-1 ml-3">
+                      <Text className="font-bold text-slate-900 text-[15px]" numberOfLines={1}>
+                        {a.patientName}
+                      </Text>
+                      <View className="flex-row items-center mt-0.5">
+                        <Ionicons name="time-outline" size={12} color={colors.slate400} />
+                        <Text className="text-xs text-slate-500 ml-1">{a.time}</Text>
+                      </View>
+                    </View>
+                    <View className="flex-row items-center gap-1.5 bg-brand-500 rounded-xl px-3.5 py-2">
+                      <Ionicons name="mic" size={14} color={colors.white} />
+                      <Text className="text-white font-semibold text-[13px]">
+                        {t('dashboard.start', 'Start')}
+                      </Text>
+                    </View>
+                  </Card>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Later days — visible but quiet: knowing tomorrow is full is useful,
+            starting tomorrow's consultation today is not. */}
+        {laterAppointments.length > 0 && (
+          <View className="mt-6">
+            <SectionHeader
+              icon="calendar-outline"
+              title={t('dashboard.upcomingAppointments', 'Upcoming Appointments')}
+            />
+            <View className="gap-2.5">
+              {laterAppointments.map((a) => (
+                <Card key={a.id} className="flex-row items-center p-3.5" elevation="sm">
+                  <Avatar name={a.patientName} />
+                  <View className="flex-1 ml-3">
+                    <Text className="font-bold text-slate-900 text-[15px]" numberOfLines={1}>
+                      {a.patientName}
+                    </Text>
+                    <Text className="text-xs text-slate-500 mt-0.5" numberOfLines={1}>
+                      {prettyDate(a.date)}, {a.time}
+                    </Text>
+                  </View>
+                </Card>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Practice Overview — section heading, then the compact period filter. */}
         <Text className="text-[17px] font-bold text-slate-900 tracking-tight mt-7 mb-3">

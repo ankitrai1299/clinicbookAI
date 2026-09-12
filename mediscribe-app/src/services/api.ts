@@ -687,6 +687,72 @@ export async function getPatients(): Promise<Patient[]> {
   return res.json();
 }
 
+// ── The booked day ────────────────────────────────────────────
+// ClinicBook takes the booking; the scribe writes the note. Until now those two
+// halves never met on this screen: a patient booked by WhatsApp appeared nowhere
+// in the app, so the doctor had to be told out loud that somebody was coming and
+// then find or re-type them under "New Consultation".
+//
+// The route is the same one the web scribe uses, and it scopes itself to the
+// signed-in doctor server-side — this app cannot ask for anybody else's day.
+
+export interface UpcomingAppointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  doctorId: string;
+  doctorName: string;
+  speciality?: string;
+  /** Clinic-local calendar day, YYYY-MM-DD. */
+  date: string;
+  /** "09:30 AM" — as the clinic wrote it, not re-derived here. */
+  time: string;
+}
+
+/**
+ * Today's and future appointments for the signed-in doctor, soonest first.
+ *
+ * Returns [] on any failure rather than throwing: an unreachable network must
+ * leave the dashboard standing. The difference between "nothing booked" and
+ * "could not ask" is carried by the link status below, which is the case that
+ * actually misleads people.
+ */
+export async function getUpcomingAppointments(): Promise<UpcomingAppointment[]> {
+  try {
+    const res = await fetch(`${DOCTOR}/appointments/upcoming`, authed());
+    if (!res.ok) return [];
+    const body = await res.json();
+    return Array.isArray(body) ? body : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface DoctorLinkStatus {
+  linked: boolean;
+  role: string;
+  email?: string;
+  doctorName?: string | null;
+}
+
+/**
+ * Is this login attached to a doctor record in ClinicBook?
+ *
+ * An empty queue is ambiguous — nobody booked, or the login matches no doctor —
+ * and the two look identical on screen. They are not the same thing: the second
+ * is a fault the doctor cannot see, cannot fix, and will read as "the app is
+ * broken". Assume linked on failure, so a blip never accuses a working account.
+ */
+export async function getDoctorLinkStatus(): Promise<DoctorLinkStatus> {
+  try {
+    const res = await fetch(`${DOCTOR}/appointments/link-status`, authed());
+    if (!res.ok) return { linked: true, role: 'doctor' };
+    return await res.json();
+  } catch {
+    return { linked: true, role: 'doctor' };
+  }
+}
+
 export async function getConsultations(): Promise<Consultation[]> {
   const res = await fetch(`${DOCTOR}/consultations`, authed());
   await ensureOk(res, 'Failed to fetch consultations');
