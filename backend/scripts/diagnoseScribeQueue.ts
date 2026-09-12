@@ -72,6 +72,21 @@ const main = async () => {
         `      ...${u.id.slice(-6)}  ${u.email.padEnd(30)} ${u.role.padEnd(13)} ${String(u.name ?? '').padEnd(20)} ${u.createdAt.toISOString().slice(0, 10)}`
       );
     }
+    // The scribe keeps its OWN role per user, in the NovaDoc `users` collection,
+    // and `/me` prefers it over the ClinicBook one. A stale value there changes
+    // what the app shows without anything in ClinicBook looking wrong.
+    const scribeUsers = await prisma.novaDoc.findMany({
+      where: { clinicId, collection: 'users' },
+      select: { id: true, data: true }
+    });
+    const scribeRole = new Map(
+      scribeUsers.map((r) => [r.id, String((r.data as Record<string, unknown>)?.role ?? '?')])
+    );
+    console.log('  Role the SCRIBE stores for each login (blank = falls through to ClinicBook):');
+    for (const u of users) {
+      console.log(`      ${u.email.padEnd(30)} ClinicBook ${u.role.padEnd(13)} scribe ${scribeRole.get(u.id) ?? '(none)'}`);
+    }
+
     console.log('  What each login would see in the scribe queue:');
     for (const u of users) {
       const doc = await findDoctorForLogin(clinicId, u.email, u.id);
