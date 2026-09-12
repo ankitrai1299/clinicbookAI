@@ -25,6 +25,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { verifyAccessToken } from '../../config/jwt.js';
 import { tokenVersionValid } from '../../core/auth/session.service.js';
 import { openLiveStt, availableProviders, type LiveSttSession } from './services/liveStt/index.js';
+import { restoreLatinTerms } from './services/devanagariTerms.js';
 
 export const LIVE_STT_PATH = '/api/mediscribe/stt/stream';
 
@@ -129,7 +130,15 @@ const handle = (ws: WebSocket, who: Principal): void => {
         {
           onOpen: () => say(ws, { type: 'ready', provider: session?.provider }),
           onEvent: (e) =>
-            say(ws, { type: e.final ? 'final' : 'partial', text: e.text, language: e.language }),
+            say(ws, {
+              type: e.final ? 'final' : 'partial',
+              // Drug and test names go back into Latin, but only on a FINISHED
+              // line. A partial is half a word — "पैराs" matches nothing, and a
+              // name that rewrote itself twice while the doctor watched would
+              // look like the transcript was arguing with itself.
+              text: e.final ? restoreLatinTerms(e.text) : e.text,
+              language: e.language
+            }),
           onError: (err) => {
             console.error(`[liveStt] clinic ${who.clinicId}:`, err.message);
             // The message is ours, not the provider's. A vendor error string on a
