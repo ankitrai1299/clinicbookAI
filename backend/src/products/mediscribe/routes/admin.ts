@@ -105,9 +105,12 @@ router.get('/doctors', requirePermission('doctors.view'), async (req, res) => {
 // No email or no password → no login, and we SAY so in the response rather than
 // returning silently. A bookable doctor with no login is a legitimate thing to
 // want; a doctor the admin THINKS has a login and doesn't is the bug.
-type LoginResult = { login: 'created' | 'updated' | 'skipped'; reason?: string };
+export type LoginResult = { login: 'created' | 'updated' | 'skipped'; reason?: string };
 
-async function giveDoctorLogin(
+// Exported so a script can hand out logins in bulk through the SAME code path
+// the admin screen uses. A second implementation would drift, and the thing that
+// would drift is the link — which is the whole point of this function.
+export async function giveDoctorLogin(
   clinicId: string,
   doctor: { id: string; name: string; email?: string | null },
   emailInput?: string,
