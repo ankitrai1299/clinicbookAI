@@ -68,7 +68,7 @@
           ]
         }
       ],
-      "@siteed/expo-audio-studio"
+      "@siteed/audio-studio"
     ],
     "experiments": {
       "typedRoutes": true,
