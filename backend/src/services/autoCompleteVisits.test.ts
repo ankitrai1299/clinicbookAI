@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 // Everything else the cron does hangs off this one comparison — get it wrong and
 // visits either close while the patient is still in the room, or never close at
 // all. Clinic time is Asia/Kolkata (UTC+5:30).
-import { slotEndInstant } from './autoCompleteVisits.service';
+import { dateStrOf, noteDateStr, slotEndInstant } from './autoCompleteVisits.service';
 
 // Appointment dates are stored at midnight UTC (see normalizeDate).
 const day = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
@@ -92,5 +92,60 @@ describe('no-show grace', () => {
     // A 15-minute consultation is a no-show 45 minutes in, not 60.
     const appt = { appointmentDate: day('2026-08-04'), appointmentTime: '12:00 PM' };
     expect(slotEndInstant(appt, 15 + GRACE)).toEqual(new Date('2026-08-04T07:15:00.000Z'));
+  });
+});
+
+// ── The note's date ────────────────────────────────────────────────────────
+//
+// A real incident, 12 Sep 2026. Ankit Kumar Rai was scribed on the 8th. On the
+// 12th he had another booking. The sweep asked "does this PATIENT have a
+// finished note?", found the one from the 8th, and marked the 12th COMPLETED —
+// a visit nobody attended, recorded as done, while the doctor's queue lost it
+// thirty minutes after the slot and they never saw it at all.
+//
+// A visit recorded as done is also a visit that can be pushed into that
+// person's national health record, where it cannot be taken back.
+
+describe('noteDateStr', () => {
+  it('reads the format the scribe actually writes', () => {
+    // The browser's own d/m/yyyy in India, and unpadded.
+    expect(noteDateStr('18/8/2026')).toBe('2026-08-18');
+    expect(noteDateStr('8/9/2026')).toBe('2026-09-08');
+    expect(noteDateStr('08/09/2026')).toBe('2026-09-08');
+  });
+
+  it('reads day first, not month', () => {
+    // Reading "12/9/2026" as December would move a consultation by months, and
+    // every date below 13 would look plausible either way.
+    expect(noteDateStr('12/9/2026')).toBe('2026-09-12');
+    expect(noteDateStr('31/12/2026')).toBe('2026-12-31');
+  });
+
+  it('accepts ISO, which a future writer may store', () => {
+    expect(noteDateStr('2026-09-08')).toBe('2026-09-08');
+    expect(noteDateStr('2026-09-08T04:25:02.000Z')).toBe('2026-09-08');
+  });
+
+  it('returns null rather than a guess', () => {
+    // The caller treats null as "belongs to no day", which lands the visit on
+    // NO_SHOW — correctable by a human. A guess lands it on COMPLETED, which
+    // is not.
+    for (const bad of ['', '   ', 'today', '18-8-2026', '32/8/2026', '18/13/2026', '8/9/26', null, undefined, 42]) {
+      expect(noteDateStr(bad), String(bad)).toBeNull();
+    }
+  });
+});
+
+describe('dateStrOf', () => {
+  it('reads the clinic day off an appointment', () => {
+    // Stored at UTC midnight for a clinic-local day, so the UTC calendar day IS
+    // the clinic's day.
+    expect(dateStrOf(new Date('2026-09-12T00:00:00.000Z'))).toBe('2026-09-12');
+  });
+
+  it('lines up with a note written on the same day', () => {
+    // The pairing the sweep depends on. If these two ever disagree on format,
+    // every visit becomes a no-show.
+    expect(dateStrOf(new Date('2026-09-08T00:00:00.000Z'))).toBe(noteDateStr('8/9/2026'));
   });
 });

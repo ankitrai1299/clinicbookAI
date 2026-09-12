@@ -51,6 +51,53 @@ const DEFAULT_SLOT_MIN = 30; // when a doctor's schedule doesn't specify one
  */
 const NO_SHOW_GRACE_MIN = 30;
 
+/**
+ * PURE: the day an appointment is for, as YYYY-MM-DD.
+ *
+ * Appointment dates are stored at UTC midnight for a clinic-local day, so the
+ * UTC calendar day IS the clinic's day — going through a timezone here would
+ * shift it.
+ */
+export const dateStrOf = (d: Date): string => d.toISOString().slice(0, 10);
+
+/**
+ * PURE: the day a scribe note is for, as YYYY-MM-DD.
+ *
+ * The scribe writes `date` with the browser's own formatting, which in India is
+ * `d/m/yyyy` and unpadded — "18/8/2026", not "18/08/2026". Day comes first;
+ * reading it as m/d would move a consultation by months.
+ *
+ * Anything it cannot read returns null, and the caller treats that as "belongs
+ * to no day" rather than guessing at one.
+ */
+export const noteDateStr = (raw: unknown): string | null => {
+  const v = String(raw ?? '').trim();
+  if (!v) return null;
+
+  // d/m/yyyy or dd/mm/yyyy, the scribe's own format.
+  const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    const day = Number(d);
+    const month = Number(m);
+    if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+    return `${y}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  // An ISO date, or an ISO timestamp — accepted because a future writer may
+  // store one and the rest of this file already speaks ISO.
+  const iso = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)/.exec(v);
+  if (iso) {
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+    return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  }
+
+  return null;
+};
+
+
 const to12h = (hhmm: string): string => {
   const [h, m] = hhmm.split(':').map(Number);
   const ap = h >= 12 ? 'PM' : 'AM';
@@ -190,6 +237,13 @@ export const processAutoCompleteVisits = async (): Promise<void> => {
     if (!byClinic.has(a.clinicId)) byClinic.set(a.clinicId, []);
     byClinic.get(a.clinicId)!.push(a.patientId);
   }
+  //
+  // Keyed by clinic|patient|DATE, not clinic|patient. Without the date, one
+  // finished consultation completed every future appointment that patient ever
+  // had: a note from the 8th closed a booking on the 12th, the doctor never saw
+  // it in their queue, and a visit nobody attended was recorded as done — and a
+  // visit recorded as done can be pushed into that person's national health
+  // record, where it cannot be taken back.
   const hasFinalizedScribe = new Set<string>();
   for (const [clinicId, patientIds] of byClinic) {
     const rows = await prisma.novaDoc.findMany({
@@ -197,17 +251,21 @@ export const processAutoCompleteVisits = async (): Promise<void> => {
       select: { patientId: true, data: true }
     });
     for (const r of rows) {
-      const d = r.data as { status?: string; report?: unknown } | null;
-      if (r.patientId && d?.status === 'Completed' && d?.report) {
-        hasFinalizedScribe.add(`${clinicId}|${r.patientId}`);
-      }
+      const d = r.data as { status?: string; report?: unknown; date?: unknown } | null;
+      if (!r.patientId || d?.status !== 'Completed' || !d?.report) continue;
+
+      const on = noteDateStr(d.date);
+      // A finished note with no readable date cannot be attributed to a day, so
+      // it attributes to none. That lands the visit on NO_SHOW, which a human
+      // can correct; the other direction cannot be undone.
+      if (on) hasFinalizedScribe.add(`${clinicId}|${r.patientId}|${on}`);
     }
   }
 
   // ── Decide + complete ────────────────────────────────────────────────────
   for (const a of ended) {
     try {
-      if (!hasFinalizedScribe.has(`${a.clinicId}|${a.patientId}`)) {
+      if (!hasFinalizedScribe.has(`${a.clinicId}|${a.patientId}|${dateStrOf(a.appointmentDate)}`)) {
         // No note anywhere for this patient, so there is nothing to attribute
         // and the same-day ambiguity below cannot arise: if they had two
         // bookings that day, they missed both.
