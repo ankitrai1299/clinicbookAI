@@ -26,6 +26,7 @@ import { verifyAccessToken } from '../../config/jwt.js';
 import { tokenVersionValid } from '../../core/auth/session.service.js';
 import { openLiveStt, availableProviders, type LiveSttSession } from './services/liveStt/index.js';
 import { restoreLatinTerms } from './services/devanagariTerms.js';
+import { meaningOf, isMeaningLanguage, type MeaningLanguage } from './services/liveMeaning.js';
 
 export const LIVE_STT_PATH = '/api/mediscribe/stt/stream';
 
@@ -109,6 +110,15 @@ export const attachLiveSttGateway = (server: Server): void => {
 const handle = (ws: WebSocket, who: Principal): void => {
   let session: LiveSttSession | null = null;
   let bytes = 0;
+  // What the doctor wants on the second line. Off until asked: a doctor working
+  // in the patient's own language needs no translation, and a row that repeats
+  // the line above it is noise pretending to be a feature.
+  let meaning: MeaningLanguage = 'off';
+  // Finished lines are numbered so a meaning can find its line again. It arrives
+  // a second or two later, by which time the doctor is two sentences on — with
+  // no id the client would have to guess, and would guess wrong exactly when the
+  // patient is talking fast.
+  let seq = 0;
 
   // A socket that is opened and then forgotten holds an upstream session open
   // and bills for it. Consultations end; sockets sometimes do not.
@@ -129,16 +139,32 @@ const handle = (ws: WebSocket, who: Principal): void => {
       session = openLiveStt(
         {
           onOpen: () => say(ws, { type: 'ready', provider: session?.provider }),
-          onEvent: (e) =>
-            say(ws, {
-              type: e.final ? 'final' : 'partial',
-              // Drug and test names go back into Latin, but only on a FINISHED
-              // line. A partial is half a word — "पैराs" matches nothing, and a
-              // name that rewrote itself twice while the doctor watched would
-              // look like the transcript was arguing with itself.
-              text: e.final ? restoreLatinTerms(e.text) : e.text,
-              language: e.language
-            }),
+          onEvent: (e) => {
+            if (!e.final) {
+              say(ws, { type: 'partial', text: e.text, language: e.language });
+              return;
+            }
+            // Drug and test names go back into Latin, but only on a FINISHED
+            // line. A partial is half a word — "पैराs" matches nothing, and a
+            // name that rewrote itself twice while the doctor watched would look
+            // like the transcript was arguing with itself.
+            const text = restoreLatinTerms(e.text);
+            const id = ++seq;
+            say(ws, { type: 'final', id, text, language: e.language });
+
+            // Deliberately not awaited. The transcript is what the doctor is
+            // watching; a meaning that lands two seconds later is useful, a
+            // transcript that stutters while waiting for one is not.
+            void meaningOf(text, meaning, e.language)
+              .then((m) => {
+                if (m) say(ws, { type: 'meaning', id, text: m, language: meaning });
+              })
+              .catch(() => {
+                // Already logged where it happened. A missing second row is the
+                // correct outcome here — never an error on a doctor's screen for
+                // something they did not ask for and cannot act on.
+              });
+          },
           onError: (err) => {
             console.error(`[liveStt] clinic ${who.clinicId}:`, err.message);
             // The message is ours, not the provider's. A vendor error string on a
@@ -164,7 +190,7 @@ const handle = (ws: WebSocket, who: Principal): void => {
       return;
     }
 
-    let msg: { type?: string; language?: string };
+    let msg: { type?: string; language?: string; meaning?: string };
     try {
       msg = JSON.parse(data.toString());
     } catch {
@@ -173,7 +199,16 @@ const handle = (ws: WebSocket, who: Principal): void => {
     // `start` is optional — audio alone opens a session. It exists so a client
     // that knows the language (a doctor who set it) can say so before speaking,
     // which is the difference between Sarvam being useful and being useless.
-    if (msg.type === 'start') return begin(msg.language);
+    if (msg.type === 'start') {
+      if (isMeaningLanguage(msg.meaning)) meaning = msg.meaning;
+      return begin(msg.language);
+    }
+    // Changing the second line mid-consultation must not disturb the first one.
+    // A doctor switching Hindi to English should not lose the recording to do it.
+    if (msg.type === 'meaning' && isMeaningLanguage(msg.language)) {
+      meaning = msg.language;
+      return;
+    }
     if (msg.type === 'stop') {
       stop();
       say(ws, { type: 'stopped' });
