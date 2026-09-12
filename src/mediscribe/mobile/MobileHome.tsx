@@ -49,6 +49,9 @@ interface MobileHomeProps {
    *  empty for a reason the doctor cannot see or fix themselves. */
   doctorLinked?: boolean;
   loginEmail?: string;
+  /** Whether this account may RECORD a consultation. An admin watches the diary;
+   *  the note belongs to the doctor who was in the room. */
+  canScribe?: boolean;
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
@@ -82,6 +85,7 @@ export default function MobileHome({
   upcomingAppointments = [],
   doctorLinked = true,
   loginEmail,
+  canScribe = true,
   onStartNew,
   onSelectConsultation,
   onScribeAppointment,
@@ -194,6 +198,7 @@ export default function MobileHome({
 
       {/* Hero — a calm white card. Colour appears only on the action and the mic
           disc, never as a full coloured slab. */}
+      {canScribe && (
       <Card className="p-5 flex items-center" onClick={onStartNew}>
         <div className="flex-1 pr-3 min-w-0">
           <div className="text-[12px] font-semibold text-[#5B5CEB] uppercase tracking-wide">{t('dashboard.startNew')}</div>
@@ -208,9 +213,10 @@ export default function MobileHome({
           <Mic size={28} color={BRAND} />
         </span>
       </Card>
+      )}
 
       {/* Quick Rx — prescribe without recording (refills, two-minute visits) */}
-      {onQuickRx && (
+      {canScribe && onQuickRx && (
         <button
           onClick={onQuickRx}
           className="w-full flex items-center justify-center gap-2 mt-3 py-3 rounded-2xl bg-white border border-[#E8ECF2] text-slate-700 font-semibold text-[14px] active:bg-slate-50 transition-colors"
@@ -253,7 +259,11 @@ export default function MobileHome({
           )}
           <div className="space-y-2.5">
             {todaysQueue.slice(0, 4).map((a) => (
-              <Card key={a.id} className="flex items-center p-3.5" onClick={() => onScribeAppointment?.(a)}>
+              <Card
+                key={a.id}
+                className="flex items-center p-3.5"
+                onClick={canScribe ? () => onScribeAppointment?.(a) : undefined}
+              >
                 <Avatar name={a.patientName} size={40} />
                 <div className="flex-1 min-w-0 ml-3">
                   <div className="font-bold text-slate-900 text-[15px] truncate">{a.patientName}</div>
@@ -261,9 +271,11 @@ export default function MobileHome({
                     <Clock size={12} /> {a.time}
                   </div>
                 </div>
-                <span className="flex-shrink-0 inline-flex items-center gap-1.5 bg-[#5B5CEB] text-white px-3.5 py-2 rounded-xl font-semibold text-[13px]">
-                  <Mic size={14} /> {t('dashboard.start')}
-                </span>
+                {canScribe && (
+                  <span className="flex-shrink-0 inline-flex items-center gap-1.5 bg-[#5B5CEB] text-white px-3.5 py-2 rounded-xl font-semibold text-[13px]">
+                    <Mic size={14} /> {t('dashboard.start')}
+                  </span>
+                )}
               </Card>
             ))}
           </div>

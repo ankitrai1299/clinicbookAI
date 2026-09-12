@@ -16,6 +16,14 @@ interface DashboardViewProps {
   // empty for a reason the doctor cannot see or fix themselves.
   doctorLinked?: boolean;
   loginEmail?: string;
+  /** Whether this account may RECORD a consultation, not merely see the diary.
+   *
+   *  Scribing belongs to the doctor who was in the room. An admin runs the desk:
+   *  they need to know who is coming and when, and they need it for every doctor
+   *  — but a note in a patient's record signed by the person who never examined
+   *  them is a false clinical document, so the admin gets the list without the
+   *  button. */
+  canScribe?: boolean;
   onStartNew: () => void;
   onSelectConsultation: (con: Consultation) => void;
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
@@ -40,6 +48,7 @@ export default function DashboardView({
   roleLabel,
   doctorLinked = true,
   loginEmail,
+  canScribe = true,
   onStartNew,
   onSelectConsultation,
   onScribeAppointment,
@@ -115,14 +124,18 @@ export default function DashboardView({
               <>
                 <span className="text-slate-800 font-semibold">{signedInName}</span>
                 {roleLabel && <span className="text-slate-400"> · {roleLabel}</span>}
-                <span className="hidden sm:inline"> — ready for your next patient?</span>
+                <span className="hidden sm:inline">
+                  {canScribe ? ' — ready for your next patient?' : ' — today across the clinic'}
+                </span>
               </>
             ) : (
               'Ready for your next patient?'
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        {/* Recording actions belong to the doctor. An admin sees the diary and
+            nothing that would put their name on somebody else's consultation. */}
+        <div className={`flex items-center gap-3 ${canScribe ? '' : 'hidden'}`}>
           {onQuickRx && (
             <button
               onClick={onQuickRx}
@@ -165,17 +178,23 @@ export default function DashboardView({
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
           <div className="p-5 border-b border-slate-100 flex items-center gap-2 bg-gradient-to-r from-blue-50/80 to-transparent">
             <CalendarClock size={18} className="text-blue-600" />
-            <h2 className="font-semibold text-lg text-slate-800">Today's Queue</h2>
+            <h2 className="font-semibold text-lg text-slate-800">
+              {canScribe ? "Today's Queue" : "Today's Appointments"}
+            </h2>
             <span className="ml-auto text-xs font-bold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">
-              {todaysQueue.length} waiting
+              {todaysQueue.length} {canScribe ? 'waiting' : 'booked'}
             </span>
           </div>
           <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto custom-scrollbar">
             {todaysQueue.map((a) => (
-              <button
+              <div
                 key={a.id}
-                onClick={() => onScribeAppointment?.(a)}
-                className="w-full p-4 sm:px-5 flex items-center gap-4 hover:bg-blue-50/40 transition-colors text-left group cursor-pointer"
+                onClick={canScribe ? () => onScribeAppointment?.(a) : undefined}
+                role={canScribe ? 'button' : undefined}
+                tabIndex={canScribe ? 0 : undefined}
+                className={`w-full p-4 sm:px-5 flex items-center gap-4 transition-colors text-left group ${
+                  canScribe ? 'hover:bg-blue-50/40 cursor-pointer' : ''
+                }`}
               >
                 <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
                   {(a.patientName || '?').charAt(0).toUpperCase()}
@@ -193,11 +212,13 @@ export default function DashboardView({
                     </span>
                   </div>
                 </div>
-                <span className="flex-shrink-0 flex items-center gap-2 bg-blue-600 group-hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors">
-                  <Mic size={15} />
-                  <span className="hidden sm:inline">Start</span>
-                </span>
-              </button>
+                {canScribe && (
+                  <span className="flex-shrink-0 flex items-center gap-2 bg-blue-600 group-hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors">
+                    <Mic size={15} />
+                    <span className="hidden sm:inline">Start</span>
+                  </span>
+                )}
+              </div>
             ))}
           </div>
         </div>
@@ -240,13 +261,15 @@ export default function DashboardView({
                     <span className="flex items-center gap-1"><Stethoscope size={14} /> Dr. {a.doctorName.replace(/^dr\.?\s*/i, '')}{a.speciality ? ` · ${a.speciality}` : ''}</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => onScribeAppointment?.(a)}
-                  className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors flex items-center gap-2"
-                >
-                  <Mic size={15} />
-                  <span className="hidden sm:inline">Start Scribe</span>
-                </button>
+                {canScribe && (
+                  <button
+                    onClick={() => onScribeAppointment?.(a)}
+                    className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors flex items-center gap-2"
+                  >
+                    <Mic size={15} />
+                    <span className="hidden sm:inline">Start Scribe</span>
+                  </button>
+                )}
               </div>
             ))}
           </div>

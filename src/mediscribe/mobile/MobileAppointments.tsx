@@ -18,6 +18,9 @@ interface MobileAppointmentsProps {
   consultations: Consultation[];
   onBack: () => void;
   onScribeAppointment?: (appt: UpcomingAppointment) => void;
+  /** Whether this account may RECORD a consultation. An admin reads the diary
+   *  for every doctor; only the doctor in the room starts the note. */
+  canScribe?: boolean;
 }
 
 const DAYS = 7;
@@ -29,6 +32,7 @@ export default function MobileAppointments({
   consultations,
   onBack,
   onScribeAppointment,
+  canScribe = true,
 }: MobileAppointmentsProps) {
   const now = new Date();
   const [selected, setSelected] = React.useState<string>(localDay(now));
@@ -141,10 +145,11 @@ export default function MobileAppointments({
               return (
                 <button
                   key={a.id}
-                  onClick={() => onScribeAppointment?.(a)}
-                  className={`w-full flex items-center gap-3 p-4 text-left active:bg-[#EEEFFE]/50 transition-colors ${
-                    i ? 'border-t border-slate-100' : ''
-                  }`}
+                  onClick={canScribe ? () => onScribeAppointment?.(a) : undefined}
+                  disabled={!canScribe}
+                  className={`w-full flex items-center gap-3 p-4 text-left transition-colors ${
+                    canScribe ? 'active:bg-[#EEEFFE]/50' : 'cursor-default'
+                  } ${i ? 'border-t border-slate-100' : ''}`}
                 >
                   {/* Time rail */}
                   <div className="w-[52px] flex-shrink-0">
@@ -172,9 +177,9 @@ export default function MobileAppointments({
                     <span className={`flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-lg ${badge.cls}`}>
                       {badge.text}
                     </span>
-                  ) : (
+                  ) : canScribe ? (
                     <ChevronRight size={18} className="text-slate-300 flex-shrink-0" />
-                  )}
+                  ) : null}
                 </button>
               );
             })}
@@ -182,7 +187,7 @@ export default function MobileAppointments({
         )}
 
         {/* Starting a session is the point of this screen — say so. */}
-        {onDay.length > 0 && (
+        {onDay.length > 0 && canScribe && (
           <p className="text-[12px] text-slate-400 text-center mt-4 flex items-center justify-center gap-1.5">
             <Mic size={13} /> Tap a patient to start their consultation
           </p>

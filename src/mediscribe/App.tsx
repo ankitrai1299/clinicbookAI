@@ -169,6 +169,18 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
   // only then a neutral fallback. Never an invented name.
   const signedInName = doctorName || user?.name || 'Your account';
 
+  // ── Who may record a consultation ─────────────────────────────────────────
+  // Only a doctor. An admin needs the diary — which patient is coming, to which
+  // doctor, when, across the whole clinic — and that is all they need: a clinical
+  // note carries the name of the person who took it, so a note started by the
+  // front office is a document signed by somebody who was never in the room.
+  //
+  // So the appointment list is the same for both, and the Start/Scribe action is
+  // the doctor's alone. False until the session has loaded, deliberately: a
+  // button that appears for a moment and then vanishes is worse than one that
+  // arrives a moment late.
+  const canScribe = user?.role === 'doctor';
+
   const VIEW_PERM: Record<ViewState, Permission> = {
     dashboard: 'dashboard.view',
     patients: 'patients.view',
@@ -480,6 +492,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
             reportsCount={reports.length}
             prescriptionsCount={prescriptions.length}
             upcomingAppointments={upcomingAppointments}
+            canScribe={canScribe}
             signedInName={signedInName}
             roleLabel={user?.role ? ROLE_LABELS[user.role] : undefined}
             doctorLinked={doctorLink.linked}
@@ -662,6 +675,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
                 patients={patients}
                 doctorName={doctorName}
                 upcomingAppointments={upcomingAppointments}
+                canScribe={canScribe}
                 doctorLinked={doctorLink.linked}
                 loginEmail={doctorLink.email}
                 onStartNew={handleStartNewConsultation}
@@ -678,6 +692,7 @@ export default function App({ onExitToHub, doctorName }: MediscribeAppProps = {}
               <MobileAppointments
                 appointments={upcomingAppointments}
                 consultations={consultations}
+                canScribe={canScribe}
                 onBack={() => setActiveView('dashboard')}
                 onScribeAppointment={(a) => startSessionForPatient(a.patientId, a.patientName, a.id)}
               />
