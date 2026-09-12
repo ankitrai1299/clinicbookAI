@@ -48,15 +48,41 @@ export type MeaningLanguage = 'off' | 'hi' | 'en';
 
 const RECORD_RATE = 48_000;
 
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const B64_INDEX = (() => {
+  const t = new Uint8Array(128);
+  for (let i = 0; i < B64.length; i++) t[B64.charCodeAt(i)] = i;
+  return t;
+})();
+
 /**
- * Float32 samples at 48 kHz → an ArrayBuffer of PCM16 at 24 kHz.
+ * Base64 → bytes, without `atob`.
  *
- * Float32 rather than the recorder's default base64: on Android's new
- * architecture the samples arrive over JSI as a real Float32Array, so there is
- * no base64 to encode on one side and decode on the other, a hundred times a
- * minute, for the length of a consultation. It also removes a dependency on
- * `atob` being present in the JS runtime, which is a thing to discover on a
- * doctor's phone rather than here.
+ * `atob` is a browser global that React Native's engine has carried only since
+ * recently, and its absence would surface as a silent, total failure of live
+ * transcription on whichever phones happen to run an older runtime — discovered
+ * in a clinic rather than here. Ten lines removes the question.
+ */
+const decodeBase64 = (b64: string): Uint8Array => {
+  let len = b64.length;
+  while (len > 0 && b64[len - 1] === '=') len--;
+  const out = new Uint8Array(Math.floor((len * 3) / 4));
+  let o = 0;
+  let acc = 0;
+  let bits = 0;
+  for (let i = 0; i < len; i++) {
+    acc = (acc << 6) | B64_INDEX[b64.charCodeAt(i) & 0x7f];
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[o++] = (acc >> bits) & 0xff;
+    }
+  }
+  return out.subarray(0, o);
+};
+
+/**
+ * Base64 PCM16 at 48 kHz → an ArrayBuffer of PCM16 at 24 kHz.
  *
  * Averaging each adjacent pair rather than keeping every second sample. Keeping
  * one and discarding the other is a line shorter and aliases: the discarded
@@ -64,14 +90,17 @@ const RECORD_RATE = 48_000;
  * fricatives — स, श, ph, kh — which is where Indian-language recognition is
  * decided.
  */
-export const halveTo24k = (samples: Float32Array): ArrayBuffer => {
-  const outSamples = Math.floor(samples.length / 2);
+export const halveTo24k = (base64: string): ArrayBuffer => {
+  const bytes = decodeBase64(base64);
+  const inSamples = bytes.length >> 1;
+  const outSamples = inSamples >> 1;
   const out = new DataView(new ArrayBuffer(outSamples * 2));
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
   for (let i = 0; i < outSamples; i++) {
-    const avg = (samples[i * 2] + samples[i * 2 + 1]) / 2;
-    const clamped = Math.max(-1, Math.min(1, avg));
-    out.setInt16(i * 2, Math.round(clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff), true);
+    const a = view.getInt16(i * 4, true);
+    const b = view.getInt16(i * 4 + 2, true);
+    out.setInt16(i * 2, (a + b) >> 1, true);
   }
   return out.buffer;
 };
@@ -163,27 +192,16 @@ export const useLiveStt = (): LiveStt => {
     await recorder.startRecording({
       sampleRate: RECORD_RATE,
       channels: 1,
-      encoding: 'pcm_32bit',
-      streamFormat: 'float32',
+      encoding: 'pcm_16bit',
       // 100 ms per callback. Longer batches the words into visible jumps;
       // shorter spends more time crossing the bridge than in the microphone.
       interval: 100,
       onAudioStream: async (event) => {
         const socket = wsRef.current;
         if (!socket || socket.readyState !== WebSocket.OPEN) return;
-        const data = event.data as unknown;
-        // iOS hands over a plain Array; Android new-arch a Float32Array. Both
-        // are accepted rather than assumed, because the wrong one here is
-        // silence that looks like a broken microphone.
-        const samples =
-          data instanceof Float32Array
-            ? data
-            : Array.isArray(data)
-              ? Float32Array.from(data as number[])
-              : null;
-        if (!samples) return;
+        if (typeof event.data !== 'string') return;
         try {
-          socket.send(halveTo24k(samples));
+          socket.send(halveTo24k(event.data));
         } catch {
           /* a frame lost to a closing socket is not worth an error on screen */
         }
