@@ -178,6 +178,18 @@ export default function Dashboard() {
       : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
   };
 
+  // What became of this visit, in one word, or nothing when it is simply waiting.
+  //
+  // "Missed" is the sweep's opinion, not a fact: it marks a visit no-show an hour
+  // after the slot, which in a running OPD means the doctor is late rather than
+  // the patient absent. So it is shown as a label and the visit stays openable —
+  // writing the note is what corrects the record.
+  const badgeFor = (a: UpcomingAppointment): { text: string; cls: string } | null => {
+    if (a.status === 'COMPLETED') return { text: t('dashboard.done', 'Done'), cls: 'bg-success-50' };
+    if (a.status === 'NO_SHOW') return { text: t('dashboard.missed', 'Missed'), cls: 'bg-warning-50' };
+    return null;
+  };
+
   // The whole point of showing the appointment: the session opens already
   // attached to that patient, so nobody re-types a name that is already known.
   const scribeAppointment = (a: UpcomingAppointment) => {
@@ -285,12 +297,21 @@ export default function Dashboard() {
                       <View className="flex-row items-center mt-0.5">
                         <Ionicons name="time-outline" size={12} color={colors.slate400} />
                         <Text className="text-xs text-slate-500 ml-1">{a.time}</Text>
+                        {badgeFor(a) && (
+                          <View className={`ml-2 px-2 py-0.5 rounded-lg ${badgeFor(a)!.cls}`}>
+                            <Text className="text-[10.5px] font-semibold text-slate-600">
+                              {badgeFor(a)!.text}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                     </View>
                     <View className="flex-row items-center gap-1.5 bg-brand-500 rounded-xl px-3.5 py-2">
                       <Ionicons name="mic" size={14} color={colors.white} />
                       <Text className="text-white font-semibold text-[13px]">
-                        {t('dashboard.start', 'Start')}
+                        {a.status === 'COMPLETED'
+                          ? t('dashboard.addendum', 'Open')
+                          : t('dashboard.start', 'Start')}
                       </Text>
                     </View>
                   </Card>

@@ -210,6 +210,20 @@ export default function DashboardView({
                     <span className="flex items-center gap-1">
                       <Stethoscope size={13} /> Dr. {a.doctorName.replace(/^dr\.?\s*/i, '')}
                     </span>
+                    {/* "Missed" is the sweep's opinion, not a fact — it marks a
+                        visit no-show an hour after the slot, which usually means
+                        the doctor is late, not that the patient stayed away. It
+                        stays openable; writing the note corrects the record. */}
+                    {a.status === 'COMPLETED' && (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-xs font-semibold">
+                        Done
+                      </span>
+                    )}
+                    {a.status === 'NO_SHOW' && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-xs font-semibold">
+                        Missed
+                      </span>
+                    )}
                   </div>
                 </div>
                 {canScribe && (

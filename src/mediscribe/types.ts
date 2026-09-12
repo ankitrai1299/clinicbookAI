@@ -242,4 +242,7 @@ export interface UpcomingAppointment {
   speciality?: string;
   date: string; // YYYY-MM-DD
   time: string; // "HH:MM AM/PM"
+  /** PENDING | CONFIRMED | NO_SHOW | COMPLETED. Today's list keeps all four, so
+   *  a visit already written up is distinguishable from one not reached yet. */
+  status?: string;
 }

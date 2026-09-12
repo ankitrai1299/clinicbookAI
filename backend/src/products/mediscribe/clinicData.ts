@@ -253,9 +253,43 @@ export interface UpcomingAppointment {
   speciality?: string;
   date: string; // YYYY-MM-DD (clinic-local calendar day)
   time: string; // "HH:MM AM/PM"
+  /** So the doctor can tell a waiting patient from one already written up. */
+  status: AppointmentStatus;
 }
 
 const LIVE = new Set<AppointmentStatus>([AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]);
+
+// TODAY is different, and this is the whole point of the screen.
+//
+// A visit leaves LIVE on its own: the sweep marks it NO_SHOW an hour after the
+// slot, and finalising a note marks it COMPLETED. Both used to delete it from
+// the doctor's queue — so the patient the doctor had not got to yet simply
+// disappeared, and so did the one they had just written up. A doctor running an
+// hour late in an OPD lost the booking from the one screen meant to bring it to
+// them, and could no longer scribe it at all.
+//
+// So for today the queue keeps everything except a cancellation. A visit stays
+// on the doctor's screen for the whole day it belongs to, labelled by where it
+// got to. CANCELLED is the one real exclusion: that visit is not happening, and
+// saying otherwise would be a lie rather than a delay.
+//
+// Future days stay LIVE-only. Tomorrow has no "missed" and no "done".
+const TODAY_ALSO = new Set<AppointmentStatus>([AppointmentStatus.NO_SHOW, AppointmentStatus.COMPLETED]);
+
+/** The statuses worth asking the database for. Narrowed per-day by the rule below. */
+export const QUEUE_STATUSES: AppointmentStatus[] = [...LIVE, ...TODAY_ALSO];
+
+/**
+ * Does this appointment belong on the doctor's screen?
+ *
+ * Pure, and separated from the query so the rule can be read and tested on its
+ * own — it is the rule that decides whether a patient is reachable or invisible.
+ */
+export const belongsOnQueue = (
+  status: AppointmentStatus,
+  appointmentDay: string,
+  today: string
+): boolean => (appointmentDay === today ? status !== AppointmentStatus.CANCELLED : LIVE.has(status));
 const dateStrOf = (d: Date): string => d.toISOString().slice(0, 10);
 
 /** The clinic's scribe queue: today's + future live appointments, soonest first.
@@ -331,7 +365,7 @@ export const listUpcomingAppointments = async (
   return (
     await getAppointments(clinicId, {
       fromDate: today,
-      statuses: [...LIVE],
+      statuses: QUEUE_STATUSES,
       ...(onlyDoctorId && onlyDoctorId !== '__no_match__' ? { doctorId: onlyDoctorId } : {}),
       limit: 200
     })
@@ -339,6 +373,10 @@ export const listUpcomingAppointments = async (
     // A doctor whose login matched no Doctor row must see nothing — the sentinel
     // can't go into the query, so it is still enforced here.
     .filter(() => onlyDoctorId !== '__no_match__')
+    // NO_SHOW and COMPLETED were asked for to cover TODAY. On any later day they
+    // would be noise at best and wrong at worst, so they are dropped here rather
+    // than by a second query.
+    .filter((a) => belongsOnQueue(a.status, dateStrOf(a.appointmentDate), today))
     .sort(
       (a, b) =>
         dateStrOf(a.appointmentDate).localeCompare(dateStrOf(b.appointmentDate)) ||
@@ -352,6 +390,7 @@ export const listUpcomingAppointments = async (
       doctorName: a.doctor?.name ?? 'Doctor',
       speciality: a.doctor?.speciality,
       date: dateStrOf(a.appointmentDate),
-      time: a.appointmentTime
+      time: a.appointmentTime,
+      status: a.status
     }));
 };

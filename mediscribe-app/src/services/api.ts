@@ -707,6 +707,10 @@ export interface UpcomingAppointment {
   date: string;
   /** "09:30 AM" — as the clinic wrote it, not re-derived here. */
   time: string;
+  /** PENDING | CONFIRMED | NO_SHOW | COMPLETED — today's list keeps all four, so
+   *  a visit already written up and one the doctor has not reached yet are
+   *  distinguishable rather than merely both present. */
+  status?: string;
 }
 
 /**
