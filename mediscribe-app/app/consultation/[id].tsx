@@ -63,6 +63,7 @@ import {
   printReport,
 } from '../../src/utils/export';
 import { useLiveTranscription, ensureLiveRecognition } from '../../src/hooks/useLiveTranscription';
+import { useLiveStt, type MeaningLanguage } from '../../src/hooks/useLiveStt';
 import ReportEditor from '../../src/components/ReportEditor';
 import AudioPlayer from '../../src/components/AudioPlayer';
 import Waveform from '../../src/components/Waveform';
@@ -87,6 +88,18 @@ export default function ConsultationScreen() {
 
   // ── Live on-device transcription (primary) + expo-audio→Whisper fallback ──
   const live = useLiveTranscription();
+
+  // ── The live transcript, as spoken ────────────────────────────────────
+  //
+  // Our own gateway: the audio leaves the phone and reaches a model that
+  // identifies the language itself and keeps it. The on-device recogniser above
+  // stays as the fallback — it takes ONE locale fixed before anybody speaks, and
+  // "Auto" meant Indian English, which is why Hindi and Bhojpuri came back as
+  // nonsense. A poor transcript a doctor can correct still beats a blank screen
+  // when the socket cannot be reached, and the doctor is told which one they are
+  // on.
+  const stt = useLiveStt();
+  const [sttMode, setSttMode] = useState<'gateway' | 'device'>('gateway');
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
   const [liveMode, setLiveMode] = useState(true);
@@ -145,8 +158,13 @@ export default function ConsultationScreen() {
   const didAuto = useRef(false);
 
   // Unified recording state across the live + fallback engines.
-  const isRecording = liveMode ? live.isListening : recorderState.isRecording;
-  const isPaused = liveMode ? live.isPaused : fbPaused;
+  // Three engines, one answer. Without the gateway arm the mic button would show
+  // "not recording" while the microphone was open and streaming — the worst
+  // possible disagreement between a screen and a device.
+  const isRecording = liveMode
+    ? (sttMode === 'gateway' ? stt.isLive : live.isListening)
+    : recorderState.isRecording;
+  const isPaused = liveMode ? (sttMode === 'gateway' ? false : live.isPaused) : fbPaused;
 
   useEffect(() => {
     loadSettings().then((s) => {
@@ -171,11 +189,21 @@ export default function ConsultationScreen() {
 
   // Stream live transcript into the editable field while listening.
   useEffect(() => {
-    if (liveMode && live.isListening) {
+    if (liveMode && sttMode === 'device' && live.isListening) {
       setDisplayedTranscript(live.liveText);
       setOriginalTranscript(live.liveText);
     }
-  }, [live.liveText, live.isListening, liveMode]);
+  }, [live.liveText, live.isListening, liveMode, sttMode]);
+
+  // The record is the SPOKEN words, never the meaning. The second row is a
+  // reading aid for the doctor; what gets saved, reported and printed is what
+  // the patient actually said.
+  useEffect(() => {
+    if (sttMode !== 'gateway' || !stt.lines.length) return;
+    const text = stt.lines.map((l) => l.text).join(' ').trim();
+    setDisplayedTranscript(text);
+    setOriginalTranscript(text);
+  }, [stt.lines, sttMode]);
 
   // Surface live-recognition permission errors.
   useEffect(() => {
@@ -291,9 +319,20 @@ export default function ConsultationScreen() {
   const startRecording = async () => {
     setError(null);
     setSeconds(0);
+    // Our gateway first.
+    try {
+      setLiveMode(true);
+      setSttMode('gateway');
+      await stt.start();
+      return;
+    } catch (err) {
+      console.warn('[liveStt] falling back to the on-device recogniser:', err);
+    }
+
     const canLive = await ensureLiveRecognition();
     if (canLive) {
       setLiveMode(true);
+      setSttMode('device');
       live.start(language, displayedTranscript);
       return;
     }
@@ -311,16 +350,34 @@ export default function ConsultationScreen() {
   };
 
   const pauseRecording = () => {
+    // The gateway path has no pause: the upstream session is a continuous stream
+    // and interrupting it mid-utterance loses the sentence in flight. A button
+    // that appears to work and does not is worse than one that is not offered,
+    // so the control is hidden for this engine rather than made a no-op.
+    if (liveMode && sttMode === 'gateway') return;
     if (liveMode) { live.pause(); return; }
     try { recorder.pause(); setFbPaused(true); } catch {}
   };
 
   const resumeRecording = () => {
+    if (liveMode && sttMode === 'gateway') return;
     if (liveMode) { live.resume(displayedTranscript); return; }
     try { recorder.record(); setFbPaused(false); } catch {}
   };
 
   const stopRecording = async () => {
+    if (liveMode && sttMode === 'gateway') {
+      await stt.stop();
+      // Drug names are already back in Latin — the gateway does that on every
+      // finished line — so the terminology pass below would only repeat work the
+      // server has done with the full glossary in front of it.
+      const text = stt.lines.map((l) => l.text).join(' ').trim();
+      if (text) {
+        setDisplayedTranscript(text);
+        setOriginalTranscript(text);
+      }
+      return;
+    }
     if (liveMode) {
       const finalText = await live.stop();
       if (finalText) {
@@ -628,8 +685,12 @@ export default function ConsultationScreen() {
             setDisplayedTranscript={setDisplayedTranscript}
             isRecording={isRecording}
             isPaused={isPaused}
-            liveText={live.liveText}
-            interim={live.interim}
+            liveText={sttMode === 'gateway' ? stt.lines.map((l) => l.text).join(' ') : live.liveText}
+            interim={sttMode === 'gateway' ? stt.partial : live.interim}
+            liveLines={sttMode === 'gateway' ? stt.lines : undefined}
+            meaningLang={stt.meaning}
+            onMeaningLang={stt.setMeaning}
+            sttNote={sttMode === 'gateway' ? stt.note : null}
             timer={formatTimer(seconds)}
             onStart={startRecording}
             onStop={stopRecording}
@@ -755,6 +816,7 @@ function CaptureStep(props: any) {
     isTranscribing, isTranslating, language, onOpenLang, displayedTranscript, setDisplayedTranscript,
     isRecording, isPaused, liveText, interim, timer, onStart, onStop, onPause, onResume,
     canGenerate, isGenerating, onGenerate,
+    liveLines, meaningLang, onMeaningLang, sttNote,
   } = props;
 
   const [search, setSearch] = useState('');
@@ -794,13 +856,60 @@ function CaptureStep(props: any) {
           <View className="flex-row items-center gap-1.5 px-4 pt-3 pb-1">
             <Ionicons name="radio-outline" size={14} color={colors.brand} />
             <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">{tt('consultation.liveTranscript')}</Text>
+            {/* Off by default: a doctor working in the patient's own language
+                needs no second row, and one that repeats the line above it is
+                noise pretending to be a feature. */}
+            {liveLines && (
+              <View className="flex-row ml-auto rounded-lg border border-slate-200 overflow-hidden">
+                {(['off', 'hi', 'en'] as const).map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    onPress={() => onMeaningLang?.(opt)}
+                    className={`px-2 py-0.5 ${meaningLang === opt ? 'bg-brand-500' : 'bg-surface'}`}
+                  >
+                    <Text className={`text-[10.5px] font-semibold ${meaningLang === opt ? 'text-white' : 'text-slate-500'}`}>
+                      {opt === 'off' ? 'Off' : opt === 'hi' ? 'हिंदी' : 'EN'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
+          {sttNote ? (
+            <Text className="px-4 pb-1 text-[11.5px] text-amber-700">{sttNote}</Text>
+          ) : null}
           <ScrollView
             ref={liveScrollRef}
             className="flex-1 px-4 pb-3"
             onContentSizeChange={() => liveScrollRef.current?.scrollToEnd({ animated: true })}
           >
-            {liveText.trim() ? (
+            {liveLines ? (
+              /* Two rows per line. The top row is the RECORD — the patient's own
+                 words, in their own language. The row under it is a reading aid
+                 for a doctor who does not speak it, and is never what gets
+                 saved. */
+              <View>
+                {liveLines.map((line: { id: number; text: string; meaning?: string }) => (
+                  <View key={line.id} className="mb-2">
+                    <Text className="text-[15px] leading-6 text-slate-800">{line.text}</Text>
+                    {meaningLang !== 'off' && line.meaning ? (
+                      <Text className="text-[13px] leading-5 text-slate-500 mt-0.5 pl-2 border-l-2 border-slate-200">
+                        {line.meaning}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
+                {interim ? (
+                  /* The tail still being spoken. Greyed because it can still
+                     change — showing it as settled would have the screen
+                     rewriting sentences the doctor has already read. */
+                  <Text className="text-[15px] leading-6 text-slate-400 italic">{interim}</Text>
+                ) : null}
+                {!liveLines.length && !interim ? (
+                  <Text className="text-sm text-slate-400 italic mt-2">{tt('consultation.listeningHint')}</Text>
+                ) : null}
+              </View>
+            ) : liveText.trim() ? (
               <Text className="text-[15px] leading-6 text-slate-800">
                 {committed}
                 {interim ? <Text className="text-blue-500">{committed ? ' ' : ''}{interim}</Text> : null}
@@ -813,9 +922,11 @@ function CaptureStep(props: any) {
 
         {/* Controls: Pause/Resume + Stop */}
         <View className="flex-row items-center justify-center gap-8">
-          <TouchableOpacity onPress={isPaused ? onResume : onPause} activeOpacity={0.85} className="w-16 h-16 rounded-full items-center justify-center bg-surface border border-slate-200">
-            <Ionicons name={isPaused ? 'play' : 'pause'} size={26} color={colors.slate700} />
-          </TouchableOpacity>
+          {!liveLines && (
+            <TouchableOpacity onPress={isPaused ? onResume : onPause} activeOpacity={0.85} className="w-16 h-16 rounded-full items-center justify-center bg-surface border border-slate-200">
+              <Ionicons name={isPaused ? 'play' : 'pause'} size={26} color={colors.slate700} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={onStop} activeOpacity={0.85} className="w-20 h-20 rounded-full items-center justify-center bg-red-500">
             <Ionicons name="stop" size={32} color={colors.white} />
           </TouchableOpacity>
