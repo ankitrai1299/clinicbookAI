@@ -97,6 +97,27 @@ export const noteDateStr = (raw: unknown): string | null => {
   return null;
 };
 
+/**
+ * PURE: what a stored consultation says about the visit it belongs to.
+ *
+ *   'finalized'  the doctor finished and a report exists — the visit is done
+ *   'started'    opened and not finished — the visit is still in progress
+ *   null         no usable date, so it speaks for no particular day
+ *
+ * The middle state is the one worth naming. A consultation under way must stop
+ * the sweep touching that appointment at all: without it the grace period was a
+ * deadline, and a doctor still mid-consultation — or writing up after the clinic
+ * emptied — had the visit swept to NO_SHOW out from under them.
+ */
+export const noteState = (
+  data: { status?: string; report?: unknown; date?: unknown } | null | undefined
+): { state: 'finalized' | 'started'; on: string } | null => {
+  const on = noteDateStr(data?.date);
+  if (!on) return null;
+  return { state: data?.status === 'Completed' && data?.report ? 'finalized' : 'started', on };
+};
+
+
 
 const to12h = (hhmm: string): string => {
   const [h, m] = hhmm.split(':').map(Number);
@@ -245,6 +266,10 @@ export const processAutoCompleteVisits = async (): Promise<void> => {
   // visit recorded as done can be pushed into that person's national health
   // record, where it cannot be taken back.
   const hasFinalizedScribe = new Set<string>();
+  // A consultation the doctor has STARTED but not finished. The sweep leaves
+  // these alone entirely — see the decision loop.
+  const scribeInProgress = new Set<string>();
+
   for (const [clinicId, patientIds] of byClinic) {
     const rows = await prisma.novaDoc.findMany({
       where: { clinicId, collection: 'consultations', patientId: { in: [...new Set(patientIds)] } },
@@ -252,20 +277,45 @@ export const processAutoCompleteVisits = async (): Promise<void> => {
     });
     for (const r of rows) {
       const d = r.data as { status?: string; report?: unknown; date?: unknown } | null;
-      if (!r.patientId || d?.status !== 'Completed' || !d?.report) continue;
+      if (!r.patientId) continue;
 
-      const on = noteDateStr(d.date);
-      // A finished note with no readable date cannot be attributed to a day, so
-      // it attributes to none. That lands the visit on NO_SHOW, which a human
-      // can correct; the other direction cannot be undone.
-      if (on) hasFinalizedScribe.add(`${clinicId}|${r.patientId}|${on}`);
+      // A note with no readable date cannot be attributed to a day, so it
+      // attributes to none. That lands the visit on NO_SHOW, which a human can
+      // correct; the other direction cannot be undone.
+      const note = noteState(d);
+      if (!note) continue;
+
+      const key = `${clinicId}|${r.patientId}|${note.on}`;
+      if (note.state === 'finalized') hasFinalizedScribe.add(key);
+      else scribeInProgress.add(key);
     }
   }
 
   // ── Decide + complete ────────────────────────────────────────────────────
   for (const a of ended) {
     try {
-      if (!hasFinalizedScribe.has(`${a.clinicId}|${a.patientId}|${dateStrOf(a.appointmentDate)}`)) {
+      const dayKey = `${a.clinicId}|${a.patientId}|${dateStrOf(a.appointmentDate)}`;
+
+      // ── A consultation already under way ─────────────────────────────────
+      //
+      // The doctor opened the scribe for this patient, on this day, and has not
+      // finished. Leave the appointment exactly as it is: still live, still in
+      // their queue, waiting to be finished.
+      //
+      // Without this the grace period was a deadline. Thirty minutes after the
+      // slot the visit was swept to NO_SHOW and vanished from the queue — while
+      // the doctor was mid-consultation, or writing it up after the clinic
+      // emptied. A long appointment was punished for being long.
+      //
+      // Nothing is lost by waiting: finalising the scribe completes the visit
+      // itself, and an abandoned draft leaves the booking live, where a person
+      // can see it and decide.
+      if (scribeInProgress.has(dayKey)) {
+        console.info(`[AutoComplete] Visit ${a.id} left alone — a consultation for this patient is open today.`);
+        continue;
+      }
+
+      if (!hasFinalizedScribe.has(dayKey)) {
         // No note anywhere for this patient, so there is nothing to attribute
         // and the same-day ambiguity below cannot arise: if they had two
         // bookings that day, they missed both.

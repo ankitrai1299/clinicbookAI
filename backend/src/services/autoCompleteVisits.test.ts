@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 // Everything else the cron does hangs off this one comparison — get it wrong and
 // visits either close while the patient is still in the room, or never close at
 // all. Clinic time is Asia/Kolkata (UTC+5:30).
-import { dateStrOf, noteDateStr, slotEndInstant } from './autoCompleteVisits.service';
+import { dateStrOf, noteDateStr, noteState, slotEndInstant } from './autoCompleteVisits.service';
 
 // Appointment dates are stored at midnight UTC (see normalizeDate).
 const day = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
@@ -147,5 +147,56 @@ describe('dateStrOf', () => {
     // The pairing the sweep depends on. If these two ever disagree on format,
     // every visit becomes a no-show.
     expect(dateStrOf(new Date('2026-09-08T00:00:00.000Z'))).toBe(noteDateStr('8/9/2026'));
+  });
+});
+
+// ── A consultation already under way ───────────────────────────────────────
+//
+// The grace period used to be a deadline. Thirty minutes after the slot the
+// visit was swept to NO_SHOW — while the doctor was mid-consultation, or
+// writing it up after the clinic had emptied. A long appointment was punished
+// for being long.
+//
+// `started` is what stops that: the sweep leaves the appointment alone, still
+// live and still in the doctor's queue, until they finish it.
+
+describe('noteState', () => {
+  it('calls a finished consultation finalized', () => {
+    expect(noteState({ status: 'Completed', report: { a: 1 }, date: '8/9/2026' })).toEqual({
+      state: 'finalized',
+      on: '2026-09-08'
+    });
+  });
+
+  it('calls an open one started, so the sweep leaves it alone', () => {
+    // A draft the doctor is still working on.
+    expect(noteState({ status: 'Draft', date: '12/9/2026' })).toEqual({
+      state: 'started',
+      on: '2026-09-12'
+    });
+  });
+
+  it('treats "Completed" with no report as still in progress', () => {
+    // The status flipped but the report never arrived — a save that half
+    // happened. Not finished, and certainly not a visit to mark done.
+    expect(noteState({ status: 'Completed', date: '12/9/2026' })?.state).toBe('started');
+    expect(noteState({ status: 'Completed', report: null, date: '12/9/2026' })?.state).toBe('started');
+  });
+
+  it('speaks for no day when the date cannot be read', () => {
+    // Then it neither completes a visit nor protects one; the appointment falls
+    // through to NO_SHOW, which a person can correct.
+    expect(noteState({ status: 'Completed', report: {}, date: 'today' })).toBeNull();
+    expect(noteState({ status: 'Draft' })).toBeNull();
+    expect(noteState(null)).toBeNull();
+    expect(noteState(undefined)).toBeNull();
+  });
+
+  it('never calls a note finalized on a day it does not claim', () => {
+    // The bug this whole area exists for: a note from the 8th must not speak
+    // for the 12th, whatever its status.
+    const note = noteState({ status: 'Completed', report: {}, date: '8/9/2026' });
+    expect(note?.on).toBe('2026-09-08');
+    expect(note?.on).not.toBe('2026-09-12');
   });
 });
