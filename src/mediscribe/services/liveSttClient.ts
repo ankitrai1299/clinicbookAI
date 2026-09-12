@@ -86,11 +86,30 @@ const toPcm16 = (input: Float32Array, fromRate: number): ArrayBuffer => {
  * deprecated: it runs on the main thread, so every re-render competes with the
  * microphone, and the dropouts land exactly when the screen is busiest.
  */
+// The worklet buffers before it posts. process() is called every 128 samples —
+// at 48 kHz that is once every 2.7 ms, roughly 375 times a second. A WebSocket
+// message that often carries frames smaller than their own headers and spends
+// the consultation in the bridge rather than in the microphone. Batching to
+// ~85 ms sends about twelve messages a second instead, which is the granularity
+// the upstream providers are built around anyway.
 const WORKLET_SOURCE = `
+const BATCH_SAMPLES = 4096;       // ~85 ms at 48 kHz
 class Tap extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buf = new Float32Array(BATCH_SAMPLES);
+    this.at = 0;
+  }
   process(inputs) {
     const ch = inputs[0] && inputs[0][0];
-    if (ch && ch.length) this.port.postMessage(ch.slice(0));
+    if (!ch || !ch.length) return true;
+    for (let i = 0; i < ch.length; i++) {
+      this.buf[this.at++] = ch[i];
+      if (this.at === BATCH_SAMPLES) {
+        this.port.postMessage(this.buf.slice(0));
+        this.at = 0;
+      }
+    }
     return true;
   }
 }
