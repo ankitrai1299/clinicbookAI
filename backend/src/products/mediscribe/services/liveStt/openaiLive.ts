@@ -10,7 +10,7 @@
 
 import WebSocket from 'ws';
 
-import { CAPTURE_RATE, type LiveSttHandlers, type LiveSttSession } from './types.js';
+import { CAPTURE_RATE, silenceBuffer, type LiveSttHandlers, type LiveSttSession } from './types.js';
 
 const URL = 'wss://api.openai.com/v1/realtime?intent=transcription';
 
@@ -113,9 +113,10 @@ export const openOpenAiLive = (handlers: LiveSttHandlers): LiveSttSession => {
       if (ws.readyState === WebSocket.OPEN) {
         // A last breath of silence so the server's VAD closes the final turn.
         // Without it the last sentence spoken is the one that never arrives —
-        // and in a consultation that is usually the plan.
-        send(Buffer.alloc(CAPTURE_RATE)); // 0.5 s of silence, 16-bit mono
-        setTimeout(() => ws.close(), 1500);
+        // and in a consultation that is usually the plan. It must be LONGER than
+        // the configured silence_duration_ms or the provider reads it as a pause.
+        send(silenceBuffer(CAPTURE_RATE));
+        setTimeout(() => ws.close(), 3000);
         return;
       }
       ws.close();

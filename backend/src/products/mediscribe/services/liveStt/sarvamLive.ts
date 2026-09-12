@@ -12,7 +12,7 @@
 
 import WebSocket from 'ws';
 
-import { downsample24to16, type LiveSttHandlers, type LiveSttSession } from './types.js';
+import { CAPTURE_RATE, downsample24to16, silenceBuffer, type LiveSttHandlers, type LiveSttSession } from './types.js';
 import { sarvamKey } from '../sarvam.js';
 
 const MODEL = 'saaras:v3-realtime';
@@ -124,8 +124,8 @@ export const openSarvamLive = (handlers: LiveSttHandlers, languageHint?: string)
     },
     close() {
       if (ws.readyState === WebSocket.OPEN) {
-        send(Buffer.alloc(24_000)); // silence, so the VAD closes the last turn
-        setTimeout(() => ws.close(), 1500);
+        send(silenceBuffer(CAPTURE_RATE)); // so the VAD releases the last turn
+        setTimeout(() => ws.close(), 3000);
         return;
       }
       ws.close();

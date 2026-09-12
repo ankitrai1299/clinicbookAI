@@ -12,6 +12,7 @@ import { startWebhookCron } from './cron/webhook.cron.js';
 import { startSecurityScanCron } from './cron/securityScan.cron.js';
 import { logWhatsAppStartupInfo } from './core/whatsapp/whatsapp.diagnostics.js';
 import { logEmailStartupInfo } from './services/email.service.js';
+import { attachLiveSttGateway } from './products/mediscribe/liveStt.gateway.js';
 
 const app = createApp();
 let server: ReturnType<typeof app.listen> | null = null;
@@ -52,6 +53,11 @@ const startServer = async () => {
     // Email provider + sender banner (flags the Resend test-domain limitation).
     logEmailStartupInfo();
   });
+
+  // The live-transcription socket shares this HTTP server and this port. It has
+  // to be attached to the server object rather than to the Express app, because
+  // a WebSocket arrives as an HTTP *upgrade* — a request Express never sees.
+  attachLiveSttGateway(server);
 
   startReminderCron();
   startMedicineReminderCron();

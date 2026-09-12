@@ -91,3 +91,19 @@ export const downsample24to16 = (pcm24k: Buffer): Buffer => {
   }
   return out;
 };
+
+/**
+ * Trailing silence sent when a recording stops, so the provider's voice-activity
+ * detector decides the last utterance has ended and releases it.
+ *
+ * 1200 ms, and the number is load-bearing. OpenAI's turn detection is configured
+ * with silence_duration_ms: 600, so anything at or under that is not silence to
+ * it — it is a pause. Half a second was tried first: the socket closed with the
+ * final sentence still inside the provider, and in a consultation the final
+ * sentence is usually the plan.
+ */
+export const CLOSING_SILENCE_MS = 1200;
+
+/** That much silence as PCM16 mono at a given rate. */
+export const silenceBuffer = (rate: number): Buffer =>
+  Buffer.alloc(Math.round((rate * CLOSING_SILENCE_MS) / 1000) * 2);
