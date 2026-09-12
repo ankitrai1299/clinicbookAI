@@ -406,13 +406,13 @@ export default function SettingsScreen() {
           <SectionLabel className="px-1">{t('settings.about')}</SectionLabel>
           <Card className="px-4" elevation="sm">
             <Row icon="information-circle-outline" label={t('settings.appVersion')} value={version} tint={colors.brand} />
-            <Row icon="shield-checkmark-outline" label={t('settings.privacyPolicy')} onPress={() => openLink('https://novascribe.ai/privacy')} tint={colors.success} />
-            <Row icon="document-text-outline" label={t('settings.termsOfService')} onPress={() => openLink('https://novascribe.ai/terms')} tint={colors.accent} />
+            <Row icon="shield-checkmark-outline" label={t('settings.privacyPolicy')} onPress={() => openLink('https://getanvaya.com/privacy')} tint={colors.success} />
+            <Row icon="document-text-outline" label={t('settings.termsOfService')} onPress={() => openLink('https://getanvaya.com/terms')} tint={colors.accent} />
             <Row icon="help-buoy-outline" label={t('settings.support')} onPress={() => openLink('mailto:apps@nextdot.co.in')} tint={colors.warning} last />
           </Card>
         </View>
 
-        <Text className="text-center text-xs text-slate-400 mt-1">NovaScribe · v{version}</Text>
+        <Text className="text-center text-xs text-slate-400 mt-1">अन्वयScribe · v{version}</Text>
       </ScrollView>
     </SafeAreaView>
   );

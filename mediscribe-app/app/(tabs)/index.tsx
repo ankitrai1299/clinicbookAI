@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -197,12 +197,16 @@ export default function Dashboard() {
         {/* Header */}
         <View className="flex-row items-center justify-between mb-6">
           <View className="flex-1 pr-3">
-            <View className="flex-row items-center gap-1.5">
-              <Ionicons name="sparkles" size={12} color={colors.brand} />
-              <Text className="text-[11px] font-bold text-brand-500 uppercase" style={{ letterSpacing: 0.6 }}>
-                NovaScribe
-              </Text>
-            </View>
+            {/* The wordmark itself, not the name set as text: अन्वय is drawn
+                lettering in a display face this app does not ship, and setting
+                it in the system font gives a different shape wearing the same
+                letters. The artwork is the one the website uses. */}
+            <Image
+              source={require('../../assets/brand/anvaya-scribe.png')}
+              style={{ width: 132, height: 42 }}
+              resizeMode="contain"
+              accessibilityLabel="Anvaya Scribe"
+            />
             <Text className="text-slate-500 mt-3 text-[14px] font-medium">{t(g)}</Text>
             <Text
               className="text-[27px] font-extrabold text-slate-900 leading-8 mt-0.5"

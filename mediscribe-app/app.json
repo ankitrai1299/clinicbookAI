@@ -1,7 +1,7 @@
 {
   "expo": {
     "owner": "ruchi5286",
-    "name": "NovaScribe",
+    "name": "Anvaya Scribe",
     "slug": "mediscribe-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,8 +12,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.nextdot.novascribeai",
       "infoPlist": {
-        "NSSpeechRecognitionUsageDescription": "Allow NovaScribe AI to recognize speech for live transcription.",
-        "NSMicrophoneUsageDescription": "Allow NovaScribe AI to use the microphone for live transcription.",
+        "NSSpeechRecognitionUsageDescription": "Allow Anvaya Scribe to recognize speech for live transcription.",
+        "NSMicrophoneUsageDescription": "Allow Anvaya Scribe to use the microphone for live transcription.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -54,14 +54,14 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow NovaScribe AI to access your microphone to record consultations."
+          "microphonePermission": "Allow Anvaya Scribe to access your microphone to record consultations."
         }
       ],
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Allow NovaScribe AI to use the microphone for live transcription.",
-          "speechRecognitionPermission": "Allow NovaScribe AI to recognize speech for live transcription.",
+          "microphonePermission": "Allow Anvaya Scribe to use the microphone for live transcription.",
+          "speechRecognitionPermission": "Allow Anvaya Scribe to recognize speech for live transcription.",
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"
           ]

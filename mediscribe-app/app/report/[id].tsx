@@ -324,7 +324,7 @@ export default function ReportViewer() {
               {/* Letterhead */}
               <View className="flex-row items-start gap-3">
                 <View className="flex-1">
-                  <Text className="text-[19px] font-bold text-slate-900 tracking-tight">{settings?.clinicName?.trim() || 'NovaScribe Clinic'}</Text>
+                  <Text className="text-[19px] font-bold text-slate-900 tracking-tight">{settings?.clinicName?.trim() || 'Clinic'}</Text>
                   <Text className="text-[11.5px] mt-1" style={{ color: colors.docAccent }}>
                     {[
                       settings?.doctorName?.trim() || L('Attending Physician'),

@@ -98,7 +98,7 @@ async function shareFile(
 // ── Transcript: TXT ──────────────────────────────────────────
 export async function exportTranscriptTxt(text: string, meta: ExportMeta): Promise<void> {
   const header = [
-    `NovaScribe - ${L('Consultation Transcript')}`,
+    `AnvayaScribe - ${L('Consultation Transcript')}`,
     meta.patientName ? `${L('Patient')}: ${meta.patientName}` : '',
     meta.date ? `Date: ${meta.date}` : '',
     '',
@@ -170,7 +170,7 @@ export async function printReport(report: ReportData, meta: ReportMeta): Promise
 // ── Report: JSON export (structured data, shareable/interoperable) ──
 export async function exportReportJson(report: ReportData, meta: ExportMeta): Promise<void> {
   const payload = {
-    generatedBy: 'NovaScribe',
+    generatedBy: 'AnvayaScribe',
     exportedAt: new Date().toISOString(),
     patient: meta.patientName || null,
     date: meta.date || null,
@@ -257,7 +257,7 @@ export async function exportReportDocx(rawReport: ReportData, meta: ExportMeta):
         new TextRun({
           text:
             [meta.patientName, meta.date].filter(Boolean).join('  •  ') ||
-            'NovaScribe',
+            'AnvayaScribe',
           color: '64748B',
           size: 20,
         }),
