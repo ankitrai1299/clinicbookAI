@@ -67,8 +67,7 @@
             "com.google.android.googlequicksearchbox"
           ]
         }
-      ],
-      "@siteed/expo-audio-studio"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

@@ -101,6 +101,48 @@ Backend: none needed. `/api/doctor` and `/api/mediscribe` are the same router, s
 these routes already existed and already scope themselves to the signed-in
 doctor. Verified live against production before shipping.
 
+## Live transcription is NOT in this app yet (12 Sep 2026)
+
+The web scribe streams the microphone to our own gateway, where a model reads
+whatever language is spoken and keeps it — Bhojpuri as Bhojpuri, Bengali as
+Bengali. This app cannot, and the reason is worth writing down so nobody spends
+the same afternoon twice.
+
+Android's own recogniser takes ONE locale, fixed before anybody speaks, and the
+app's "Auto" resolved to en-IN. That is why the live transcript here is poor and
+why no amount of tuning fixes it: the recogniser was told the wrong language
+before the patient opened their mouth.
+
+Streaming instead needs a native module that hands over raw PCM frames.
+`expo-audio` records to a file; `expo-speech-recognition` hands over a file at
+the end. Neither streams.
+
+`@siteed/expo-audio-studio` does, and three EAS builds failed on it:
+
+    3.2.2 → wrapper with no app.plugin.js; expo config could not resolve it
+    3.2.1 → built for expo ^56.0.5 / RN 0.85.3; this app is 54.0.0 / 0.81.5,
+            and it compiles C++ through CMake and the NDK for mel spectrograms
+            and feature extraction this app has no use for
+    2.18.6 → built for expo ^54.0.0 / RN 0.81.5 exactly, and ships no cpp/ at
+            all. Gradle still failed, and the logs are only reachable from the
+            Expo dashboard, which the CLI cannot read.
+
+**To pick this up again, start with the Gradle log from that third build.** Do
+not add the module back and rebuild hoping — that is three builds already spent
+on hope.
+
+The screen is ready. `CaptureStep` renders the two-row view — said on top, its
+meaning underneath, with an Off/हिंदी/English toggle — whenever it is handed
+`liveLines`. Nothing passes them today, so it falls through to the single-line
+path. The backend, the gateway, the drug-name restoration and the meaning layer
+are all live and proven in production; only this last hop is missing.
+
+A chunked fallback (record 4-5 s, upload, repeat) was considered and rejected:
+restarting the recorder leaves a gap at every seam, and words lost every five
+seconds out of a clinical record is worse than a transcript that is merely late.
+
+---
+
 ---
 
 ## What has NOT been changed, and must not be

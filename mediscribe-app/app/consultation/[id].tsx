@@ -63,7 +63,6 @@ import {
   printReport,
 } from '../../src/utils/export';
 import { useLiveTranscription, ensureLiveRecognition } from '../../src/hooks/useLiveTranscription';
-import { useLiveStt, type MeaningLanguage } from '../../src/hooks/useLiveStt';
 import ReportEditor from '../../src/components/ReportEditor';
 import AudioPlayer from '../../src/components/AudioPlayer';
 import Waveform from '../../src/components/Waveform';
@@ -89,17 +88,15 @@ export default function ConsultationScreen() {
   // ── Live on-device transcription (primary) + expo-audio→Whisper fallback ──
   const live = useLiveTranscription();
 
-  // ── The live transcript, as spoken ────────────────────────────────────
+  // Live transcription through our own gateway — which reads every language
+  // instead of the one locale Android is told before anybody speaks — is written
+  // and working on the WEB scribe. It is not wired here yet: it needs a native
+  // module that can stream raw PCM, and the only one that does failed to build
+  // against this app's Expo SDK. See docs/DIVERGENCES.md.
   //
-  // Our own gateway: the audio leaves the phone and reaches a model that
-  // identifies the language itself and keeps it. The on-device recogniser above
-  // stays as the fallback — it takes ONE locale fixed before anybody speaks, and
-  // "Auto" meant Indian English, which is why Hindi and Bhojpuri came back as
-  // nonsense. A poor transcript a doctor can correct still beats a blank screen
-  // when the socket cannot be reached, and the doctor is told which one they are
-  // on.
-  const stt = useLiveStt();
-  const [sttMode, setSttMode] = useState<'gateway' | 'device'>('gateway');
+  // CaptureStep below already renders the two-row view when it is handed
+  // `liveLines`. Nothing passes them today, so it falls through to the
+  // single-line path — the screen is ready for the day the module is.
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
   const [liveMode, setLiveMode] = useState(true);
@@ -161,10 +158,8 @@ export default function ConsultationScreen() {
   // Three engines, one answer. Without the gateway arm the mic button would show
   // "not recording" while the microphone was open and streaming — the worst
   // possible disagreement between a screen and a device.
-  const isRecording = liveMode
-    ? (sttMode === 'gateway' ? stt.isLive : live.isListening)
-    : recorderState.isRecording;
-  const isPaused = liveMode ? (sttMode === 'gateway' ? false : live.isPaused) : fbPaused;
+  const isRecording = liveMode ? live.isListening : recorderState.isRecording;
+  const isPaused = liveMode ? live.isPaused : fbPaused;
 
   useEffect(() => {
     loadSettings().then((s) => {
@@ -189,21 +184,11 @@ export default function ConsultationScreen() {
 
   // Stream live transcript into the editable field while listening.
   useEffect(() => {
-    if (liveMode && sttMode === 'device' && live.isListening) {
+    if (liveMode && live.isListening) {
       setDisplayedTranscript(live.liveText);
       setOriginalTranscript(live.liveText);
     }
-  }, [live.liveText, live.isListening, liveMode, sttMode]);
-
-  // The record is the SPOKEN words, never the meaning. The second row is a
-  // reading aid for the doctor; what gets saved, reported and printed is what
-  // the patient actually said.
-  useEffect(() => {
-    if (sttMode !== 'gateway' || !stt.lines.length) return;
-    const text = stt.lines.map((l) => l.text).join(' ').trim();
-    setDisplayedTranscript(text);
-    setOriginalTranscript(text);
-  }, [stt.lines, sttMode]);
+  }, [live.liveText, live.isListening, liveMode]);
 
   // Surface live-recognition permission errors.
   useEffect(() => {
@@ -319,20 +304,9 @@ export default function ConsultationScreen() {
   const startRecording = async () => {
     setError(null);
     setSeconds(0);
-    // Our gateway first.
-    try {
-      setLiveMode(true);
-      setSttMode('gateway');
-      await stt.start();
-      return;
-    } catch (err) {
-      console.warn('[liveStt] falling back to the on-device recogniser:', err);
-    }
-
     const canLive = await ensureLiveRecognition();
     if (canLive) {
       setLiveMode(true);
-      setSttMode('device');
       live.start(language, displayedTranscript);
       return;
     }
@@ -350,34 +324,16 @@ export default function ConsultationScreen() {
   };
 
   const pauseRecording = () => {
-    // The gateway path has no pause: the upstream session is a continuous stream
-    // and interrupting it mid-utterance loses the sentence in flight. A button
-    // that appears to work and does not is worse than one that is not offered,
-    // so the control is hidden for this engine rather than made a no-op.
-    if (liveMode && sttMode === 'gateway') return;
     if (liveMode) { live.pause(); return; }
     try { recorder.pause(); setFbPaused(true); } catch {}
   };
 
   const resumeRecording = () => {
-    if (liveMode && sttMode === 'gateway') return;
     if (liveMode) { live.resume(displayedTranscript); return; }
     try { recorder.record(); setFbPaused(false); } catch {}
   };
 
   const stopRecording = async () => {
-    if (liveMode && sttMode === 'gateway') {
-      await stt.stop();
-      // Drug names are already back in Latin — the gateway does that on every
-      // finished line — so the terminology pass below would only repeat work the
-      // server has done with the full glossary in front of it.
-      const text = stt.lines.map((l) => l.text).join(' ').trim();
-      if (text) {
-        setDisplayedTranscript(text);
-        setOriginalTranscript(text);
-      }
-      return;
-    }
     if (liveMode) {
       const finalText = await live.stop();
       if (finalText) {
@@ -685,12 +641,8 @@ export default function ConsultationScreen() {
             setDisplayedTranscript={setDisplayedTranscript}
             isRecording={isRecording}
             isPaused={isPaused}
-            liveText={sttMode === 'gateway' ? stt.lines.map((l) => l.text).join(' ') : live.liveText}
-            interim={sttMode === 'gateway' ? stt.partial : live.interim}
-            liveLines={sttMode === 'gateway' ? stt.lines : undefined}
-            meaningLang={stt.meaning}
-            onMeaningLang={stt.setMeaning}
-            sttNote={sttMode === 'gateway' ? stt.note : null}
+            liveText={live.liveText}
+            interim={live.interim}
             timer={formatTimer(seconds)}
             onStart={startRecording}
             onStop={stopRecording}
