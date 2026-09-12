@@ -15,6 +15,7 @@ import {
   fetchAnalytics,
   getUpcomingAppointments,
   getDoctorLinkStatus,
+  scribeWindow,
   type DoctorAnalytics,
   type UpcomingAppointment,
 } from '../../src/services/api';
@@ -89,6 +90,14 @@ export default function Dashboard() {
   // attached to the right patient, instead of finding them in a list.
   const [upcoming, setUpcoming] = useState<UpcomingAppointment[]>([]);
   const [linked, setLinked] = useState(true);
+  // The Start button turns on at 3:00 and off at 3:30 without anybody touching
+  // the screen. A doctor standing in front of a patient at 3:01 should not have
+  // to pull-to-refresh to discover the button that ought to be there.
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   useEffect(() => {
     let active = true;
     getUpcomingAppointments().then((a) => { if (active) setUpcoming(a); });
@@ -190,6 +199,10 @@ export default function Dashboard() {
     return null;
   };
 
+  // Scribing is offered only during the slot: 3:00 to 3:30 for a 3 o'clock
+  // appointment. `tick` is read here so this recomputes as the clock moves.
+  const windowOf = (a: UpcomingAppointment) => scribeWindow(a.opensAt, a.closesAt, new Date(tick));
+
   // The whole point of showing the appointment: the session opens already
   // attached to that patient, so nobody re-types a name that is already known.
   const scribeAppointment = (a: UpcomingAppointment) => {
@@ -287,7 +300,11 @@ export default function Dashboard() {
             />
             <View className="gap-2.5">
               {todaysQueue.map((a) => (
-                <TouchableOpacity key={a.id} onPress={() => scribeAppointment(a)} activeOpacity={0.7}>
+                <TouchableOpacity
+                  key={a.id}
+                  onPress={windowOf(a) === 'open' ? () => scribeAppointment(a) : undefined}
+                  activeOpacity={windowOf(a) === 'open' ? 0.7 : 1}
+                >
                   <Card className="flex-row items-center p-3.5" elevation="sm">
                     <Avatar name={a.patientName} />
                     <View className="flex-1 ml-3">
@@ -306,14 +323,24 @@ export default function Dashboard() {
                         )}
                       </View>
                     </View>
-                    <View className="flex-row items-center gap-1.5 bg-brand-500 rounded-xl px-3.5 py-2">
-                      <Ionicons name="mic" size={14} color={colors.white} />
-                      <Text className="text-white font-semibold text-[13px]">
-                        {a.status === 'COMPLETED'
-                          ? t('dashboard.addendum', 'Open')
-                          : t('dashboard.start', 'Start')}
+                    {windowOf(a) === 'open' ? (
+                      <View className="flex-row items-center gap-1.5 bg-brand-500 rounded-xl px-3.5 py-2">
+                        <Ionicons name="mic" size={14} color={colors.white} />
+                        <Text className="text-white font-semibold text-[13px]">
+                          {a.status === 'COMPLETED'
+                            ? t('dashboard.addendum', 'Open')
+                            : t('dashboard.start', 'Start')}
+                        </Text>
+                      </View>
+                    ) : (
+                      /* No button, and a reason. An action that is simply absent
+                         reads as a fault; "Opens 3:00 PM" reads as a rule. */
+                      <Text className="text-[11.5px] font-semibold text-slate-400">
+                        {windowOf(a) === 'early'
+                          ? t('dashboard.opensAt', 'Opens') + ' ' + a.time
+                          : t('dashboard.windowClosed', 'Window closed')}
                       </Text>
-                    </View>
+                    )}
                   </Card>
                 </TouchableOpacity>
               ))}

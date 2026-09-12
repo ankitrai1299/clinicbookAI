@@ -245,4 +245,8 @@ export interface UpcomingAppointment {
   /** PENDING | CONFIRMED | NO_SHOW | COMPLETED. Today's list keeps all four, so
    *  a visit already written up is distinguishable from one not reached yet. */
   status?: string;
+  /** The slot as absolute instants, ISO 8601 UTC. Scribing is offered only
+   *  between them — see scribeWindow in src/mediscribe/scribeWindow.ts. */
+  opensAt?: string;
+  closesAt?: string;
 }

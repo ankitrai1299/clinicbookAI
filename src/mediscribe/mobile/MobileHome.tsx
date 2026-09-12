@@ -25,6 +25,7 @@ import {
   trendOf,
   type RangeKey
 } from './ui';
+import { scribeWindow } from '../scribeWindow';
 import { usePrefs } from './prefs';
 // `BRAND` here is the phone UI's accent colour (from ./ui). The brand NAMES
 // come in under an alias so neither has to be renamed.
@@ -102,6 +103,15 @@ export default function MobileHome({
   const now = new Date();
   const today = localDay(now);
   const mins = nowMinutes(now);
+
+  // Scribing is offered only during the slot. Re-read every half minute so the
+  // button turns on at 3:00 and off at 3:30 without a reload.
+  const [tick, setTick] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const id = window.setInterval(() => setTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const windowOf = (a: UpcomingAppointment) => scribeWindow(a.opensAt, a.closesAt, new Date(tick));
   const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
   // Today's roster, in clock order. Slots we can't parse sort last rather than
@@ -262,7 +272,7 @@ export default function MobileHome({
               <Card
                 key={a.id}
                 className="flex items-center p-3.5"
-                onClick={canScribe ? () => onScribeAppointment?.(a) : undefined}
+                onClick={canScribe && windowOf(a) === 'open' ? () => onScribeAppointment?.(a) : undefined}
               >
                 <Avatar name={a.patientName} size={40} />
                 <div className="flex-1 min-w-0 ml-3">
@@ -271,11 +281,16 @@ export default function MobileHome({
                     <Clock size={12} /> {a.time}
                   </div>
                 </div>
-                {canScribe && (
-                  <span className="flex-shrink-0 inline-flex items-center gap-1.5 bg-[#5B5CEB] text-white px-3.5 py-2 rounded-xl font-semibold text-[13px]">
-                    <Mic size={14} /> {t('dashboard.start')}
-                  </span>
-                )}
+                {canScribe &&
+                  (windowOf(a) === 'open' ? (
+                    <span className="flex-shrink-0 inline-flex items-center gap-1.5 bg-[#5B5CEB] text-white px-3.5 py-2 rounded-xl font-semibold text-[13px]">
+                      <Mic size={14} /> {t('dashboard.start')}
+                    </span>
+                  ) : (
+                    <span className="flex-shrink-0 text-[11.5px] font-semibold text-slate-400">
+                      {windowOf(a) === 'early' ? `Opens ${a.time}` : 'Window closed'}
+                    </span>
+                  ))}
               </Card>
             ))}
           </div>

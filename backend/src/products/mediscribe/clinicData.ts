@@ -9,7 +9,7 @@ import { forClinic } from '../../config/tenantPrisma.js';
 import { getPatients, createPatient } from '../../core/patients/patient.service.js';
 import { getDoctors, createDoctor, updateDoctor, deleteDoctor } from '../../core/doctors/doctor.service.js';
 import { getAppointments } from '../../core/appointments/appointment.service.js';
-import { clinicNow, labelToMinutes } from '../../services/slotMath.js';
+import { clinicNow, labelToMinutes, clinicLocalInstant } from '../../services/slotMath.js';
 import { AppointmentStatus } from '@prisma/client';
 
 // MediScribe frontend patient shape.
@@ -255,6 +255,15 @@ export interface UpcomingAppointment {
   time: string; // "HH:MM AM/PM"
   /** So the doctor can tell a waiting patient from one already written up. */
   status: AppointmentStatus;
+  /** The slot, as absolute instants. ISO 8601, UTC.
+   *
+   *  Sent rather than left to the client to work out. The client would have to
+   *  combine a clinic-local date, a "03:00 PM" label and the clinic's timezone,
+   *  on a phone whose own clock and timezone are its own business — and get the
+   *  same answer as the server every time. Two instants and a comparison cannot
+   *  drift. */
+  opensAt: string;
+  closesAt: string;
 }
 
 const LIVE = new Set<AppointmentStatus>([AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]);
@@ -337,6 +346,43 @@ export const findDoctorForLogin = async (
   });
 };
 
+/**
+ * Is this visit's scribe window open right now?
+ *
+ * The clinic's rule, in their words: a 3:00 appointment with a 30-minute slot is
+ * scribable from 3:00 to 3:30, and Start is not offered outside that. Before the
+ * slot there is nothing to record yet; after it, the moment has passed.
+ *
+ * Compared as ABSOLUTE INSTANTS, both supplied by the server. The alternative is
+ * the phone rebuilding the moment from a date, a "03:00 PM" label and a timezone
+ * — three chances to land on a different answer than the server, each of which
+ * shows as a Start button that is missing for no visible reason.
+ *
+ * A value that will not parse returns 'open'. Failing the other way would lock a
+ * doctor out of a real consultation because of a bad string, and a doctor who
+ * cannot record the visit in front of them is a worse outcome than one who can
+ * record a visit slightly outside its window.
+ */
+export type ScribeWindow = 'early' | 'open' | 'closed';
+
+export const scribeWindow = (
+  opensAt: string | undefined,
+  closesAt: string | undefined,
+  now: Date = new Date()
+): ScribeWindow => {
+  const o = Date.parse(String(opensAt ?? ''));
+  const c = Date.parse(String(closesAt ?? ''));
+  if (!Number.isFinite(o) || !Number.isFinite(c)) return 'open';
+  const t = now.getTime();
+  if (t < o) return 'early';
+  if (t >= c) return 'closed';
+  return 'open';
+};
+
+/** When a doctor's schedule says nothing, a visit is half an hour. Same default
+ *  the no-show sweep uses — the two must not disagree about when a slot ended. */
+const DEFAULT_SLOT_MIN = 30;
+
 export const listUpcomingAppointments = async (
   clinicId: string,
   opts?: { doctorEmail?: string; doctorUserId?: string }
@@ -358,6 +404,15 @@ export const listUpcomingAppointments = async (
     const doc = await findDoctorForLogin(clinicId, opts.doctorEmail, opts.doctorUserId);
     onlyDoctorId = doc?.id ?? '__no_match__';
   }
+
+  // Slot lengths, one query. Keyed doctor + weekday, the same key the no-show
+  // sweep uses: if these two ever disagree about how long a visit is, a doctor
+  // loses the Start button while the sweep still thinks the slot is running.
+  const rows = await forClinic(clinicId).doctorSchedule.findMany({
+    where: { isActive: true, ...(onlyDoctorId && onlyDoctorId !== '__no_match__' ? { doctorId: onlyDoctorId } : {}) },
+    select: { doctorId: true, dayOfWeek: true, slotMinutes: true }
+  });
+  const slotMinutes = new Map(rows.map((r) => [`${r.doctorId}|${r.dayOfWeek}`, r.slotMinutes]));
 
   // Filtered in the QUERY, not afterwards. This used to pull the clinic's entire
   // appointment history — every row hydrated with its patient and doctor — and
@@ -382,7 +437,10 @@ export const listUpcomingAppointments = async (
         dateStrOf(a.appointmentDate).localeCompare(dateStrOf(b.appointmentDate)) ||
         (labelToMinutes(a.appointmentTime) ?? 0) - (labelToMinutes(b.appointmentTime) ?? 0)
     )
-    .map((a) => ({
+    .map((a) => {
+      const opens = clinicLocalInstant(a.appointmentDate, a.appointmentTime);
+      const mins = slotMinutes.get(`${a.doctorId}|${a.appointmentDate.getUTCDay()}`) ?? DEFAULT_SLOT_MIN;
+      return {
       id: a.id,
       patientId: a.patientId,
       patientName: a.patient?.name ?? 'Patient',
@@ -391,6 +449,9 @@ export const listUpcomingAppointments = async (
       speciality: a.doctor?.speciality,
       date: dateStrOf(a.appointmentDate),
       time: a.appointmentTime,
-      status: a.status
-    }));
+      status: a.status,
+      opensAt: opens.toISOString(),
+      closesAt: new Date(opens.getTime() + mins * 60_000).toISOString()
+      };
+    });
 };

@@ -71,3 +71,47 @@ describe('QUEUE_STATUSES', () => {
     expect(QUEUE_STATUSES).not.toContain(AppointmentStatus.CANCELLED);
   });
 });
+
+// ── The scribe window ──────────────────────────────────────────────────────
+//
+// The clinic's rule, in their words: a 3:00 appointment that runs to 3:30 can be
+// scribed between 3:00 and 3:30, and Start is not offered outside that.
+
+import { scribeWindow } from './clinicData';
+
+const at = (hhmm: string) => new Date(`2026-09-12T${hhmm}:00.000Z`);
+const OPENS = '2026-09-12T15:00:00.000Z';
+const CLOSES = '2026-09-12T15:30:00.000Z';
+
+describe('scribeWindow', () => {
+  it('is open from the first second of the slot', () => {
+    expect(scribeWindow(OPENS, CLOSES, at('15:00'))).toBe('open');
+  });
+
+  it('is open all the way through it', () => {
+    expect(scribeWindow(OPENS, CLOSES, at('15:29'))).toBe('open');
+  });
+
+  it('is not open a minute early', () => {
+    expect(scribeWindow(OPENS, CLOSES, at('14:59'))).toBe('early');
+  });
+
+  it('closes exactly at the end, not a second later', () => {
+    // The boundary is the half of this that people argue about, so it is pinned:
+    // 15:30 belongs to the next slot, not this one.
+    expect(scribeWindow(OPENS, CLOSES, at('15:30'))).toBe('closed');
+  });
+
+  it('stays closed afterwards', () => {
+    expect(scribeWindow(OPENS, CLOSES, at('18:00'))).toBe('closed');
+  });
+
+  it('opens rather than locks out when the times are unusable', () => {
+    // Deliberately the safe direction. A doctor who cannot record the patient in
+    // front of them is worse than one recording slightly outside the window.
+    for (const bad of ['', 'tomorrow', undefined]) {
+      expect(scribeWindow(bad, CLOSES, at('18:00')), String(bad)).toBe('open');
+      expect(scribeWindow(OPENS, bad, at('18:00')), String(bad)).toBe('open');
+    }
+  });
+});

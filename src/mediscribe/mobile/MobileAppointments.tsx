@@ -1,6 +1,7 @@
 import React from 'react';
 import { CalendarDays, Mic, ChevronRight } from 'lucide-react';
 import { Consultation, UpcomingAppointment } from '../types';
+import { scribeWindow } from '../scribeWindow';
 import { initials, localDay, minutesOfDay, nowMinutes, relativeIn, ScreenHeader, EmptyState } from './ui';
 
 // The doctor's roster for a chosen day — the same ClinicBook appointments the
@@ -36,6 +37,15 @@ export default function MobileAppointments({
 }: MobileAppointmentsProps) {
   const now = new Date();
   const [selected, setSelected] = React.useState<string>(localDay(now));
+
+  // Scribing is offered only during the slot; re-read every half minute so it
+  // opens and closes on its own rather than on a reload.
+  const [tick, setTick] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const id = window.setInterval(() => setTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const windowOf = (a: UpcomingAppointment) => scribeWindow(a.opensAt, a.closesAt, new Date(tick));
 
   // Today plus the next six days — the window a doctor plans within.
   const days = React.useMemo(
@@ -145,8 +155,8 @@ export default function MobileAppointments({
               return (
                 <button
                   key={a.id}
-                  onClick={canScribe ? () => onScribeAppointment?.(a) : undefined}
-                  disabled={!canScribe}
+                  onClick={canScribe && windowOf(a) === 'open' ? () => onScribeAppointment?.(a) : undefined}
+                  disabled={!canScribe || windowOf(a) !== 'open'}
                   className={`w-full flex items-center gap-3 p-4 text-left transition-colors ${
                     canScribe ? 'active:bg-[#EEEFFE]/50' : 'cursor-default'
                   } ${i ? 'border-t border-slate-100' : ''}`}

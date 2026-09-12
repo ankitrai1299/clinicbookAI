@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Consultation, UpcomingAppointment } from '../types';
+import { scribeWindow } from '../scribeWindow';
 import { Mic, Search, Clock, CheckCircle, ChevronRight, Activity, ClipboardList, Users, Pill, CalendarClock, Stethoscope, Zap, AlertTriangle } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -55,6 +56,16 @@ export default function DashboardView({
   onQuickRx,
 }: DashboardViewProps) {
   const [searchQuery, setSearchQuery] = React.useState('');
+
+  // Scribing is offered only during the slot — 3:00 to 3:30 for a 3 o'clock
+  // appointment. Re-read every half minute so the button appears and disappears
+  // on its own: a doctor at 3:01 should not have to reload to find it.
+  const [tick, setTick] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const id = window.setInterval(() => setTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const windowOf = (a: UpcomingAppointment) => scribeWindow(a.opensAt, a.closesAt, new Date(tick));
 
   // Sortable timestamp for a session: prefer updatedAt, then createdAt, then the
   // display date. Missing/unparseable values sort to the bottom.
@@ -189,11 +200,11 @@ export default function DashboardView({
             {todaysQueue.map((a) => (
               <div
                 key={a.id}
-                onClick={canScribe ? () => onScribeAppointment?.(a) : undefined}
-                role={canScribe ? 'button' : undefined}
-                tabIndex={canScribe ? 0 : undefined}
+                onClick={canScribe && windowOf(a) === 'open' ? () => onScribeAppointment?.(a) : undefined}
+                role={canScribe && windowOf(a) === 'open' ? 'button' : undefined}
+                tabIndex={canScribe && windowOf(a) === 'open' ? 0 : undefined}
                 className={`w-full p-4 sm:px-5 flex items-center gap-4 transition-colors text-left group ${
-                  canScribe ? 'hover:bg-blue-50/40 cursor-pointer' : ''
+                  canScribe && windowOf(a) === 'open' ? 'hover:bg-blue-50/40 cursor-pointer' : ''
                 }`}
               >
                 <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold flex-shrink-0">
@@ -226,12 +237,19 @@ export default function DashboardView({
                     )}
                   </div>
                 </div>
-                {canScribe && (
-                  <span className="flex-shrink-0 flex items-center gap-2 bg-blue-600 group-hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors">
-                    <Mic size={15} />
-                    <span className="hidden sm:inline">Start</span>
-                  </span>
-                )}
+                {canScribe &&
+                  (windowOf(a) === 'open' ? (
+                    <span className="flex-shrink-0 flex items-center gap-2 bg-blue-600 group-hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors">
+                      <Mic size={15} />
+                      <span className="hidden sm:inline">Start</span>
+                    </span>
+                  ) : (
+                    /* No button, and a reason. An action that is simply missing
+                       reads as a fault; "Opens 3:00 PM" reads as a rule. */
+                    <span className="flex-shrink-0 text-xs font-semibold text-slate-400">
+                      {windowOf(a) === 'early' ? `Opens ${a.time}` : 'Window closed'}
+                    </span>
+                  ))}
               </div>
             ))}
           </div>
@@ -275,15 +293,11 @@ export default function DashboardView({
                     <span className="flex items-center gap-1"><Stethoscope size={14} /> Dr. {a.doctorName.replace(/^dr\.?\s*/i, '')}{a.speciality ? ` · ${a.speciality}` : ''}</span>
                   </div>
                 </div>
-                {canScribe && (
-                  <button
-                    onClick={() => onScribeAppointment?.(a)}
-                    className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow-sm transition-colors flex items-center gap-2"
-                  >
-                    <Mic size={15} />
-                    <span className="hidden sm:inline">Start Scribe</span>
-                  </button>
-                )}
+                {/* A later day is never inside its own slot, so this offered an
+                    action that could not be right. It is now a plain label. */}
+                <span className="flex-shrink-0 text-xs font-medium text-slate-400">
+                  {prettyDate(a.date)}
+                </span>
               </div>
             ))}
           </div>
