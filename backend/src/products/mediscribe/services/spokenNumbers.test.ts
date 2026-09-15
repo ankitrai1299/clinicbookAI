@@ -51,6 +51,14 @@ describe('blood pressure', () => {
   it('converts a spelled-out reading', () => {
     expect(normaliseSpokenNumbers('BP one hundred forty by ninety')).toBe('BP 140/90');
   });
+
+  it('reads the separator a doctor actually uses', () => {
+    // Measured on a real consultation: the report came out as "150 over 96
+    // millimeters of mercury" — faithful to the speech and useless on a chart,
+    // because nothing downstream can read that as a blood pressure.
+    expect(normaliseSpokenNumbers('BP one fifty over ninety six hai')).toBe('BP 150/96 hai');
+    expect(normaliseSpokenNumbers('ब्लड प्रेशर 150 बटे 96 hai')).toBe('ब्लड प्रेशर 150/96 hai');
+  });
 });
 
 describe('what it must not touch', () => {
@@ -72,6 +80,13 @@ describe('what it must not touch', () => {
   it('leaves Hindi and Devanagari untouched', () => {
     const line = 'दो दिन से पेट में तेज़ दर्द है';
     expect(normaliseSpokenNumbers(line)).toBe(line);
+  });
+
+  it('refuses a pair of numbers that is not a blood pressure', () => {
+    // Digits make "45 by 2" look like a reading. Outside human range it stays as
+    // spoken — an invented vital is worse than an unconverted one.
+    expect(normaliseSpokenNumbers('tablet 45 by 2 lena hai')).toBe('tablet 45 by 2 lena hai');
+    expect(normaliseSpokenNumbers('BP 90 by 140 hai')).toBe('BP 90 by 140 hai');
   });
 
   it('leaves digits that are already digits', () => {

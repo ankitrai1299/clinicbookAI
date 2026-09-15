@@ -40,6 +40,17 @@ const TENS: Record<string, number> = {
   sixty: 60, seventy: 70, eighty: 80, ninety: 90
 };
 
+/**
+ * Words that sit between the two halves of a blood pressure.
+ *
+ * "by" is how it is said in English, "over" is how it is dictated, and "बटे" is
+ * how it is said in Hindi — measured on a real consultation, where the report
+ * came out reading "150 over 96 millimeters of mercury". That is faithful to
+ * the speech and useless on a chart: nothing downstream can read it as a blood
+ * pressure, compare it to the last visit, or flag it as high.
+ */
+const BP_SEPARATORS = new Set(['by', 'over', 'बटे', 'बाई', 'स्लैश', '/']);
+
 /** Units that make a preceding number a dose rather than a count of anything. */
 const UNITS = new Set([
   'mg', 'mgs', 'ml', 'mls', 'mcg', 'g', 'gm', 'gms', 'gram', 'grams',
@@ -111,11 +122,28 @@ const parsePairedReading = (tokens: string[]): number | null => {
  * word) so it can only claim readings that have no other reading: nobody says
  * "one forty" meaning one and then forty.
  */
-const valueOf = (tokens: string[]): number | null =>
-  parsePairedReading(tokens) ?? parseNumberWords(tokens);
+const valueOf = (tokens: string[]): number | null => {
+  // Already a number. A doctor dictating "150 बटे 96" gives the digits and only
+  // the separator in words, so half of every Hindi blood pressure arrives like
+  // this — and a rule that only understands number WORDS would leave it as
+  // "150 बटे 96" on the chart.
+  if (tokens.length === 1 && /^\d{1,3}$/.test(tokens[0])) return Number(tokens[0]);
+  return parsePairedReading(tokens) ?? parseNumberWords(tokens);
+};
+
+/**
+ * Is this pair a plausible blood pressure?
+ *
+ * Guards the one risk digits introduce: "patient 45 by 2" or a stray pair of
+ * numbers should not become a reading. Outside human range it is left as spoken,
+ * because an invented vital is worse than an unconverted one.
+ */
+const plausibleBp = (systolic: number, diastolic: number): boolean =>
+  systolic >= 50 && systolic <= 300 && diastolic >= 30 && diastolic <= 200 && systolic > diastolic;
 
 const isNumberWord = (t: string): boolean => {
-  const w = t.toLowerCase();
+  const w = stripPunct(t).toLowerCase();
+  if (/^\d{1,3}$/.test(w)) return true;
   return ONES[w] !== undefined || TENS[w] !== undefined || w === 'hundred' || w === 'thousand' || w === 'and';
 };
 
@@ -183,13 +211,13 @@ export const normaliseSpokenNumbers = (text: string): string => {
   for (let r = runs.length - 1; r >= 0; r--) {
     const run = runs[r];
 
-    // Blood pressure: <run> by <run>
+    // Blood pressure: <run> by|over|बटे <run>
     const next = runs[r + 1];
-    const between = words[run.to]?.toLowerCase();
-    if (next && between === 'by' && next.from === run.to + 1) {
+    const between = stripPunct(words[run.to] ?? '').toLowerCase();
+    if (next && BP_SEPARATORS.has(between) && next.from === run.to + 1) {
       const systolic = valueOf(run.tokens);
       const diastolic = valueOf(next.tokens);
-      if (systolic !== null && diastolic !== null) {
+      if (systolic !== null && diastolic !== null && plausibleBp(systolic, diastolic)) {
         replace(run.from, next.to, `${systolic}/${diastolic}`);
         continue;
       }
