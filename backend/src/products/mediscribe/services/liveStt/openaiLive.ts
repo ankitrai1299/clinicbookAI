@@ -82,6 +82,22 @@ export const openOpenAiLive = (handlers: LiveSttHandlers): LiveSttSession => {
     }
     if (type === 'conversation.item.input_audio_transcription.completed') {
       handlers.onEvent({ text: String(msg.transcript ?? ''), final: true });
+      return;
+    }
+
+    // A turn that could not be transcribed.
+    //
+    // This does NOT arrive as type 'error' — it is its own event, per utterance,
+    // and ignoring it is a silent total failure: the doctor speaks, every turn
+    // fails, no text appears, no error appears, and the failover to the other
+    // provider never fires because nothing ever reported a problem.
+    //
+    // Found when the account ran out of credit mid-project and the benchmark
+    // returned empty strings for every case with no explanation at all. That is
+    // the shape this bug takes in a clinic too.
+    if (type === 'conversation.item.input_audio_transcription.failed') {
+      const e = msg.error as { message?: string; code?: string } | undefined;
+      handlers.onError(new Error(e?.message || e?.code || 'OpenAI could not transcribe this turn'));
     }
   });
 
