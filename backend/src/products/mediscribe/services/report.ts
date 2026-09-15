@@ -23,6 +23,7 @@
 import type { ReportData } from '../shared/types.js';
 import { normalizeReport } from '../shared/report.js';
 import { sarvamChat, sarvamKey } from '../../../core/ai/sarvam.js';
+import { isDeniedIn } from './negation.js';
 import { translateTranscript } from './translate.js';
 
 // Detect a non-Latin Indian/Urdu script — Devanagari (0900–097F) … Malayalam
@@ -38,6 +39,19 @@ const SHARED_RULES =
   '- Output MUST be entirely in English. Translate any non-English content (Hindi/Urdu/Telugu/etc.) into English; never emit non-Latin script. Medicine names and proper nouns may keep their standard Latin spelling.\n' +
   '- Extract ONLY facts present in the transcript; never invent medicines, diagnoses, tests, dosages or vitals. Preserve medicine names, doses, frequencies, durations and values exactly as stated.\n' +
   '- Capture every relevant fact for the requested fields. Leave anything not mentioned empty ([] or "").\n' +
+  // The rule this section exists for. Measured: given "Patient ko Penicillin se
+  // allergy NAHI hai", the report came back with Penicillin listed as an
+  // allergy — the exact opposite of what was said, and a record that would deny
+  // that patient the right antibiotic for years. Both models did it.
+  '- NEGATION IS A CLINICAL FACT AND MUST SURVIVE. "no allergy", "allergy nahi hai", "denies chest pain", ' +
+  '"koi dikkat nahi", "sugar nahi hai" mean the finding is ABSENT. Never record a denied finding as present. ' +
+  'An allergy the patient denies is NOT an allergy; a symptom the patient denies is NOT a symptom; a condition ' +
+  'ruled out is NOT a diagnosis.\n' +
+  '- A denial belongs only where the schema has somewhere for it (explicitly negative findings in ' +
+  'reviewOfSystems, or history noting a denial). Everywhere else leave the field EMPTY rather than listing ' +
+  'the thing that was denied.\n' +
+  '- If you cannot tell whether something was affirmed or denied, leave it out. An omission is a gap a doctor ' +
+  'can see and fill; an inverted fact is one they cannot.\n' +
   '- Return ONLY a single JSON object with EXACTLY the requested keys — no markdown fences, no commentary.';
 
 // The report schema is generated in these four groups. Splitting the output keeps
@@ -166,6 +180,39 @@ async function condenseIfLong(text: string): Promise<string> {
 // content (token budget), and degrades to an empty object rather than failing the
 // whole report if it still cannot produce that group. A genuine API error (bad
 // key, network) is surfaced instead of being masked.
+/**
+ * Strip findings the transcript denied.
+ *
+ * Deliberately narrow: only the lists where a false POSITIVE changes treatment.
+ * An allergy the patient does not have will deny them a drug for years; a
+ * diagnosis that was ruled out will be treated as history by the next doctor
+ * who reads the file.
+ *
+ * A finding the transcript does not mention at all is KEPT. The model may have
+ * read a paraphrase this cannot match, and silently deleting clinical content
+ * because a string comparison missed it would be its own kind of harm.
+ */
+function dropDeniedFindings(report: Record<string, unknown>, transcript: string): void {
+  const prune = (key: string, nameOf: (row: any) => string): void => {
+    const rows = report[key];
+    if (!Array.isArray(rows) || !rows.length) return;
+    const kept = rows.filter((row) => {
+      const name = nameOf(row);
+      if (!name) return true;
+      const denied = isDeniedIn(transcript, name);
+      if (denied === true) {
+        console.warn(`[generate-report] dropped "${name}" from ${key} — the transcript denies it`);
+        return false;
+      }
+      return true;
+    });
+    if (kept.length !== rows.length) report[key] = kept;
+  };
+
+  prune('allergies', (r) => String(r?.allergy ?? r?.name ?? '').trim());
+  prune('diagnoses', (r) => String(r?.diagnosis ?? r?.name ?? r ?? '').trim());
+}
+
 async function extractGroup(text: string, group: (typeof SECTION_GROUPS)[number]): Promise<Record<string, unknown>> {
   const { glossaryForPrompt } = await import('./medicalTerms.js');
   const system =
@@ -265,6 +312,14 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
   // the same consultation always produces the same report.
   const merged: Record<string, unknown> = {};
   for (const part of results) Object.assign(merged, part);
+
+  //    Then the guard: remove anything the transcript actually DENIED.
+  //
+  //    Both models, given "Patient ko Penicillin se allergy NAHI hai", produced
+  //    a report listing Penicillin as an allergy — and kept doing it after the
+  //    prompt was given an explicit rule about negation in capitals with
+  //    examples. So it is checked in code instead. See ./negation.ts.
+  dropDeniedFindings(merged, source);
 
   // 4) Merge onto a full empty report so every field/section always exists.
   return normalizeReport(merged);

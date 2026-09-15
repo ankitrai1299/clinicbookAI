@@ -56,7 +56,21 @@ export const isAiConfigured = (): boolean =>
 /**
  * The default chat model for the chosen provider.
  *
- * SARVAM_MODEL exists because Sarvam retires models without warning —
+ * sarvam-105b-conversations, not sarvam-105b, and the gap is not small. Both
+ * were run over the same consultation:
+ *
+ *              time    picked up the patient's existing Metformin?
+ *   105b       121s    no — dropped it entirely
+ *   -conv       16s    yes, in both the history and the prescription
+ *
+ * Seven times faster, and it kept a fact the other lost. The duplication is the
+ * lesser fault: a doctor can see a medicine listed twice, and cannot see one
+ * that is missing.
+ *
+ * The speed is not a luxury either. At two minutes the whole request exceeded
+ * the client's timeout, so the doctor watched a spinner and received nothing.
+ *
+ * SARVAM_MODEL overrides this because Sarvam retires models without warning —
  * 'sarvam-30b' was the default until it was deprecated mid-flight and every
  * report generation began failing. The override makes the next retirement a
  * config change on the host rather than a deploy.
@@ -64,7 +78,7 @@ export const isAiConfigured = (): boolean =>
 export const aiModel = (): string =>
   aiProvider() === 'openai'
     ? (process.env.OPENAI_MODEL || '').trim() || 'gpt-4.1-mini'
-    : (process.env.SARVAM_MODEL || '').trim() || 'sarvam-105b';
+    : (process.env.SARVAM_MODEL || '').trim() || 'sarvam-105b-conversations';
 
 /** An OpenAI-SDK client pointed at whichever provider is in charge. */
 export const aiClient = (): OpenAI => {

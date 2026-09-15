@@ -33,13 +33,26 @@ export interface ChatMessage {
 
 // Chat model, overridable with SARVAM_MODEL.
 //
+// '-conversations', not plain 'sarvam-105b'. Both were run over the same
+// consultation and the difference decides whether a report arrives at all:
+//
+//              time    picked up the patient's existing Metformin?
+//   105b       121s    no — dropped it entirely
+//   -conv       16s    yes, in both the history and the prescription
+//
+// It reasons far less for the same extraction, which is what makes it fast: the
+// reasoning trace and the answer share one token budget, and the plain model
+// spent so much of it thinking that some sections came back EMPTY after four
+// minutes. The duplication it produces is the lesser fault — a doctor can see a
+// medicine listed twice and cannot see one that is missing.
+//
 // Sarvam retires models without warning — 'sarvam-30b' was the default until it
 // was deprecated mid-flight, and every report generation started failing with
 // "Model 'sarvam-30b' has been deprecated" long after the code was written. The
 // env override exists so the next retirement is a config change on the host, not
 // a code change and a redeploy while doctors cannot generate reports.
 export function sarvamModel(): string {
-  return (process.env.SARVAM_MODEL || '').trim() || 'sarvam-105b';
+  return (process.env.SARVAM_MODEL || '').trim() || 'sarvam-105b-conversations';
 }
 
 export interface SarvamChatOptions {
