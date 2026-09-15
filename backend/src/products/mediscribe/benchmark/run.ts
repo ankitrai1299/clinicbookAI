@@ -75,20 +75,42 @@ const TAIL_TICKS = 20;
  */
 const bytesPer100ms = (rate: number): number => (rate / 10) * 2;
 
-/** Speak a line, and return raw PCM16 at 24 kHz. */
-const synthesise = async (text: string, voice: string): Promise<Buffer> => {
-  const res = await fetch('https://api.sarvam.ai/text-to-speech', {
-    method: 'POST',
-    headers: { 'api-subscription-key': sarvamKey(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, target_language_code: voice, speech_sample_rate: RATE })
-  });
-  const body = await res.text();
-  if (!res.ok) throw new Error(`TTS ${res.status}: ${body.slice(0, 200)}`);
-  const b64 = JSON.parse(body)?.audios?.[0];
-  if (!b64) throw new Error('TTS returned no audio');
-  // 44-byte RIFF header, then linear16 mono.
-  return Buffer.from(b64, 'base64').subarray(44);
+/**
+ * Retry a network call a few times before giving up.
+ *
+ * A full run is twenty minutes of API calls, and the first attempt at one died
+ * on a single connect timeout to the TTS endpoint — twenty minutes of work
+ * destroyed by one blip on a home connection. A benchmark nobody can finish
+ * running is a benchmark nobody runs.
+ */
+const withRetry = async <T>(what: string, fn: () => Promise<T>): Promise<T> => {
+  const delays = [1000, 3000, 8000];
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i >= delays.length) throw err;
+      process.stdout.write(`(${what} retry ${i + 1}) `);
+      await new Promise((r) => setTimeout(r, delays[i]));
+    }
+  }
 };
+
+/** Speak a line, and return raw PCM16 at 24 kHz. */
+const synthesise = (text: string, voice: string): Promise<Buffer> =>
+  withRetry('tts', async () => {
+    const res = await fetch('https://api.sarvam.ai/text-to-speech', {
+      method: 'POST',
+      headers: { 'api-subscription-key': sarvamKey(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, target_language_code: voice, speech_sample_rate: RATE })
+    });
+    const body = await res.text();
+    if (!res.ok) throw new Error(`TTS ${res.status}: ${body.slice(0, 200)}`);
+    const b64 = JSON.parse(body)?.audios?.[0];
+    if (!b64) throw new Error('TTS returned no audio');
+    // 44-byte RIFF header, then linear16 mono.
+    return Buffer.from(b64, 'base64').subarray(44);
+  });
 
 /** Feed PCM to a socket in real time, then hold for the tail. */
 const stream = (
@@ -247,8 +269,17 @@ const main = async () => {
   const rows: Row[] = [];
 
   for (const c of cases) {
-    const pcm = await synthesise(c.say, c.voice);
     process.stdout.write(`${c.id.padEnd(20)} `);
+    let pcm: Buffer;
+    try {
+      pcm = await synthesise(c.say, c.voice);
+    } catch (err) {
+      // Skipped, and said so. Silently scoring it zero would look like the
+      // engine failed on a case it was never given.
+      process.stdout.write(`SKIPPED (could not synthesise: ${(err as Error).message.slice(0, 50)})
+`);
+      continue;
+    }
 
     for (const engine of ENGINES) {
       let text = '';

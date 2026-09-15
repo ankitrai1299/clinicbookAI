@@ -8,6 +8,19 @@
 import { ReportData, Vitals, FollowUp } from '../types';
 import { VITALS_FIELDS } from './report';
 
+// Matching ACROSS SCRIPTS, for the two comparisons where a script difference
+// would read as a clinical change.
+//
+// The engine's script is not stable — the same Hindi came back as "बुखार" on one
+// run and "bukhaar" on another, on identical audio. Compared as plain strings, a
+// patient on one unchanged medicine for six months reads as "stopped
+// Paracetamol, started पैरासिटामोल", on the screen a doctor uses to judge
+// whether the treatment is working.
+//
+// Used only for the two maps below. `norm` stays as it is for placeholder
+// detection, which needs exact words and would misfire on a phonetic reduction.
+import { matchKey } from './phonetic';
+
 export interface SymptomComparison {
   // Present last visit, gone now.
   resolved: string[];
@@ -53,7 +66,6 @@ export interface VisitComparison {
 
 const clean = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 const norm = (v: string): string => v.trim().toLowerCase();
-
 // AI reports fill absent fields with "Not mentioned" / "None" placeholders — drop
 // them so the summary shows only real clinical content.
 const PLACEHOLDERS = new Set(['not mentioned', 'none', 'none mentioned', 'n/a', 'na', 'nil', 'not applicable', 'no', 'not specified', 'unknown']);
@@ -95,8 +107,8 @@ function testFindings(report: ReportData): string[] {
 // Diff two string lists case-insensitively, preserving the original casing of
 // whichever side a value came from.
 function diffLists(prev: string[], curr: string[]) {
-  const prevMap = new Map(prev.map(s => [norm(s), s]));
-  const currMap = new Map(curr.map(s => [norm(s), s]));
+  const prevMap = new Map(prev.map(s => [matchKey(s), s]));
+  const currMap = new Map(curr.map(s => [matchKey(s), s]));
   const added: string[] = [];
   const removed: string[] = [];
   const both: string[] = [];
@@ -154,8 +166,8 @@ function medRegimen(m: any): string {
 function compareMedicines(prev: ReportData, curr: ReportData): MedicineChange {
   const prevRows = (Array.isArray(prev.prescribedMedications) ? prev.prescribedMedications : []).filter(m => medName(m));
   const currRows = (Array.isArray(curr.prescribedMedications) ? curr.prescribedMedications : []).filter(m => medName(m));
-  const prevMap = new Map(prevRows.map(m => [norm(medName(m)), m]));
-  const currMap = new Map(currRows.map(m => [norm(medName(m)), m]));
+  const prevMap = new Map(prevRows.map(m => [matchKey(medName(m)), m]));
+  const currMap = new Map(currRows.map(m => [matchKey(medName(m)), m]));
 
   const started: string[] = [];
   const stopped: string[] = [];
