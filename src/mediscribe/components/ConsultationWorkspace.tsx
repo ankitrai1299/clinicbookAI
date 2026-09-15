@@ -2012,7 +2012,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     setIsLabelling(true);
     setError(null);
     try {
-      const turns = await labelSpeakers(text);
+      const turns = await labelSpeakers(text, audioUrl || undefined);
       if (turns.length === 0) {
         setError('Could not confidently separate the speakers for this transcript.');
         return;

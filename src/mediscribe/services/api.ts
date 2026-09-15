@@ -481,11 +481,37 @@ export async function getPatientHistory(
 
 // Split a transcript into labelled Doctor/Patient turns. Returns [] when the
 // transcript can't be segmented — callers keep showing the plain transcript.
-export async function labelSpeakers(transcript: string): Promise<{ speaker: 'Doctor' | 'Patient'; text: string }[]> {
+//
+// The recording is passed when there is one, because separating the VOICES beats
+// reading the words and guessing: a doctor and a patient discussing the same
+// symptom read alike on the page and sound nothing like each other. The server
+// falls back to the transcript-only method when the audio cannot be used or the
+// acoustics find only one voice.
+//
+// The key and its signature are pulled out of the audio URL the server issued.
+// They are re-verified server-side — this is not a way to reach another clinic's
+// recording, and a link that has expired is refused there as it is everywhere.
+export async function labelSpeakers(
+  transcript: string,
+  audioUrl?: string,
+): Promise<{ speaker: 'Doctor' | 'Patient'; text: string }[]> {
+  let audio: { audioKey: string; e: string; s: string } | null = null;
+  if (audioUrl) {
+    try {
+      const u = new URL(audioUrl, window.location.origin);
+      const key = decodeURIComponent(u.pathname.split('/api/mediscribe/audio/')[1] ?? '');
+      const e = u.searchParams.get('e') ?? '';
+      const sig = u.searchParams.get('s') ?? '';
+      if (key && e && sig) audio = { audioKey: key, e, s: sig };
+    } catch {
+      /* a malformed URL just means no acoustic pass */
+    }
+  }
+
   const res = await fetch(`${BASE}/label-speakers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeader() },
-    body: JSON.stringify({ transcript }),
+    body: JSON.stringify({ transcript, ...(audio ?? {}) }),
   });
   if (!res.ok) throw new Error(await errorMessage(res, 'Could not identify speakers'));
   const data = await res.json();
