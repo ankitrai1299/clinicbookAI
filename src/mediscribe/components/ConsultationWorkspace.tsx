@@ -683,11 +683,33 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         const result = await transcribeAudio(blob);
         const whisperText = (result.rawText || '').trim();
         debug('[transcribe] backend response — text length:', whisperText.length);
-        if (whisperText && !isLikelyHallucination(whisperText)) {
+        // The recorded pass REPLACES the live transcript, so it must be at
+        // least as complete. Measured against a 1.8-minute recording, the
+        // provider's batch transcription returned 13 of 24 spoken lines —
+        // dropping content from the start and the middle, not truncating the
+        // end. Taking that would have destroyed a complete live transcript the
+        // doctor had watched appear, and replaced it with half a consultation.
+        //
+        // So the longer one wins on word count. Not on quality judgement, which
+        // neither side can make: the recorded pass usually reads better per
+        // word, but "better wording of half the visit" is not better.
+        const liveWords = countWords(liveText);
+        const recordedWords = countWords(whisperText);
+        const complete = liveWords === 0 || recordedWords >= liveWords * 0.85;
+
+        if (whisperText && !isLikelyHallucination(whisperText) && complete) {
           // Append the accurate transcription after any pre-recording transcript.
           finalText = (recordingBaseRef.current
             ? `${recordingBaseRef.current} ${whisperText}`
             : whisperText).trim();
+        } else if (whisperText && !complete) {
+          // Said out loud rather than decided quietly. A doctor who sees the
+          // text change after Stop needs to know which version they are reading.
+          debug('[transcribe] recorded pass was shorter than the live transcript — keeping live',
+            { liveWords, recordedWords });
+          setError(
+            'Kept the live transcript: the re-check of the recording came back shorter and would have lost part of the consultation.'
+          );
         }
         // Transcribed — the persisted audio has served its purpose.
         void clearRecording(consultation.id);
@@ -899,6 +921,10 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     // spans the whole Start→Stop session).
     try { if (mediaRecorderRef.current?.state === 'paused') mediaRecorderRef.current.resume(); } catch { /* noop */ }
   };
+
+  // Words, for deciding which of two transcripts is more complete. Any script:
+  // Devanagari and Bengali separate words with spaces exactly as Latin does.
+  const countWords = (t: string): number => (t || '').trim().split(/\s+/).filter(Boolean).length;
 
   const stopLiveRecording = () => {
     // Ignore repeat Stop clicks while a stop/finalize/report run is in progress.
