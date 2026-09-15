@@ -851,8 +851,15 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
           onMeaning: (id, text) =>
             setLiveLines((prev) => prev.map((l) => (l.id === id ? { ...l, meaning: text } : l))),
           onStatus: (status, detail) => {
-            if (status === 'error') setSttNote(detail ?? 'Live transcription stopped.');
-            if (status === 'live') setSttNote(null);
+            if (status === 'live') return setSttNote(null);
+            if (status === 'error') return setSttNote(detail ?? 'Live transcription stopped.');
+            if (status === 'reconnecting') {
+              // Said plainly, because the doctor can see the words have stopped
+              // and the only question that matters is whether they are lost.
+              return setSttNote(
+                detail ?? 'Reconnecting — the recording is still running and nothing is lost.'
+              );
+            }
           }
         },
         { meaning: meaningLang }
@@ -2689,7 +2696,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
                reading aid for a doctor who does not speak that language, and it
                is never what gets saved. */
             <div className="flex-1 w-full bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-24 flex flex-col">
-              <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3 bg-slate-50/60">
+              <div className="px-4 sm:px-5 py-3 border-b border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-2 bg-slate-50/60">
                 <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-red-600">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Live
                 </span>
@@ -2718,7 +2725,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-3">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-5 space-y-3">
                 {liveLines.map((line) => (
                   <div key={line.id}>
                     <p className="text-[15px] leading-relaxed text-slate-800">{line.text}</p>

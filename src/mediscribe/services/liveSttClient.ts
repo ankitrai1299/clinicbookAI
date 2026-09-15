@@ -23,7 +23,13 @@
 export const CAPTURE_RATE = 24_000;
 
 export interface LiveLine {
-  id: number;
+  /** Unique for the whole consultation, not just this connection.
+   *
+   *  The server numbers lines from 1 and starts again on every socket, so after
+   *  a reconnect its ids collide with the ones already on screen — line 1 of the
+   *  new connection would overwrite line 1 of the old. The epoch below is bumped
+   *  per connection so the two can never be mistaken for each other. */
+  id: string;
   text: string;
   language?: string;
   /** The second row: the same line in the language the doctor reads. */
@@ -38,9 +44,30 @@ export interface LiveSttHandlers {
   /** A finished line. Drug names are already back in Latin by the time it arrives. */
   onFinal: (line: LiveLine) => void;
   /** The meaning of a line, arriving a beat after it. */
-  onMeaning: (id: number, text: string) => void;
-  onStatus?: (status: 'connecting' | 'live' | 'stopped' | 'error', detail?: string) => void;
+  onMeaning: (id: string, text: string) => void;
+  onStatus?: (
+    status: 'connecting' | 'live' | 'reconnecting' | 'stopped' | 'error',
+    detail?: string
+  ) => void;
 }
+
+// ── Surviving a dropped network ───────────────────────────────────────────
+//
+// A consultation does not pause because a lift, a thick wall or a mobile
+// handover took the connection away for eight seconds. The microphone keeps
+// recording into a queue the whole time, the socket reconnects on its own, and
+// the queue drains into it — so the transcript catches up rather than losing the
+// middle of what the patient said.
+//
+// The queue is capped. Beyond the cap the LIVE text will have a gap, and that is
+// the right trade: the parallel full recording is still running and still
+// complete, and a transcript produced from it when the consultation ends is
+// better than a browser tab that grew until the phone killed it mid-visit.
+const MAX_QUEUE_BYTES = 4 * 60 * CAPTURE_RATE * 2; // ~4 minutes of audio
+// Backoff, and deliberately gentle at the start: most outages on a phone are a
+// second or two of handover, and an immediate retry catches those before the
+// doctor notices anything.
+const RETRY_DELAYS_MS = [400, 800, 1500, 3000, 5000, 8000];
 
 const socketUrl = (token: string): string => {
   const root = ((import.meta.env.VITE_API_URL as string) || (import.meta.env.VITE_API_BASE_URL as string) || '')
@@ -155,34 +182,103 @@ export const startLiveStt = async (
   }
   const fromRate = ctx.sampleRate;
 
-  const ws = new WebSocket(socketUrl(token));
-  ws.binaryType = 'arraybuffer';
-
   let meaning: MeaningLanguage = opts.meaning ?? 'off';
   let stopped = false;
 
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type: 'start', meaning }));
-    handlers.onStatus?.('live');
-  };
-  ws.onmessage = (ev) => {
-    let msg: { type?: string; id?: number; text?: string; language?: string; message?: string };
-    try {
-      msg = JSON.parse(ev.data);
-    } catch {
-      return;
+  // ── The socket, and the queue behind it ────────────────────────────────
+  //
+  // Audio is produced by the microphone whether or not there is anywhere to send
+  // it. Everything the worklet hands over goes into `queue` first and is drained
+  // from there, so a socket that is closed, reconnecting, or not open yet costs
+  // latency rather than words.
+  let ws: WebSocket | null = null;
+  let epoch = 0;
+  let attempt = 0;
+  let queued = 0;
+  const queue: ArrayBuffer[] = [];
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const drain = () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    while (queue.length) {
+      const chunk = queue.shift()!;
+      queued -= chunk.byteLength;
+      ws.send(chunk);
     }
-    if (msg.type === 'partial') return handlers.onPartial(msg.text ?? '');
-    if (msg.type === 'final') {
-      return handlers.onFinal({ id: msg.id ?? 0, text: msg.text ?? '', language: msg.language });
+    queued = 0;
+  };
+
+  const enqueue = (chunk: ArrayBuffer) => {
+    queue.push(chunk);
+    queued += chunk.byteLength;
+    // Oldest first. A long outage loses the START of the gap rather than the
+    // end, which keeps the words nearest to "now" — the ones the doctor is
+    // about to look for on screen.
+    while (queued > MAX_QUEUE_BYTES && queue.length) {
+      queued -= queue.shift()!.byteLength;
     }
-    if (msg.type === 'meaning') return handlers.onMeaning(msg.id ?? 0, msg.text ?? '');
-    if (msg.type === 'error') return handlers.onStatus?.('error', msg.message);
+    drain();
   };
-  ws.onerror = () => handlers.onStatus?.('error', 'Live transcription lost its connection.');
-  ws.onclose = () => {
-    if (!stopped) handlers.onStatus?.('stopped');
+
+  const connect = () => {
+    if (stopped) return;
+    epoch += 1;
+    const myEpoch = epoch;
+    handlers.onStatus?.(attempt === 0 ? 'connecting' : 'reconnecting');
+
+    const socket = new WebSocket(socketUrl(token));
+    socket.binaryType = 'arraybuffer';
+    ws = socket;
+
+    socket.onopen = () => {
+      attempt = 0;
+      socket.send(JSON.stringify({ type: 'start', meaning }));
+      handlers.onStatus?.('live');
+      drain();
+    };
+
+    socket.onmessage = (ev) => {
+      let msg: { type?: string; id?: number; text?: string; language?: string; message?: string };
+      try {
+        msg = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+      // Namespaced by connection: the server restarts its numbering on every
+      // socket, and without this a reconnect would overwrite the lines already
+      // on screen.
+      const key = `${myEpoch}-${msg.id ?? 0}`;
+      if (msg.type === 'partial') return handlers.onPartial(msg.text ?? '');
+      if (msg.type === 'final') {
+        return handlers.onFinal({ id: key, text: msg.text ?? '', language: msg.language });
+      }
+      if (msg.type === 'meaning') return handlers.onMeaning(key, msg.text ?? '');
+      if (msg.type === 'error') return handlers.onStatus?.('error', msg.message);
+    };
+
+    const retry = () => {
+      if (stopped || ws !== socket) return;
+      const delay = RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+      attempt += 1;
+      const seconds = Math.round(queued / (CAPTURE_RATE * 2));
+      handlers.onStatus?.(
+        'reconnecting',
+        seconds > 2 ? `Offline — ${seconds}s of audio is held and will be sent.` : undefined
+      );
+      retryTimer = setTimeout(connect, delay);
+    };
+
+    socket.onerror = () => {
+      // An error is always followed by a close; reconnecting is handled there so
+      // a single drop does not schedule two retries.
+    };
+    socket.onclose = () => {
+      if (stopped || ws !== socket) return;
+      retry();
+    };
   };
+
+  connect();
 
   const blobUrl = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: 'application/javascript' }));
   await ctx.audioWorklet.addModule(blobUrl);
@@ -190,10 +286,9 @@ export const startLiveStt = async (
 
   const source = ctx.createMediaStreamSource(stream);
   const tap = new AudioWorkletNode(ctx, 'mic-tap');
-  tap.port.onmessage = (e: MessageEvent<Float32Array>) => {
-    if (ws.readyState !== WebSocket.OPEN) return;
-    ws.send(toPcm16(e.data, fromRate));
-  };
+  // Straight into the queue, never straight onto the socket. Whether there is a
+  // connection right now is the queue's problem, not the microphone's.
+  tap.port.onmessage = (e: MessageEvent<Float32Array>) => enqueue(toPcm16(e.data, fromRate));
   source.connect(tap);
   // A worklet with no destination is not guaranteed to be pulled. Routing it
   // through a silent gain keeps the graph alive without playing the consultation
@@ -202,29 +297,52 @@ export const startLiveStt = async (
   mute.gain.value = 0;
   tap.connect(mute).connect(ctx.destination);
 
+  // A phone locks, a browser tab goes to the background, and the AudioContext is
+  // suspended by the platform — the microphone stops without anything being
+  // wrong. Resuming when the page comes back means a doctor who checked a
+  // message mid-consultation does not return to a recording that quietly ended.
+  const onVisible = () => {
+    if (!stopped && ctx.state === 'suspended') void ctx.resume().catch(() => undefined);
+  };
+  document.addEventListener('visibilitychange', onVisible);
+
   return {
     get active() {
-      return !stopped && ws.readyState === WebSocket.OPEN;
+      return !stopped;
     },
     setMeaning(lang: MeaningLanguage) {
       meaning = lang;
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'meaning', language: lang }));
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'meaning', language: lang }));
     },
     async stop() {
       stopped = true;
-      try {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop' }));
-      } catch {
-        /* the socket is already gone; nothing to tell it */
-      }
+      if (retryTimer) clearTimeout(retryTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+
       source.disconnect();
       tap.disconnect();
       mute.disconnect();
       stream.getTracks().forEach((t) => t.stop());
       await ctx.close().catch(() => undefined);
-      // Left open briefly on purpose: the last sentence is still inside the
-      // provider, and closing now would discard the line the doctor just spoke.
-      setTimeout(() => ws.close(), 4000);
+
+      const socket = ws;
+      if (socket?.readyState === WebSocket.OPEN) {
+        // Whatever is still queued goes now — those are words already spoken,
+        // and they are the last thing a doctor would expect to lose by pressing
+        // Stop.
+        drain();
+        try {
+          socket.send(JSON.stringify({ type: 'stop' }));
+        } catch {
+          /* the socket went away between the check and the send */
+        }
+        // Left open briefly on purpose: the last sentence is still inside the
+        // provider, and closing now would discard the line just spoken.
+        setTimeout(() => socket.close(), 4000);
+      } else {
+        socket?.close();
+      }
+      ws = null;
       handlers.onStatus?.('stopped');
     }
   };
