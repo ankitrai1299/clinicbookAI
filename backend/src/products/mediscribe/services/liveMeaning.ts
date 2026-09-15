@@ -26,7 +26,7 @@
 // transcript that stutters is not. Every failure here returns null and the line
 // simply has no second row.
 
-import { sarvamChat, sarvamKey } from './sarvam.js';
+import { sarvamChat, sarvamKey } from '../../../core/ai/sarvam.js';
 import { complete, isAiConfigured } from '../../../core/ai/llm.js';
 import { translateText } from '../../../core/ai/translate.js';
 

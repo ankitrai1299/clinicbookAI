@@ -22,7 +22,7 @@
 
 import type { ReportData } from '../shared/types.js';
 import { normalizeReport } from '../shared/report.js';
-import { sarvamChat, sarvamKey } from './sarvam.js';
+import { sarvamChat, sarvamKey } from '../../../core/ai/sarvam.js';
 import { translateTranscript } from './translate.js';
 
 // Detect a non-Latin Indian/Urdu script — Devanagari (0900–097F) … Malayalam

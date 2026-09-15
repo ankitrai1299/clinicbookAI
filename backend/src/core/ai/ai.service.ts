@@ -1,4 +1,6 @@
 import OpenAI from 'openai';
+
+import { aiClient, aiExtras, aiModel } from './provider.js';
 import type { AppointmentStatus } from '@prisma/client';
 
 import { env } from '../../config/env.js';
@@ -18,14 +20,15 @@ import { getAvailableSlots, isSlotAvailable } from '../../services/scheduling.se
 // stored in full international format (e.g. "919876543210") to be deliverable.
 const toWhatsAppNumber = (phone: string): string => phone.replace(/\D/g, '');
 
-const getClient = () => {
-  if (!env.OPENAI_API_KEY) {
-    throw new AppError('AI assistant is not configured. Add OPENAI_API_KEY to backend/.env', 503);
-  }
-  return new OpenAI({ apiKey: env.OPENAI_API_KEY });
-};
+// The provider lives in core/ai/provider.ts — Sarvam by default, OpenAI when
+// AI_PROVIDER says so. Sarvam speaks the same protocol, tool calling included
+// (verified against the live API with this file's own book_appointment shape
+// before the switch was made), so everything below is unchanged.
+const getClient = () => aiClient();
 
-const AI_MODEL = 'gpt-4.1-mini';
+// Whatever the configured provider's default is. Read per call rather than
+// frozen at import, so switching providers does not need a restart.
+const AI_MODEL = aiModel();
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -446,6 +449,7 @@ export const chat = async (
   for (let step = 0; step < MAX_STEPS; step++) {
     const response = await client.chat.completions.create({
       model: AI_MODEL,
+      ...aiExtras(),
       messages,
       tools: TOOLS,
       tool_choice: 'auto'
@@ -546,6 +550,7 @@ export const patientAssistantReply = async (
     const client = getClient();
     const res = await client.chat.completions.create({
       model: AI_MODEL,
+      ...aiExtras(),
       max_tokens: 300,
       messages: [
         {
@@ -629,6 +634,7 @@ export const classifyPatientMessage = async (
     const client = getClient();
     const res = await client.chat.completions.create({
       model: AI_MODEL,
+      ...aiExtras(),
       max_tokens: 80,
       temperature: 0,
       response_format: { type: 'json_object' },
@@ -724,6 +730,7 @@ export const understandPatientMessage = async (
     const client = getClient();
     const res = await client.chat.completions.create({
       model: AI_MODEL,
+      ...aiExtras(),
       max_tokens: 200,
       temperature: 0,
       response_format: { type: 'json_object' },
@@ -1302,6 +1309,8 @@ export const patientAgentReply = async (params: PatientAgentParams): Promise<Pat
     for (let step = 0; step < 6; step += 1) {
       const response = await client.chat.completions.create({
         model: AI_MODEL,
+        ...aiExtras(),
+      ...aiExtras(),
         messages,
         tools: PATIENT_TOOLS,
         tool_choice: 'auto',

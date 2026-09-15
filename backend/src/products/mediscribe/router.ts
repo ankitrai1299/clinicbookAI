@@ -261,7 +261,7 @@ mediscribeRouter.post('/transcribe', requirePermission('consultation.write'), up
     // core/consent/recordingConsent.ts for why that rollout is staged.
     await requireRecordingConsent(currentClinicId(), req.body?.patientId ? String(req.body.patientId) : null);
 
-    const { transcribeAudio } = await import('./services/sarvamStt.js');
+    const { transcribeAudio } = await import('../../core/ai/stt.js');
     const text = await transcribeAudio(req.file.buffer, req.file.mimetype, req.body?.language);
 
     let audioUrl = '';

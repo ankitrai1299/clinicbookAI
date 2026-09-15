@@ -10,7 +10,7 @@
 import { buildPatientHistory } from './patientHistory.js';
 import { listClinicPatients, type ScribePatient } from '../clinicData.js';
 import { consultationsRepo } from '../repositories/index.js';
-import { sarvamChat } from './sarvam.js';
+import { sarvamChat } from '../../../core/ai/sarvam.js';
 import {
   parseQuestionLocally,
   CLASSIFIER_PROMPT,

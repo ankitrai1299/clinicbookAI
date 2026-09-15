@@ -9,7 +9,7 @@
 // Read-only and additive: it never edits the transcript text, only segments it.
 // If anything goes wrong the caller keeps the original unlabelled transcript.
 
-import { sarvamChat } from './sarvam.js';
+import { sarvamChat } from '../../../core/ai/sarvam.js';
 
 export interface SpeakerTurn {
   speaker: 'Doctor' | 'Patient';

@@ -13,4 +13,200 @@ bho-stomach          ..
 bho-cough            ..
 bn-stomach           ..
 mix-fever-bp         ..
-mix-diabetes         .
+mix-diabetes         ..
+mix-amlodipine       ..
+mix-antibiotic       ..
+mix-tests            ..
+mix-slurred-drug     ..
+num-bp               ..
+num-sugar            ..
+neg-allergy-yes      ..
+neg-allergy-no       ..
+neg-fever-hi         ..
+neg-chestpain        ..
+neg-smoking          ..
+turns-cough          ..
+turns-diabetes       ..
+
+
+── Per case ────────────────────────────────────────────────────────
+
+hi-fever  [hindi]
+  said     नमस्ते डॉक्टर साहब, पिछले दस दिन से मुझे तेज़ बुखार आ रहा है और शरीर में बहुत दर्द रहता है
+  sarvam-auto नमस्ते डॉक्टर साहब, पिछले 10 दिन से मुझे तेज़ बुख़ार आ रहा है और शरीर में बहुत दर्द रहता है।
+           wer   10%   drug   —     dose   —     neg   —  
+  sarvam-pipeline नमस्ते डॉक्टर साहब, पिछले 10 दिन से मुझे तेज़ बुख़ार आ रहा है और शरीर में बहुत दर्द रहता है।
+           wer   10%   drug   —     dose   —     neg   —  
+
+hi-breathless  [hindi]
+  said     डॉक्टर साहब, सांस लेने में थोड़ी दिक्कत होती है, रात में ज़्यादा होती है
+  sarvam-auto डॉक्टर साहब, सांस लेने में थोड़ी दिक्कत होती है, रात में ज़्यादा होती है।
+           wer    0%   drug   —     dose   —     neg   —  
+  sarvam-pipeline डॉक्टर साहब, सांस लेने में थोड़ी दिक्कत होती है, रात में ज़्यादा होती है।
+           wer    0%   drug   —     dose   —     neg   —  
+
+hi-stomach  [hindi]
+  said     दो दिन से पेट में तेज़ दर्द है और उल्टी भी हुई है
+  sarvam-auto दो दिन से पेट में तेज दर्द है और उल्टी भी हुई है।
+           wer    8%   drug   —     dose   —     neg   —  
+  sarvam-pipeline दो दिन से पेट में तेज दर्द है और उल्टी भी हुई है।
+           wer    8%   drug   —     dose   —     neg   —  
+
+bho-stomach  [bhojpuri]
+  said     हमरा पेटवा में दू दिन से बहुत दर्द होत बा, आ बुखार भी लागल बा
+  sarvam-auto हमरा पेटवा में दु दिन से बहुत दर्द होता बा, अब बुखार भी लागल बा।
+           wer   20%   drug   —     dose   —     neg   —  
+  sarvam-pipeline हमरा पेटवा में दु दिन से बहुत दर्द होता बा, अब बुखार भी लागल बा।
+           wer   20%   drug   —     dose   —     neg   —  
+
+bho-cough  [bhojpuri]
+  said     खांसी दस दिन से होत बा आ रात में सांस फूलेला
+  sarvam-auto खांसी 10 दिन से होता बा, आ रात में सांस फूलेला।
+           wer   18%   drug   —     dose   —     neg   —  
+  sarvam-pipeline खांसी 10 दिन से होता बा, आ रात में सांस फूलेला।
+           wer   18%   drug   —     dose   —     neg   —  
+
+bn-stomach  [bengali]
+  said     আমার দুই দিন ধরে পেটে খুব ব্যথা হচ্ছে আর জ্বরও আসছে
+  sarvam-auto আমার দুই দিন ধরে পেটে খুব ব্যথা হচ্ছে আর জ্বরও আসছে।
+           wer    0%   drug   —     dose   —     neg   —  
+  sarvam-pipeline আমার 2 दिन ধরে पेटे खूब ব্যथा হচ্ছে और ज्वर भी আসছে।
+           wer   73%   drug   —     dose   —     neg   —  
+
+mix-fever-bp  [code-mix, drugs]
+  said     Patient ko two days se fever hai, BP bhi high chal raha hai, Paracetamol 650 likh raha hoon
+  sarvam-auto पेशेंट को टू डेज़ से फीवर है। बीपी भी हाई चल रहा है। पारासिटामोल ६५० लिख रहा हूँ।
+           wer  100%   drug    0%   dose    0%   neg   —  
+  sarvam-pipeline पेशेंट को टू डेज़ से फीवर है। BP भी हाई चल रहा है। Paracetamol ६५० लिख रहा हूँ।
+           wer   89%   drug  100%   dose    0%   neg   —  
+
+mix-diabetes  [code-mix, drugs, dosage]
+  said     Patient ko sugar ka problem hai, Metformin 500 mg subah aur shaam chal raha hai
+  sarvam-auto पेशेंट को शुगर का प्रॉब्लम है। मेटफॉर्मिन 500 मिलीग्राम सुबह और शाम चल रहा है।
+           wer   93%   drug    0%   dose    0%   neg   —  
+  sarvam-pipeline पेशेंट को शुगर का प्रॉब्लम है। Metformin 500 मिलीग्राम सुबह और शाम चल रहा है।
+           wer   87%   drug  100%   dose    0%   neg   —  
+
+mix-amlodipine  [code-mix, drugs, dosage, spoken-numbers]
+  said     Patient ko Amlodipine 5 mg continue karna hai aur Telmisartan 40 mg raat ko
+  sarvam-auto Patient ko amlodipine 5 mg continue karna hai aur telmisartan 40 mg raat ko
+           wer    0%   drug  100%   dose  100%   neg   —  
+  sarvam-pipeline पेशेंट को Amlodipine फाइव mg कंटिन्यू करना है और Telmisartan फोर्टी mg रात को।
+           wer   71%   drug  100%   dose    0%   neg   —  
+
+mix-antibiotic  [code-mix, drugs]
+  said     Azithromycin 500 teen din aur Pantoprazole subah khali pet
+  sarvam-auto एजिथ्रोमाइसिन 503 दिन और पेंटोप्राजोल सुबह खाली पेट।
+           wer  100%   drug    0%   dose    0%   neg   —  
+  sarvam-pipeline Azithromycin 503 दिन और Pantoprazole सुबह खाली पेट।
+           wer   78%   drug  100%   dose    0%   neg   —  
+
+mix-tests  [code-mix, drugs]
+  said     CBC aur LFT kara lijiye, X-ray bhi karwa lena chest ka
+  sarvam-auto सीबीसी और एलएफटी करा लीजिए, एक्सरे भी करवा लेना चेस्ट का।
+           wer  100%   drug    0%   dose   —     neg   —  
+  sarvam-pipeline CBC और LFT करा लीजिए, X-ray भी करवा लेना चेस्ट का।
+           wer   73%   drug  100%   dose   —     neg   —  
+
+mix-slurred-drug  [code-mix, drugs, disfluency]
+  said     Patient metformin wala tablet subah lete hain
+  sarvam-auto पेशेंट मेटफॉर्म मेटफॉर्मिन वाला टैबलेट सुबह लेते हैं।
+           wer  114%   drug    0%   dose   —     neg   —  
+  sarvam-pipeline पेशेंट Metformin Metformin वाला टैबलेट सुबह लेते हैं।
+           wer  100%   drug  100%   dose   —     neg   —  
+
+num-bp  [spoken-numbers, dosage]
+  said     BP kal se 140/90 aa raha hai
+  sarvam-auto बीपी कल से 140/90 आ रहा है।
+           wer   86%   drug   —     dose  100%   neg   —  
+  sarvam-pipeline BP कल से 140/90 आ रहा है।
+           wer   71%   drug   —     dose  100%   neg   —  
+
+num-sugar  [spoken-numbers, dosage]
+  said     Fasting sugar 140 aur post prandial 210
+  sarvam-auto Fasting sugar 140 aur postprandial 200 time.
+           wer   43%   drug   —     dose   50%   neg   —  
+  sarvam-pipeline फास्टिंग शुगर 140 और पोस्ट प्रांडियल 210।
+           wer   71%   drug   —     dose  100%   neg   —  
+
+neg-allergy-yes  [negation, drugs]
+  said     Patient ko Penicillin se allergy hai, isliye Amoxicillin mat dena
+  sarvam-auto पेशेंट को पेनिसिलिन से एलर्जी है, इसलिए अमोक्सिसिलिम मत देना।
+           wer  100%   drug    0%   dose   —     neg    0%
+  sarvam-pipeline पेशेंट को पेनिसिलिन से एलर्जी है, इसलिए Amoxicillin मत देना।
+           wer   90%   drug   50%   dose   —     neg    0%
+
+neg-allergy-no  [negation, drugs]
+  said     Patient ko Penicillin se allergy nahi hai, Amoxicillin de sakte hain
+  sarvam-auto पेशेंट को पेनिसिलिन से एलर्जी नहीं है, एमोक्सिसिलिन दे सकते हैं।
+           wer  100%   drug    0%   dose   —     neg    0%
+  sarvam-pipeline पेशेंट को पेनिसिलिन से एलर्जी नहीं है, Amoxicillin दे सकते हैं।
+           wer   91%   drug   50%   dose   —     neg    0%
+
+neg-fever-hi  [negation, hindi]
+  said     खांसी है लेकिन बुखार नहीं है
+  sarvam-auto Khaansi hai lekin bukhaar nahi hai
+           wer  100%   drug   —     dose   —     neg    0%
+  sarvam-pipeline खांसी है लेकिन बुखार नहीं है।
+           wer    0%   drug   —     dose   —     neg  100%
+
+neg-chestpain  [negation]
+  said     Chest pain nahi hai, sirf saans phoolti hai chalne par
+  sarvam-auto चेस्ट पेन नहीं है, सिर्फ सांस फूलती है चलने पर।
+           wer  100%   drug   —     dose   —     neg    0%
+  sarvam-pipeline चेस्ट पेन नहीं है, सिर्फ सांस फूलती है चलने पर।
+           wer  100%   drug   —     dose   —     neg    0%
+
+neg-smoking  [negation]
+  said     Patient smoking nahi karta lekin alcohol lete hain kabhi kabhi
+  sarvam-auto पेशेंट स्मोकिंग नहीं करता, लेकिन अल्कोहल लेते हैं कभी-कभी।
+           wer  100%   drug   —     dose   —     neg    0%
+  sarvam-pipeline पेशेंट स्मोकिंग नहीं करता, लेकिन अल्कोहल लेते हैं कभी-कभी।
+           wer  100%   drug   —     dose   —     neg    0%
+
+turns-cough  [two-speaker, hindi]
+  said     आपको दिक्कत कब से है? डॉक्टर साहब, मुझे दस दिन से खांसी है। बुखार भी है? हाँ, कल से बुखार है।
+  sarvam-auto आपको दिक्कत कब से है डॉक्टर साहब? मुझे 10 दिन से खांसी है, बुखार भी है? हाँ, कल से बुखार है।
+           wer    5%   drug   —     dose   —     neg   —  
+  sarvam-pipeline आपको दिक्कत कब से है डॉक्टर साहब? मुझे 10 दिन से खांसी है, बुखार भी है? हाँ, कल से बुखार है।
+           wer    5%   drug   —     dose   —     neg   —  
+
+turns-diabetes  [two-speaker, code-mix, drugs]
+  said     Sugar kab se hai aapko? Do saal se hai doctor sahab. Metformin le rahe hain? Haan, subah shaam.
+  sarvam-auto शुगर कब से है आपको? दो साल से है डॉक्टर साहब, मेटफॉर्मल ले रहे हैं? हाँ, सुबह शाम।
+           wer  100%   drug    0%   dose   —     neg   —  
+  sarvam-pipeline शुगर कब से है आपको? दो साल से है डॉक्टर साहब, Metformin ले रहे हैं? हाँ, सुबह शाम।
+           wer   94%   drug  100%   dose   —     neg   —  
+
+── Overall ─────────────────────────────────────────────────────────
+
+engine      WER    drug   dose    neg
+sarvam-auto   62%    11%    42%     0%
+sarvam-pipeline   59%    89%    33%    20%
+
+── By tag (WER on code-mix measures SCRIPT, not correctness) ───────
+
+tag              engine      WER    drug   dose    neg
+bengali          sarvam-auto    0%    —      —      —  
+bengali          sarvam-pipeline   73%    —      —      —  
+bhojpuri         sarvam-auto   19%    —      —      —  
+bhojpuri         sarvam-pipeline   19%    —      —      —  
+code-mix         sarvam-auto   87%    14%    25%    —  
+code-mix         sarvam-pipeline   85%   100%     0%    —  
+disfluency       sarvam-auto  114%     0%    —      —  
+disfluency       sarvam-pipeline  100%   100%    —      —  
+dosage           sarvam-auto   55%    50%    63%    —  
+dosage           sarvam-pipeline   75%   100%    50%    —  
+drugs            sarvam-auto   90%    11%    25%     0%
+drugs            sarvam-pipeline   86%    89%     0%     0%
+hindi            sarvam-auto   24%    —      —       0%
+hindi            sarvam-pipeline    4%    —      —     100%
+negation         sarvam-auto  100%     0%    —       0%
+negation         sarvam-pipeline   76%    50%    —      20%
+spoken-numbers   sarvam-auto   43%   100%    83%    —  
+spoken-numbers   sarvam-pipeline   71%   100%    67%    —  
+two-speaker      sarvam-auto   52%     0%    —      —  
+two-speaker      sarvam-pipeline   50%   100%    —      —  
+
+Saved to bench-sarvam.json — compare against a later run to see whether a change helped.
+

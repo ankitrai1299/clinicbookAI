@@ -90,25 +90,18 @@ export const transcribeWhatsAppVoice = async (
     });
     const buffer = Buffer.from(audio.data);
 
-    // 3. Transcribe with Whisper. Filename extension hints the audio container.
-    const ext = mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3' : mimeType.includes('wav') ? 'wav' : 'ogg';
-    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-    const file = await toFile(buffer, `voice.${ext}`, { type: mimeType.split(';')[0] });
-    // language: short Hindi/Hinglish clips auto-detect badly (Whisper picks Urdu
-    // and mis-hears words like "doctor" → "cardiologist"), so we pin a language
-    // (WA_VOICE_LANGUAGE, default "hi"); blank = auto-detect. The prompt primes
-    // the booking domain WITHOUT naming any speciality/doctor — naming them would
-    // bias Whisper into "hearing" those words when the patient never said them.
+    // 3. Transcribe with Sarvam — the same engine the scribe uses, and an Indian
+    // one, which ABDM's "no data leaves India" checklist item makes a
+    // requirement rather than a preference.
+    //
+    // It also removes the Whisper quirk this code was written around: short
+    // Hindi/Hinglish clips auto-detected as Urdu and turned "doctor" into
+    // "cardiologist", so a language had to be pinned. Sarvam is built for these
+    // languages; WA_VOICE_LANGUAGE still pins one when a clinic wants it, and
+    // anything unset or unmapped lets Sarvam detect.
+    const { transcribeAudio } = await import('../ai/stt.js');
     const language = (env.WA_VOICE_LANGUAGE ?? '').trim() || undefined;
-    const result = await openai.audio.transcriptions.create({
-      file,
-      model: 'whisper-1',
-      ...(language ? { language } : {}),
-      temperature: 0,
-      prompt: 'Patient booking a doctor appointment at an Indian clinic, speaking Hindi and English.'
-    });
-
-    const text = (result.text ?? '').trim();
+    const text = (await transcribeAudio(buffer, mimeType.split(';')[0], language)).trim();
     // No preview. Eighty characters of a patient describing their symptoms
     // identifies both the person and the condition.
     console.info('[WhatsApp][voice] transcribed', { mediaId, length: describeText(text) });

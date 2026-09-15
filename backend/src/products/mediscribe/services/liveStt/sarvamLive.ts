@@ -13,7 +13,7 @@
 import WebSocket from 'ws';
 
 import { CAPTURE_RATE, downsample24to16, silenceBuffer, type LiveSttHandlers, type LiveSttSession } from './types.js';
-import { sarvamKey } from '../sarvam.js';
+import { sarvamKey } from '../../../../core/ai/sarvam.js';
 
 const MODEL = 'saaras:v3-realtime';
 

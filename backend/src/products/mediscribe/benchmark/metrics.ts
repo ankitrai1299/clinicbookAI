@@ -26,6 +26,28 @@
 // So WER is reported, but it is the least important number here. The ones that
 // decide whether this is safe are the drug, dosage and negation accuracies.
 
+import { devanagariToLatin, phoneticKey } from '../services/devanagariTerms.js';
+
+/**
+ * Is this word the same word, whatever script it arrived in?
+ *
+ * Needed because the engine's script is not stable: the same Hindi sentence came
+ * back as "बुखार नहीं है" on one run and "bukhaar nahi hai" on another, and a
+ * negation check that misses the second reports a perfectly correct transcript
+ * as having lost the negation. That is a false alarm on the one metric nobody
+ * can afford to stop trusting.
+ *
+ * Only for asking whether a word is PRESENT. Drug accuracy deliberately does not
+ * use this: a chart needs "Paracetamol", and "पैरासिटामोल" scoring zero there is
+ * the correct answer, not a gap in the matching.
+ */
+const sameWord = (a: string, b: string): boolean => {
+  if (a === b) return true;
+  const ka = phoneticKey(devanagariToLatin(a));
+  const kb = phoneticKey(devanagariToLatin(b));
+  return ka.length >= 2 && ka === kb;
+};
+
 /** One measured comparison of a transcript against what was actually said. */
 export interface Scores {
   /** Word error rate, 0–1. Lower is better. Context, not verdict. */
@@ -183,7 +205,7 @@ export const negationHolds = (
   // many distinct things went wrong.
   let at = -1;
   for (let i = 0; i + needle.length <= hyp.length; i++) {
-    if (needle.every((w, k) => hyp[i + k] === w)) {
+    if (needle.every((w, k) => sameWord(hyp[i + k], w))) {
       at = i;
       break;
     }
@@ -196,7 +218,7 @@ export const negationHolds = (
   let to = at + needle.length;
   while (to < hyp.length && !CLAUSE_BREAKS.has(hyp[to])) to++;
 
-  const negated = hyp.slice(from, to).some((w) => NEGATORS.includes(w));
+  const negated = hyp.slice(from, to).some((w) => NEGATORS.some((n) => sameWord(w, n)));
   return negated === shouldBeNegated;
 };
 

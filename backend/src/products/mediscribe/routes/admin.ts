@@ -8,7 +8,7 @@ import {
   notificationsRepo,
 } from '../repositories/index.js';
 import { buildOverview, buildAnalytics, buildLanguageDashboard } from '../services/analytics.js';
-import { sarvamModel } from '../services/sarvam.js';
+import { sarvamModel } from '../../../core/ai/sarvam.js';
 import { hashPassword, sanitizeUser, newId } from '../services/auth.js';
 import { requirePermission } from '../middleware/auth.js';
 import type { AdminSettings, SearchResult } from '../contracts/index.js';

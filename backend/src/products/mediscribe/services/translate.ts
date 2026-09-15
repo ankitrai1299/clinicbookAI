@@ -16,7 +16,7 @@
 //
 // The API key is read from the environment (SARVAM_API_KEY) and NEVER logged.
 
-import { sarvamChat, sarvamKey, sarvamOrigin } from './sarvam.js';
+import { sarvamChat, sarvamKey, sarvamOrigin } from '../../../core/ai/sarvam.js';
 
 // Supported OUTPUT languages (code → human name used in the chat-fallback prompt).
 export const LANGUAGE_NAMES: Record<string, string> = {

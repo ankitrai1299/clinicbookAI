@@ -1,0 +1,467 @@
+{
+  "at": "2026-09-15T10:03:32.195Z",
+  "rows": [
+    {
+      "case": "hi-fever",
+      "engine": "sarvam-auto",
+      "text": "नमस्ते डॉक्टर साहब, पिछले 10 दिन से मुझे तेज़ बुख़ार आ रहा है और शरीर में बहुत दर्द रहता है।",
+      "scores": {
+        "wer": 0.1,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "hi-fever",
+      "engine": "sarvam-pipeline",
+      "text": "नमस्ते डॉक्टर साहब, पिछले 10 दिन से मुझे तेज़ बुख़ार आ रहा है और शरीर में बहुत दर्द रहता है।",
+      "scores": {
+        "wer": 0.1,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "hi-breathless",
+      "engine": "sarvam-auto",
+      "text": "डॉक्टर साहब, सांस लेने में थोड़ी दिक्कत होती है, रात में ज़्यादा होती है।",
+      "scores": {
+        "wer": 0,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "hi-breathless",
+      "engine": "sarvam-pipeline",
+      "text": "डॉक्टर साहब, सांस लेने में थोड़ी दिक्कत होती है, रात में ज़्यादा होती है।",
+      "scores": {
+        "wer": 0,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "hi-stomach",
+      "engine": "sarvam-auto",
+      "text": "दो दिन से पेट में तेज दर्द है और उल्टी भी हुई है।",
+      "scores": {
+        "wer": 0.07692307692307693,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "hi-stomach",
+      "engine": "sarvam-pipeline",
+      "text": "दो दिन से पेट में तेज दर्द है और उल्टी भी हुई है।",
+      "scores": {
+        "wer": 0.07692307692307693,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "bho-stomach",
+      "engine": "sarvam-auto",
+      "text": "हमरा पेटवा में दु दिन से बहुत दर्द होता बा, अब बुखार भी लागल बा।",
+      "scores": {
+        "wer": 0.2,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "bho-stomach",
+      "engine": "sarvam-pipeline",
+      "text": "हमरा पेटवा में दु दिन से बहुत दर्द होता बा, अब बुखार भी लागल बा।",
+      "scores": {
+        "wer": 0.2,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "bho-cough",
+      "engine": "sarvam-auto",
+      "text": "खांसी 10 दिन से होता बा, आ रात में सांस फूलेला।",
+      "scores": {
+        "wer": 0.18181818181818182,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "bho-cough",
+      "engine": "sarvam-pipeline",
+      "text": "खांसी 10 दिन से होता बा, आ रात में सांस फूलेला।",
+      "scores": {
+        "wer": 0.18181818181818182,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "bn-stomach",
+      "engine": "sarvam-auto",
+      "text": "আমার দুই দিন ধরে পেটে খুব ব্যথা হচ্ছে আর জ্বরও আসছে।",
+      "scores": {
+        "wer": 0,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "bn-stomach",
+      "engine": "sarvam-pipeline",
+      "text": "আমার 2 दिन ধরে पेटे खूब ব্যथा হচ্ছে और ज्वर भी আসছে।",
+      "scores": {
+        "wer": 0.7272727272727273,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-fever-bp",
+      "engine": "sarvam-auto",
+      "text": "पेशेंट को टू डेज़ से फीवर है। बीपी भी हाई चल रहा है। पारासिटामोल ६५० लिख रहा हूँ।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": 0,
+        "dosageAccuracy": 0,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-fever-bp",
+      "engine": "sarvam-pipeline",
+      "text": "पेशेंट को टू डेज़ से फीवर है। BP भी हाई चल रहा है। Paracetamol ६५० लिख रहा हूँ।",
+      "scores": {
+        "wer": 0.8888888888888888,
+        "drugAccuracy": 1,
+        "dosageAccuracy": 0,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-diabetes",
+      "engine": "sarvam-auto",
+      "text": "पेशेंट को शुगर का प्रॉब्लम है। मेटफॉर्मिन 500 मिलीग्राम सुबह और शाम चल रहा है।",
+      "scores": {
+        "wer": 0.9333333333333333,
+        "drugAccuracy": 0,
+        "dosageAccuracy": 0,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-diabetes",
+      "engine": "sarvam-pipeline",
+      "text": "पेशेंट को शुगर का प्रॉब्लम है। Metformin 500 मिलीग्राम सुबह और शाम चल रहा है।",
+      "scores": {
+        "wer": 0.8666666666666667,
+        "drugAccuracy": 1,
+        "dosageAccuracy": 0,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-amlodipine",
+      "engine": "sarvam-auto",
+      "text": "Patient ko amlodipine 5 mg continue karna hai aur telmisartan 40 mg raat ko",
+      "scores": {
+        "wer": 0,
+        "drugAccuracy": 1,
+        "dosageAccuracy": 1,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-amlodipine",
+      "engine": "sarvam-pipeline",
+      "text": "पेशेंट को Amlodipine फाइव mg कंटिन्यू करना है और Telmisartan फोर्टी mg रात को।",
+      "scores": {
+        "wer": 0.7142857142857143,
+        "drugAccuracy": 1,
+        "dosageAccuracy": 0,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-antibiotic",
+      "engine": "sarvam-auto",
+      "text": "एजिथ्रोमाइसिन 503 दिन और पेंटोप्राजोल सुबह खाली पेट।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": 0,
+        "dosageAccuracy": 0,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-antibiotic",
+      "engine": "sarvam-pipeline",
+      "text": "Azithromycin 503 दिन और Pantoprazole सुबह खाली पेट।",
+      "scores": {
+        "wer": 0.7777777777777778,
+        "drugAccuracy": 1,
+        "dosageAccuracy": 0,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-tests",
+      "engine": "sarvam-auto",
+      "text": "सीबीसी और एलएफटी करा लीजिए, एक्सरे भी करवा लेना चेस्ट का।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": 0,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-tests",
+      "engine": "sarvam-pipeline",
+      "text": "CBC और LFT करा लीजिए, X-ray भी करवा लेना चेस्ट का।",
+      "scores": {
+        "wer": 0.7272727272727273,
+        "drugAccuracy": 1,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-slurred-drug",
+      "engine": "sarvam-auto",
+      "text": "पेशेंट मेटफॉर्म मेटफॉर्मिन वाला टैबलेट सुबह लेते हैं।",
+      "scores": {
+        "wer": 1.1428571428571428,
+        "drugAccuracy": 0,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "mix-slurred-drug",
+      "engine": "sarvam-pipeline",
+      "text": "पेशेंट Metformin Metformin वाला टैबलेट सुबह लेते हैं।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": 1,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "num-bp",
+      "engine": "sarvam-auto",
+      "text": "बीपी कल से 140/90 आ रहा है।",
+      "scores": {
+        "wer": 0.8571428571428571,
+        "drugAccuracy": null,
+        "dosageAccuracy": 1,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "num-bp",
+      "engine": "sarvam-pipeline",
+      "text": "BP कल से 140/90 आ रहा है।",
+      "scores": {
+        "wer": 0.7142857142857143,
+        "drugAccuracy": null,
+        "dosageAccuracy": 1,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "num-sugar",
+      "engine": "sarvam-auto",
+      "text": "Fasting sugar 140 aur postprandial 200 time.",
+      "scores": {
+        "wer": 0.42857142857142855,
+        "drugAccuracy": null,
+        "dosageAccuracy": 0.5,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "num-sugar",
+      "engine": "sarvam-pipeline",
+      "text": "फास्टिंग शुगर 140 और पोस्ट प्रांडियल 210।",
+      "scores": {
+        "wer": 0.7142857142857143,
+        "drugAccuracy": null,
+        "dosageAccuracy": 1,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "neg-allergy-yes",
+      "engine": "sarvam-auto",
+      "text": "पेशेंट को पेनिसिलिन से एलर्जी है, इसलिए अमोक्सिसिलिम मत देना।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": 0,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "neg-allergy-yes",
+      "engine": "sarvam-pipeline",
+      "text": "पेशेंट को पेनिसिलिन से एलर्जी है, इसलिए Amoxicillin मत देना।",
+      "scores": {
+        "wer": 0.9,
+        "drugAccuracy": 0.5,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "neg-allergy-no",
+      "engine": "sarvam-auto",
+      "text": "पेशेंट को पेनिसिलिन से एलर्जी नहीं है, एमोक्सिसिलिन दे सकते हैं।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": 0,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "neg-allergy-no",
+      "engine": "sarvam-pipeline",
+      "text": "पेशेंट को पेनिसिलिन से एलर्जी नहीं है, Amoxicillin दे सकते हैं।",
+      "scores": {
+        "wer": 0.9090909090909091,
+        "drugAccuracy": 0.5,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "neg-fever-hi",
+      "engine": "sarvam-auto",
+      "text": "Khaansi hai lekin bukhaar nahi hai",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "neg-fever-hi",
+      "engine": "sarvam-pipeline",
+      "text": "खांसी है लेकिन बुखार नहीं है।",
+      "scores": {
+        "wer": 0,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": 1
+      }
+    },
+    {
+      "case": "neg-chestpain",
+      "engine": "sarvam-auto",
+      "text": "चेस्ट पेन नहीं है, सिर्फ सांस फूलती है चलने पर।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "neg-chestpain",
+      "engine": "sarvam-pipeline",
+      "text": "चेस्ट पेन नहीं है, सिर्फ सांस फूलती है चलने पर।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "neg-smoking",
+      "engine": "sarvam-auto",
+      "text": "पेशेंट स्मोकिंग नहीं करता, लेकिन अल्कोहल लेते हैं कभी-कभी।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "neg-smoking",
+      "engine": "sarvam-pipeline",
+      "text": "पेशेंट स्मोकिंग नहीं करता, लेकिन अल्कोहल लेते हैं कभी-कभी।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": 0
+      }
+    },
+    {
+      "case": "turns-cough",
+      "engine": "sarvam-auto",
+      "text": "आपको दिक्कत कब से है डॉक्टर साहब? मुझे 10 दिन से खांसी है, बुखार भी है? हाँ, कल से बुखार है।",
+      "scores": {
+        "wer": 0.047619047619047616,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "turns-cough",
+      "engine": "sarvam-pipeline",
+      "text": "आपको दिक्कत कब से है डॉक्टर साहब? मुझे 10 दिन से खांसी है, बुखार भी है? हाँ, कल से बुखार है।",
+      "scores": {
+        "wer": 0.047619047619047616,
+        "drugAccuracy": null,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "turns-diabetes",
+      "engine": "sarvam-auto",
+      "text": "शुगर कब से है आपको? दो साल से है डॉक्टर साहब, मेटफॉर्मल ले रहे हैं? हाँ, सुबह शाम।",
+      "scores": {
+        "wer": 1,
+        "drugAccuracy": 0,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    },
+    {
+      "case": "turns-diabetes",
+      "engine": "sarvam-pipeline",
+      "text": "शुगर कब से है आपको? दो साल से है डॉक्टर साहब, Metformin ले रहे हैं? हाँ, सुबह शाम।",
+      "scores": {
+        "wer": 0.9444444444444444,
+        "drugAccuracy": 1,
+        "dosageAccuracy": null,
+        "negationAccuracy": null
+      }
+    }
+  ]
+}

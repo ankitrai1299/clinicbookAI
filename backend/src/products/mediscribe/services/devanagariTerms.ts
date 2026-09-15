@@ -111,7 +111,12 @@ export const devanagariToLatin = (word: string): string => {
 // 'c' is /s/ before e, i or y and /k/ elsewhere — the single rule that makes
 // Paracetamol and Calcium both come out right.
 
-const phoneticKey = (latin: string): string => {
+/**
+ * A word reduced to the consonants that survive speech, a second language and a
+ * second script. Exported so the benchmark can ask "is this the same word?"
+ * across scripts — "बुखार", "bukhaar" and "bukhar" all reduce to the same key.
+ */
+export const phoneticKey = (latin: string): string => {
   let s = latin.toLowerCase().replace(/[^a-z]/g, '');
   s = s.replace(/c(?=[eiy])/g, 's').replace(/c/g, 'k');
   s = s.replace(/ph/g, 'f').replace(/sh/g, 's').replace(/th/g, 't');

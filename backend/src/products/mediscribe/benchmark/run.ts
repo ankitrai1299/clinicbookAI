@@ -260,7 +260,13 @@ const main = async () => {
         } else if (engine === 'sarvam-auto') {
           text = await transcribeSarvam(pcm, 'auto');
         } else if (engine === 'sarvam-pipeline') {
-          text = restoreLatinTerms(await transcribeSarvam(pcm, 'hi-IN'));
+          // Deliberately the SAME language setting as sarvam-auto above. The
+          // first version of this ran on hi-IN while the column it was compared
+          // against ran on auto, so the two measured different systems and the
+          // Bengali row showed the pipeline "destroying" a transcript that the
+          // language setting had destroyed before it arrived. A comparison
+          // column must differ by exactly one thing.
+          text = restoreLatinTerms(await transcribeSarvam(pcm, 'auto'));
         } else {
           const raw = await transcribeOpenAI(pcm);
           text = engine === 'pipeline' ? restoreLatinTerms(raw) : raw;
