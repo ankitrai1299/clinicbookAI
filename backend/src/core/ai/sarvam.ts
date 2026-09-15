@@ -58,8 +58,23 @@ export interface SarvamChatOptions {
   disableThinking?: boolean;
 }
 
-// Hard ceiling accepted by Sarvam's chat models on the current subscription tier.
-const MAX_TOKENS_CAP = 4096;
+// Ceiling on generated tokens.
+//
+// Was 4096, described as the tier limit. It is not — 8192 was accepted and
+// answered (finish_reason "stop", 535 tokens used), and 4096 was actively
+// breaking report generation.
+//
+// The reason is worth writing down because it is invisible from the outside:
+// Sarvam's models always reason, and the reasoning shares this budget with the
+// answer. `enable_thinking: false` is sent and does NOT stop it — measured, the
+// request log says "thinking: off" while the model still spends 4096 tokens and
+// returns an EMPTY string. Not a truncated answer. No answer at all, after
+// seven minutes.
+//
+// So the budget has to be large enough for the model to think AND then speak.
+// The same extraction with a small schema finishes in 207 tokens; it is the
+// bigger report sections that need the room.
+const MAX_TOKENS_CAP = 8192;
 
 /**
  * Call Sarvam's OpenAI-compatible chat completion endpoint and return the

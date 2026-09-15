@@ -136,7 +136,22 @@ async function condenseIfLong(text: string): Promise<string> {
           },
           { role: 'user', content: `/no_think\nTranscript:\n${chunk}` },
         ],
-        { maxTokens: 4096, reasoningEffort: 'low' },
+        // Thinking OFF, and this is the fix for reports coming back empty.
+        //
+        // Sarvam's models always reason, and the reasoning trace spends the SAME
+        // token budget as the answer. Measured on one consultation: 3463 tokens
+        // to produce 820 characters, then 2409 for 289, then a group that burned
+        // all 4096 and returned 239 characters of unparseable fragment. The
+        // report failed there.
+        //
+        // The "/no_think" in the prompt above was an earlier attempt at this and
+        // does nothing — the request log said "thinking: on" every time. The
+        // switch is a request parameter, not an instruction to the model.
+        //
+        // Nothing is lost: these calls extract structured fields that are
+        // already stated in the transcript. There is no problem here for a model
+        // to reason its way through, and it must not invent one.
+        { maxTokens: 8192, reasoningEffort: 'low', disableThinking: true },
       );
       factParts.push(facts.trim());
     } catch (err: any) {
@@ -168,7 +183,22 @@ async function extractGroup(text: string, group: (typeof SECTION_GROUPS)[number]
           { role: 'system', content: system },
           { role: 'user', content: user },
         ],
-        { maxTokens: 4096, reasoningEffort: 'low' },
+        // Thinking OFF, and this is the fix for reports coming back empty.
+        //
+        // Sarvam's models always reason, and the reasoning trace spends the SAME
+        // token budget as the answer. Measured on one consultation: 3463 tokens
+        // to produce 820 characters, then 2409 for 289, then a group that burned
+        // all 4096 and returned 239 characters of unparseable fragment. The
+        // report failed there.
+        //
+        // The "/no_think" in the prompt above was an earlier attempt at this and
+        // does nothing — the request log said "thinking: on" every time. The
+        // switch is a request parameter, not an instruction to the model.
+        //
+        // Nothing is lost: these calls extract structured fields that are
+        // already stated in the transcript. There is no problem here for a model
+        // to reason its way through, and it must not invent one.
+        { maxTokens: 8192, reasoningEffort: 'low', disableThinking: true },
       );
       const obj = parseJson(content);
       if (obj && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length) {
