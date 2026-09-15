@@ -12,6 +12,7 @@ import { startWebhookCron } from './cron/webhook.cron.js';
 import { startSecurityScanCron } from './cron/securityScan.cron.js';
 import { logWhatsAppStartupInfo } from './core/whatsapp/whatsapp.diagnostics.js';
 import { logEmailStartupInfo } from './services/email.service.js';
+import { logAiStartupInfo } from './core/ai/ai.diagnostics.js';
 import { attachLiveSttGateway } from './products/mediscribe/liveStt.gateway.js';
 
 const app = createApp();
@@ -52,6 +53,10 @@ const startServer = async () => {
     void logWhatsAppStartupInfo();
     // Email provider + sender banner (flags the Resend test-domain limitation).
     logEmailStartupInfo();
+    // Does the AI actually answer? A key being present says nothing about
+    // whether it can be spent — the OpenAI balance ran out and nothing noticed
+    // for three days while every config check passed.
+    void logAiStartupInfo();
   });
 
   // The live-transcription socket shares this HTTP server and this port. It has

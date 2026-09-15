@@ -1,4 +1,4 @@
-◇ injected env (26) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+◇ injected env (26) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
 ◇ injected env (9) from .env.local // tip: ⌁ auth for agents [www.vestauth.com]
 
 21 cases × 2 engines
@@ -13,4 +13,11 @@ bho-stomach          ..
 bho-cough            ..
 bn-stomach           ..
 mix-fever-bp         ..
-mix-diabetes         
+mix-diabetes         ..
+mix-amlodipine       ..
+mix-antibiotic       ..
+mix-tests            ..
+mix-slurred-drug     ..
+num-bp               ..
+num-sugar            ..
+neg-allergy-yes      

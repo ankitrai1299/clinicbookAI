@@ -80,7 +80,16 @@ export const devanagariToLatin = (word: string): string => {
  */
 const key = (word: string): string => {
   let s = devanagariToLatin(word).toLowerCase().replace(/[^a-z]/g, '');
+  // English spelling, reduced to the sounds an Indian speaker makes and an
+  // Indian script writes:
+  //   c  is /s/ before e, i, y   (Paracetamol → पैरासिटामोल)  and /k/ elsewhere
+  //   g  is /j/ before e, i, y   (allergy → एलर्जी, surgery → सर्जरी)
+  // The g rule was missing and cost a real measurement: a correct transcript of
+  // "Penicillin se allergy hai" scored 0% on negation, because "allergy" reduced
+  // to lrg and "एलर्जी" to lrj, so the term was never found and the negation
+  // could not be checked. A false alarm on the safety metric.
   s = s.replace(/c(?=[eiy])/g, 's').replace(/c/g, 'k');
+  s = s.replace(/g(?=[eiy])/g, 'j');
   s = s.replace(/ph/g, 'f').replace(/sh/g, 's').replace(/th/g, 't');
   s = s.replace(/z/g, 'j').replace(/q/g, 'k').replace(/x/g, 'ks').replace(/w/g, 'v');
   s = s.replace(/[aeiouy]/g, '');

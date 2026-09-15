@@ -281,23 +281,34 @@ const main = async () => {
       continue;
     }
 
+    // Transcripts are reused across engines that share a source.
+    //
+    // sarvam-pipeline IS sarvam-auto plus restoreLatinTerms, so it must be
+    // scored on the SAME transcript, not a fresh call. Two calls to a
+    // non-deterministic model return different text, and the difference between
+    // the columns then mixes our contribution with the engine's mood — the
+    // first run showed the pipeline "improving" dosage accuracy, which it does
+    // not touch at all.
+    const cache = new Map<string, string>();
+    const sarvamOnce = async (language: string): Promise<string> => {
+      const hit = cache.get(language);
+      if (hit !== undefined) return hit;
+      const t = await withRetry('stt', () => transcribeSarvam(pcm, language));
+      cache.set(language, t);
+      return t;
+    };
+
     for (const engine of ENGINES) {
       let text = '';
       try {
         if (engine === 'sarvam') {
-          text = await transcribeSarvam(pcm, c.voice);
+          text = await sarvamOnce(c.voice);
         } else if (engine === 'sarvam-hi') {
-          text = await transcribeSarvam(pcm, 'hi-IN');
+          text = await sarvamOnce('hi-IN');
         } else if (engine === 'sarvam-auto') {
-          text = await transcribeSarvam(pcm, 'auto');
+          text = await sarvamOnce('auto');
         } else if (engine === 'sarvam-pipeline') {
-          // Deliberately the SAME language setting as sarvam-auto above. The
-          // first version of this ran on hi-IN while the column it was compared
-          // against ran on auto, so the two measured different systems and the
-          // Bengali row showed the pipeline "destroying" a transcript that the
-          // language setting had destroyed before it arrived. A comparison
-          // column must differ by exactly one thing.
-          text = restoreLatinTerms(await transcribeSarvam(pcm, 'auto'));
+          text = restoreLatinTerms(await sarvamOnce('auto'));
         } else {
           const raw = await transcribeOpenAI(pcm);
           text = engine === 'pipeline' ? restoreLatinTerms(raw) : raw;
