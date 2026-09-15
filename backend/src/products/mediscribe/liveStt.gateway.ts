@@ -26,6 +26,7 @@ import { verifyAccessToken } from '../../config/jwt.js';
 import { tokenVersionValid } from '../../core/auth/session.service.js';
 import { openLiveStt, availableProviders, type LiveSttSession } from './services/liveStt/index.js';
 import { restoreLatinTerms } from './services/devanagariTerms.js';
+import { normaliseSpokenNumbers } from './services/spokenNumbers.js';
 import { meaningOf, isMeaningLanguage, type MeaningLanguage } from './services/liveMeaning.js';
 
 export const LIVE_STT_PATH = '/api/mediscribe/stt/stream';
@@ -144,11 +145,14 @@ const handle = (ws: WebSocket, who: Principal): void => {
               say(ws, { type: 'partial', text: e.text, language: e.language });
               return;
             }
-            // Drug and test names go back into Latin, but only on a FINISHED
-            // line. A partial is half a word — "पैराs" matches nothing, and a
-            // name that rewrote itself twice while the doctor watched would look
-            // like the transcript was arguing with itself.
-            const text = restoreLatinTerms(e.text);
+            // Two corrections, and only on a FINISHED line. A partial is half a
+            // word — "पैराs" matches no drug, "one for" is not a number yet — and
+            // a line that rewrote itself twice while the doctor watched would
+            // look like the transcript arguing with itself.
+            //
+            // Numbers first: "five" has to still be a word when the dose is
+            // read, and restoring drug names does not touch digits either way.
+            const text = restoreLatinTerms(normaliseSpokenNumbers(e.text));
             const id = ++seq;
             say(ws, { type: 'final', id, text, language: e.language });
 
