@@ -26,6 +26,7 @@
 // transcript that stutters is not. Every failure here returns null and the line
 // simply has no second row.
 
+import { sarvamChat, sarvamKey } from './sarvam.js';
 import { complete, isAiConfigured } from '../../../core/ai/llm.js';
 import { translateText } from '../../../core/ai/translate.js';
 
@@ -64,10 +65,14 @@ Rules:
 /**
  * The meaning of one finished line, or null when there is nothing worth adding.
  *
- * OpenAI first because the judgement above — clinical sense over literal gloss —
- * is the part a translation endpoint does not do. Sarvam's translator is the
- * fallback: it is a genuine Indian-language translator and a literal rendering
- * is far better than a blank row.
+ * Sarvam's chat model does the judgement — clinical sense over literal gloss —
+ * because that judgement is the part a plain translation endpoint does not do,
+ * and because consultation text should not leave India when an Indian model can
+ * read it. Its own translator (Mayura) is the fallback: literal, but a literal
+ * rendering is far better than a blank row.
+ *
+ * OpenAI remains as a last resort ONLY when it is explicitly configured, so a
+ * deployment that wants it can have it without this file changing.
  */
 export const meaningOf = async (
   line: string,
@@ -78,16 +83,34 @@ export const meaningOf = async (
   if (!text || target === 'off') return null;
   if (!needsMeaning(detected, target)) return null;
 
-  if (isAiConfigured()) {
+  const system = SYSTEM.replaceAll('%LANG%', LABEL[target]);
+
+  if (sarvamKey()) {
     try {
-      const out = await complete({
-        system: SYSTEM.replaceAll('%LANG%', LABEL[target]),
-        user: text,
-        temperature: 0
-      });
-      const trimmed = out.trim();
-      if (trimmed && trimmed !== text) return trimmed;
-      if (trimmed === text) return null; // already in the target language
+      const out = (
+        await sarvamChat(
+          [
+            { role: 'system', content: system },
+            { role: 'user', content: text }
+          ],
+          // One line in, one line out. Reasoning adds nothing to a rendering
+          // task and shares the same token budget as the answer — left on, it
+          // can exhaust the budget before a word is produced.
+          { disableThinking: true, maxTokens: 600 }
+        )
+      ).trim();
+      if (out && out !== text) return out;
+      if (out === text) return null; // already in the target language
+    } catch (err) {
+      console.warn('[liveMeaning] Sarvam chat failed, falling back:', (err as Error).message);
+    }
+  }
+
+  if ((process.env.LIVE_MEANING_PROVIDER || '').trim().toLowerCase() === 'openai' && isAiConfigured()) {
+    try {
+      const out = (await complete({ system, user: text, temperature: 0 })).trim();
+      if (out && out !== text) return out;
+      if (out === text) return null;
     } catch (err) {
       console.warn('[liveMeaning] OpenAI failed, falling back:', (err as Error).message);
     }

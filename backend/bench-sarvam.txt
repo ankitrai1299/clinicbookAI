@@ -1,0 +1,16 @@
+◇ injected env (26) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+◇ injected env (9) from .env.local // tip: ⌘ enable debugging { debug: true }
+
+21 cases × 2 engines
+
+Audio is synthesised, so absolute numbers are optimistic.
+Read the DIFFERENCES between columns, not the figures themselves.
+
+hi-fever             ..
+hi-breathless        ..
+hi-stomach           ..
+bho-stomach          ..
+bho-cough            ..
+bn-stomach           ..
+mix-fever-bp         ..
+mix-diabetes         .

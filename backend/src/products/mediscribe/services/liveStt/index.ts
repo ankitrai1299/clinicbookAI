@@ -1,9 +1,27 @@
-// Opening a live transcription session, with a second provider behind the first.
+// Opening a live transcription session.
 //
-// OpenAI leads because it was the only one that read Hindi, Bhojpuri and Bengali
-// correctly without being told which it was hearing. Sarvam follows because it
-// is excellent when told, and because two vendors failing at once is rarer than
-// one. See ./types.ts for the measurements behind both halves of that sentence.
+// ── Sarvam only, by decision and by measurement ───────────────────────────
+//
+// OpenAI led here until 15 Sep 2026. Three things moved it aside, in order of
+// weight:
+//
+//   1. The account ran out of credit, and every transcription failed. That is a
+//      business fact rather than a technical one, but a pipeline that stops when
+//      a card expires is not a pipeline a clinic can run on.
+//   2. ABDM's audit checklist requires that no data leaves India. Sarvam is an
+//      Indian company; routing consultation audio to OpenAI is a question we
+//      would have to answer for, and the easiest answer is not to.
+//   3. The gap that justified OpenAI closed. It was chosen because Sarvam's
+//      auto-detect once returned "Doctor, sorry, sorry, sorry…" on Hindi. Re-run
+//      on 15 Sep against the same kind of audio, Sarvam on `auto` matched being
+//      told the language exactly — Hindi 10% WER, Bhojpuri 13%, Bengali 0%.
+//
+// Point 3 is a reversal of an earlier measurement, and it is recorded rather
+// than quietly overwritten: either the provider improved or that failure is
+// intermittent. The benchmark exists to catch it if it returns.
+//
+// OpenAI is not deleted. Set LIVE_STT_PROVIDER=openai to use it, which is how
+// the two get compared again without rewriting this file.
 
 import { openOpenAiLive, openaiLiveAvailable } from './openaiLive.js';
 import { openSarvamLive, sarvamLiveAvailable } from './sarvamLive.js';
@@ -20,11 +38,19 @@ export interface LiveSttOptions {
   only?: 'openai' | 'sarvam';
 }
 
-/** Which providers this deployment could actually use, in preference order. */
+/**
+ * Which providers this deployment could actually use, in preference order.
+ *
+ * Sarvam first. OpenAI appears only when asked for by name — see the note above
+ * — and then only as the fallback, so a stray key in the environment cannot
+ * quietly start sending Indian consultation audio out of the country.
+ */
 export const availableProviders = (): Array<'openai' | 'sarvam'> => {
+  const preferOpenAi = (process.env.LIVE_STT_PROVIDER || '').trim().toLowerCase() === 'openai';
   const out: Array<'openai' | 'sarvam'> = [];
-  if (openaiLiveAvailable()) out.push('openai');
+  if (preferOpenAi && openaiLiveAvailable()) out.push('openai');
   if (sarvamLiveAvailable()) out.push('sarvam');
+  if (!out.length && openaiLiveAvailable()) out.push('openai');
   return out;
 };
 

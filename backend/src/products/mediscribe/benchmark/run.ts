@@ -12,10 +12,17 @@
  *
  *   openai     the realtime model, raw. What the doctor would see with no
  *              correction of any kind.
- *   sarvam     the realtime model with a language declared, raw. Declared
- *              because its auto-detect was measured returning "Doctor, sorry,
- *              sorry, sorry…" on Hindi, so running it on auto would benchmark a
- *              configuration nobody would ship.
+ *   sarvam     the realtime model TOLD THE RIGHT LANGUAGE. The optimistic
+ *              case: it is how Sarvam behaves at its best, and it is not
+ *              available in a clinic, where nobody knows what the patient
+ *              speaks until they have spoken.
+ *   sarvam-hi  the realtime model always told hi-IN. The SHIPPABLE case — what
+ *              a doctor would actually get with Sarvam as the primary engine
+ *              and no language picker. The gap between this column and the one
+ *              above is the price of not knowing the language in advance.
+ *   sarvam-auto its own language detection. Measured returning "Doctor, sorry,
+ *              sorry, sorry…" on Hindi; in the table so that the reason it is
+ *              not used is a number rather than a story.
  *   pipeline   openai, then restoreLatinTerms — what production actually does.
  *
  * The third column is the one that answers "is our work worth anything": it is
@@ -248,6 +255,12 @@ const main = async () => {
       try {
         if (engine === 'sarvam') {
           text = await transcribeSarvam(pcm, c.voice);
+        } else if (engine === 'sarvam-hi') {
+          text = await transcribeSarvam(pcm, 'hi-IN');
+        } else if (engine === 'sarvam-auto') {
+          text = await transcribeSarvam(pcm, 'auto');
+        } else if (engine === 'sarvam-pipeline') {
+          text = restoreLatinTerms(await transcribeSarvam(pcm, 'hi-IN'));
         } else {
           const raw = await transcribeOpenAI(pcm);
           text = engine === 'pipeline' ? restoreLatinTerms(raw) : raw;
