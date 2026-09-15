@@ -249,11 +249,22 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
 
   // 3) Generate the report in small section groups and merge them. Sectioning keeps
   //    every response within the token budget even for a dense consultation.
-  console.log('[generate-report] extracting', SECTION_GROUPS.length, 'section groups | source chars:', source.length);
+  //    They run AT THE SAME TIME, and that is the difference between a report a
+  //    doctor waits for and one they never see. Sequentially the four calls took
+  //    about four minutes on a short consultation — past the client's three
+  //    minute timeout, so the request died and the doctor got nothing after
+  //    watching a spinner. The groups are independent: each pulls different
+  //    fields out of the same text, so the wait is now the slowest one rather
+  //    than the sum of all four.
+  console.log('[generate-report] extracting', SECTION_GROUPS.length, 'section groups in parallel | source chars:', source.length);
+  const started = Date.now();
+  const results = await Promise.all(SECTION_GROUPS.map((group) => extractGroup(source, group)));
+  console.log(`[generate-report] all groups finished in ${((Date.now() - started) / 1000).toFixed(0)}s`);
+
+  // Merged in the declared order, not in the order they happened to return, so
+  // the same consultation always produces the same report.
   const merged: Record<string, unknown> = {};
-  for (const group of SECTION_GROUPS) {
-    Object.assign(merged, await extractGroup(source, group));
-  }
+  for (const part of results) Object.assign(merged, part);
 
   // 4) Merge onto a full empty report so every field/section always exists.
   return normalizeReport(merged);
