@@ -152,7 +152,51 @@ async function transcribeSync(buffer: Buffer, mimetype: string, languageCode: st
 
 // ── Batch job flow (long audio) ───────────────────────────────────────
 // Async pipeline: init → get upload URL → PUT audio → start → poll → download.
-async function transcribeBatch(buffer: Buffer, mimetype: string, languageCode: string): Promise<string> {
+/** One stretch of audio attributed to one voice. Roles are decided elsewhere. */
+export interface DiarizedTurn {
+  /** The provider's cluster id — "0", "1". A voice, not a role. */
+  speakerId: string;
+  text: string;
+  startSeconds: number;
+  endSeconds: number;
+}
+
+export interface DiarizedResult {
+  transcript: string;
+  turns: DiarizedTurn[];
+}
+
+/**
+ * Transcribe with acoustic speaker separation.
+ *
+ * Batch only — Sarvam offers diarization on the job API and not on the realtime
+ * socket, so this cannot run during a consultation. It runs on the finished
+ * recording, which is the right place for it anyway: separating two voices is
+ * easier with the whole conversation than with the last two seconds of it.
+ *
+ * `num_speakers` is not pinned. A consultation is usually two people and
+ * sometimes three — a relative translating for the patient is ordinary in an
+ * Indian clinic — and forcing two would silently merge the third into whichever
+ * voice it resembled most.
+ *
+ * Returns an empty `turns` when the provider finds only one speaker. Callers
+ * must treat that as "not separated" and fall back, rather than presenting a
+ * whole consultation as one person talking.
+ */
+export async function transcribeDiarized(
+  buffer: Buffer,
+  mimetype: string,
+  selectedLanguage?: string
+): Promise<DiarizedResult> {
+  return transcribeBatch(buffer, mimetype, mapLanguage(selectedLanguage), true);
+}
+
+async function transcribeBatch(
+  buffer: Buffer,
+  mimetype: string,
+  languageCode: string,
+  diarize = false
+): Promise<any> {
   const origin = sarvamOrigin();
   const key = sarvamKey();
   const jsonHeaders = { 'api-subscription-key': key, 'Content-Type': 'application/json' };
@@ -165,7 +209,12 @@ async function transcribeBatch(buffer: Buffer, mimetype: string, languageCode: s
     method: 'POST',
     headers: jsonHeaders,
     body: JSON.stringify({
-      job_parameters: { model: 'saaras:v3', mode: 'transcribe', language_code: languageCode },
+      job_parameters: {
+        model: 'saaras:v3',
+        mode: 'transcribe',
+        language_code: languageCode,
+        ...(diarize ? { with_diarization: true } : {})
+      },
     }),
   });
   if (!initRes.ok) throw batchError('init', await initRes.text());
@@ -226,7 +275,28 @@ async function transcribeBatch(buffer: Buffer, mimetype: string, languageCode: s
 
   const outRes = await fetch(downloadUrl);
   if (!outRes.ok) throw new Error(`Sarvam batch output fetch failed (HTTP ${outRes.status}).`);
-  return (((await outRes.json()) as any)?.transcript || '').trim();
+  const out = (await outRes.json()) as any;
+  const transcript = (out?.transcript || '').trim();
+  if (!diarize) return transcript;
+
+  const entries: any[] = Array.isArray(out?.diarized_transcript?.entries)
+    ? out.diarized_transcript.entries
+    : [];
+  const turns: DiarizedTurn[] = entries
+    .map((e) => ({
+      speakerId: String(e?.speaker_id ?? ''),
+      text: String(e?.transcript ?? '').trim(),
+      startSeconds: Number(e?.start_time_seconds ?? 0),
+      endSeconds: Number(e?.end_time_seconds ?? 0)
+    }))
+    .filter((t) => t.text);
+
+  // One voice for the whole recording is the provider saying it could not
+  // separate them, not a consultation in which one person spoke. Reported as
+  // no turns so the caller falls back rather than labelling everything Doctor.
+  const voices = new Set(turns.map((t) => t.speakerId));
+  console.log(`[sarvam:stt:batch] diarization found ${voices.size} voice(s) across ${turns.length} turns`);
+  return { transcript, turns: voices.size > 1 ? turns : [] };
 }
 
 function safeErrorMessage(raw: string): string {

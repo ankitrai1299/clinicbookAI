@@ -337,8 +337,45 @@ mediscribeRouter.post('/label-speakers', async (req: Request, res: Response) => 
     if (!transcript || !String(transcript).trim()) {
       return res.status(400).json({ error: 'transcript is required' });
     }
-    const { labelSpeakers } = await import('./services/speakerLabels.js');
-    return res.json({ turns: await labelSpeakers(String(transcript)) });
+    const { labelSpeakers, labelDiarizedTurns } = await import('./services/speakerLabels.js');
+
+    // Acoustic first, when there is a recording to listen to.
+    //
+    // Reading a transcript and guessing who spoke is the weaker method — it has
+    // only punctuation and plausibility to go on, and a doctor and patient
+    // discussing the same symptom read alike. Separating the VOICES is a
+    // different and better question, and the model is then only asked which of
+    // the two is the clinician.
+    //
+    // Sarvam offers this on the batch API and not on the realtime socket, so it
+    // cannot run during the consultation — which is fine, because it runs better
+    // on the whole conversation than on its last two seconds.
+    // The key is taken from the request, so it is checked the same way the audio
+    // route checks it: our signature, unexpired, and belonging to THIS clinic. A
+    // valid link for one clinic's recording is still refused inside another's
+    // session, and this endpoint is not a way around that.
+    const audioKey = typeof req.body?.audioKey === 'string' ? req.body.audioKey.trim() : '';
+    if (audioKey) {
+      try {
+        const check = verifySignature(audioKey, String(req.body?.e ?? ''), String(req.body?.s ?? ''));
+        if (check === 'ok' && clinicOfKey(audioKey) === currentClinicId()) {
+          const obj = await storage().get(audioKey);
+          if (obj) {
+            const { transcribeDiarized } = await import('../../core/ai/stt.js');
+            const { turns } = await transcribeDiarized(obj.body, obj.contentType);
+            if (turns.length) {
+              return res.json({ turns: await labelDiarizedTurns(turns), source: 'acoustic' });
+            }
+          }
+        }
+      } catch (err) {
+        // Falls through to the transcript-only path below. A diarization that
+        // could not run is not a reason to refuse the doctor any labels at all.
+        console.warn('[mediscribe:label-speakers] acoustic pass failed:', (err as Error).message);
+      }
+    }
+
+    return res.json({ turns: await labelSpeakers(String(transcript)), source: 'transcript' });
   } catch (error: any) {
     console.error('[mediscribe:label-speakers]', error);
     return res.status(502).json({ error: error?.message || 'Could not identify speakers' });
