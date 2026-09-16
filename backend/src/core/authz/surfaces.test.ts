@@ -69,9 +69,15 @@ describe('it fails closed', () => {
 });
 
 describe('what the person is told', () => {
-  it('sends a doctor to MediScribe by name', () => {
+  it('sends a doctor to the scribe by its CURRENT name', () => {
+    // 'clinicbook' and 'mediscribe' are keys — stored per clinic, written into
+    // deep links, impossible to rename — and they were leaking into the sentence
+    // a person reads. A doctor was being told to use "MediScribe", which is what
+    // the product was called two names ago and appears nowhere they could look
+    // it up.
     const msg = wrongSurfaceMessage('doctor', 'clinicbook');
-    expect(msg).toContain('MediScribe');
+    expect(msg).toContain('AnvayaScribe');
+    expect(msg).not.toMatch(/MediScribe|NovaScribe/);
     expect(msg).toContain('Doctors');
   });
 
@@ -97,7 +103,7 @@ describe('what the person is told', () => {
         // the person which door they are standing at. Only the OTHER names in
         // the sentence are directions, and those are what must be honest.
         const named = SURFACES.filter(
-          (s) => s !== surface && msg.includes(s === 'mediscribe' ? 'MediScribe' : 'ClinicBook')
+          (s) => s !== surface && msg.includes(s === 'mediscribe' ? 'AnvayaScribe' : 'AnvayaBook')
         );
         for (const s of named) {
           expect(maySignInTo(role, s), `${role} was sent to ${s}, which also refuses them`).toBe(true);

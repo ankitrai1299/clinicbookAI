@@ -44,7 +44,12 @@ export const maySignInTo = (role: PlatformRole | null, surface: Surface): boolea
  */
 export const wrongSurfaceMessage = (role: PlatformRole, attempted: Surface): string => {
   const elsewhere = SURFACE_ACCESS[role].filter((s) => s !== attempted);
-  const name = (s: Surface) => (s === 'mediscribe' ? 'MediScribe' : 'ClinicBook');
+  // The products' names, not the identifiers. 'clinicbook' and 'mediscribe' are
+  // keys — stored per clinic, written into deep links, impossible to rename —
+  // and they were being shown to people as if they were names. A doctor who
+  // signed in at the wrong door was told to use "MediScribe", which is what the
+  // product was called two names ago and appears nowhere they could look it up.
+  const name = (s: Surface) => (s === 'mediscribe' ? 'AnvayaScribe' : 'AnvayaBook');
   if (elsewhere.length === 0) {
     return 'This account cannot sign in here. Ask your clinic administrator.';
   }

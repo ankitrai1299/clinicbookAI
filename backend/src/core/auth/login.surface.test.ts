@@ -62,11 +62,11 @@ describe('a doctor at the ClinicBook door', () => {
     await expect(login('clinicbook')).rejects.toThrow();
   });
 
-  it('is told to use MediScribe, not that their password is wrong', async () => {
+  it('is told where to sign in, not that their password is wrong', async () => {
     await asRole('DOCTOR');
     // The whole point. "Invalid email or password" for someone who typed it
     // correctly ends as a password reset that cannot help, then a phone call.
-    await expect(login('clinicbook')).rejects.toThrow(/MediScribe/);
+    await expect(login('clinicbook')).rejects.toThrow(/AnvayaScribe/);
   });
 
   it('is refused with 403, not 401', async () => {
