@@ -56,6 +56,19 @@ export const registerClinic = async (input: RegisterClinicInput) => {
         name: input.clinicName.trim(),
         email,
         phone: input.phone.trim(),
+        // A clinic that signs up buys अन्वयBook, so that is what it gets.
+        //
+        // The column's default grants BOTH products, which was right while the
+        // only clinics were ours: an existing clinic keeps what it had. It is
+        // wrong for a public signup. अन्वयScribe is not for sale yet, and a
+        // clinic handed it anyway would meet a product still being tested,
+        // decide the whole thing is unreliable, and never come back — the one
+        // impression there is no second chance at.
+        //
+        // Named here rather than changed in the schema default, because the
+        // default is what protects every clinic already in the database. When
+        // Scribe is ready this line grows a second entry; nothing migrates.
+        products: ['clinicbook'],
       },
     });
 
