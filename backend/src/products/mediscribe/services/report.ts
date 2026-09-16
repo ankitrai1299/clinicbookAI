@@ -25,6 +25,7 @@ import { normalizeReport } from '../shared/report.js';
 import { sarvamChat, sarvamKey } from '../../../core/ai/sarvam.js';
 import { isDeniedIn } from './negation.js';
 import { translateTranscript } from './translate.js';
+import { mapPool } from '../../../utils/pool.js';
 
 // Detect a non-Latin Indian/Urdu script — Devanagari (0900–097F) … Malayalam
 // (0D00–0D7F), plus Perso-Arabic (0600–06FF, 0750–077F). Used to decide whether
@@ -91,6 +92,7 @@ const SECTION_GROUPS: { label: string; schema: string; guidance: string }[] = [
 // Above this length the transcript is condensed into English facts first, so each
 // section-group call reasons over a smaller input.
 const CONDENSE_THRESHOLD = 3500;
+const CONDENSE_CONCURRENCY = 4;
 const CONDENSE_CHUNK = 1800;
 
 // Parse the model's JSON answer. Tolerates a stray ```json fence or surrounding
@@ -138,15 +140,17 @@ async function condenseIfLong(text: string): Promise<string> {
   if (text.length <= CONDENSE_THRESHOLD) return text;
   const chunks = chunkText(text, CONDENSE_CHUNK);
   console.log('[generate-report] long transcript — condensing to facts in', chunks.length, 'chunks');
-  const factParts: string[] = [];
-  for (const chunk of chunks) {
+  const factParts = await mapPool(chunks, CONDENSE_CONCURRENCY, async (chunk) => {
     try {
       const facts = await sarvamChat(
         [
           {
             role: 'system',
             content:
-              'Summarise the consultation transcript into concise English clinical bullet points, preserving ALL symptoms, durations, past/family/social history, medicines with doses and frequencies, allergies, vitals, examination findings, diagnoses, tests ordered, advice and follow-up. English only. Plain text bullets, no JSON.',
+              'The transcript may be in Hindi, English, Hinglish or any other Indian language, in any script. ' +
+              'Summarise it into concise English clinical bullet points, preserving ALL symptoms, durations, past/family/social history, medicines with doses and frequencies, allergies, vitals, examination findings, diagnoses, tests ordered, advice and follow-up. ' +
+              'Keep every negative statement negative — "no chest pain", "denies penicillin allergy". A denial is a clinical fact, and losing the word that makes it one turns it into its opposite. ' +
+              'English only. Plain text bullets, no JSON.',
           },
           { role: 'user', content: `/no_think\nTranscript:\n${chunk}` },
         ],
@@ -167,12 +171,12 @@ async function condenseIfLong(text: string): Promise<string> {
         // to reason its way through, and it must not invent one.
         { maxTokens: 8192, reasoningEffort: 'low', disableThinking: true },
       );
-      factParts.push(facts.trim());
+      return facts.trim();
     } catch (err: any) {
       console.error('[generate-report] facts condensation failed for a chunk; keeping raw text:', err?.message || err);
-      factParts.push(chunk);
+      return chunk;
     }
-  }
+  });
   return factParts.join('\n');
 }
 
@@ -275,8 +279,15 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
   // 1) Force English: translate a non-English transcript to English FIRST so the
   //    report is reliably English. This English copy is INTERNAL to report
   //    generation only — the transcript shown in the UI is never modified.
+  //
+  //    Skipped when the transcript is long enough to be condensed below, because
+  //    the condensing pass ALSO renders English — doing both translated the same
+  //    consultation twice, which on a five minute Hindi consultation was four
+  //    model calls spent to reach text the next step was going to produce
+  //    anyway. It is not only slower, it is one more lossy pass over a clinical
+  //    record than the report needs.
   let text = transcript;
-  if (NON_LATIN_RE.test(transcript)) {
+  if (NON_LATIN_RE.test(transcript) && transcript.length <= CONDENSE_THRESHOLD) {
     try {
       const english = (await translateTranscript(transcript, 'en')).trim();
       if (english) {

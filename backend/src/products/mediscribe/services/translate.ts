@@ -17,6 +17,7 @@
 // The API key is read from the environment (SARVAM_API_KEY) and NEVER logged.
 
 import { sarvamChat, sarvamKey, sarvamOrigin } from '../../../core/ai/sarvam.js';
+import { mapPool } from '../../../utils/pool.js';
 
 // Supported OUTPUT languages (code → human name used in the chat-fallback prompt).
 export const LANGUAGE_NAMES: Record<string, string> = {
@@ -63,6 +64,12 @@ const SCRIPT_NAMES: Record<string, string> = {
 // mayura:v1 accepts at most 1000 characters per request, so transcripts are split
 // into chunks on sentence boundaries and translated piece by piece, then re-joined
 // verbatim in order. Kept under the limit with margin.
+// How many chunks are translated at once. Enough to stop the queue, few enough
+// that a long consultation does not arrive at Sarvam as twenty simultaneous
+// requests and come back rate limited — which fails the same consultation a
+// different way.
+const TRANSLATE_CONCURRENCY = 4;
+
 const CHUNK_CHARS = 900;
 // Below this length a chat-fallback chunk is no longer worth splitting on an
 // empty-content retry — we retry it as-is once more and then keep the original.
@@ -211,21 +218,26 @@ export async function translateTranscript(text: string, targetLanguage?: string)
   const chunks = chunkTranscript(source);
   console.log('[translate] target:', code, '| chars:', source.length, '| chunks:', chunks.length, '| path:', chatOnly ? 'chat' : 'api');
 
-  // Translate chunks in order and re-join them in the same order.
-  const converted: string[] = [];
-  for (const chunk of chunks) {
-    if (chatOnly) {
-      converted.push(await translateChunkViaChat(chunk, system));
-      continue;
-    }
+  // A few chunks at a time, re-joined in the order they were cut.
+  //
+  // One at a time was costing a consultation its report. A five minute Hindi
+  // consultation cuts into four chunks here, and each one waited for the last
+  // before the report generation downstream had even started — the request died
+  // at 186 seconds and the doctor got nothing.
+  //
+  // The chunks do not depend on each other, so nothing is lost by overlapping
+  // them, and mapPool keeps the output in input order: a transcript reassembled
+  // in completion order is a shuffled consultation.
+  const converted = await mapPool(chunks, TRANSLATE_CONCURRENCY, async (chunk) => {
+    if (chatOnly) return translateChunkViaChat(chunk, system);
     try {
-      converted.push(await translateChunkViaApi(chunk, targetCode));
+      return await translateChunkViaApi(chunk, targetCode);
     } catch (err: any) {
       if (!err?.fallback) throw err; // real API/transport error — surface it
       console.log('[translate] Translate API could not handle chunk — using chat fallback');
-      converted.push(await translateChunkViaChat(chunk, system));
+      return translateChunkViaChat(chunk, system);
     }
-  }
+  });
 
   return converted.join(' ').trim() || source;
 }
