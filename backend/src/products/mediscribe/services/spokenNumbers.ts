@@ -54,7 +54,14 @@ const BP_SEPARATORS = new Set(['by', 'over', 'बटे', 'बाई', 'स्�
 /** Units that make a preceding number a dose rather than a count of anything. */
 const UNITS = new Set([
   'mg', 'mgs', 'ml', 'mls', 'mcg', 'g', 'gm', 'gms', 'gram', 'grams',
-  'unit', 'units', 'iu', 'mmhg', 'kg', 'kgs'
+  'unit', 'units', 'iu', 'mmhg', 'kg', 'kgs',
+  // Weight came back as "twelve kilograms" on a paediatric consultation — a
+  // dose calculated from a weight nobody can read as a number. The unit is
+  // written out far more often than it is abbreviated when a doctor says it
+  // aloud, and the same is true in Hindi.
+  'kilo', 'kilos', 'kilogram', 'kilograms', 'किलो', 'किलोग्राम',
+  'cm', 'cms', 'centimetre', 'centimetres', 'centimeter', 'centimeters',
+  'mmol', 'mg/dl', 'mgdl', 'बार', 'मिलीग्राम', 'एमएल'
 ]);
 
 /**

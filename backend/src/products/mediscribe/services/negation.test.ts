@@ -83,6 +83,27 @@ describe('what it must never remove', () => {
     expect(isDeniedIn('Allergy nahi hai. Sorry, allergy hai Penicillin se.', 'allergy')).toBe(false);
   });
 
+  it('does not let a "nahi" about ANOTHER drug erase the allergy', () => {
+    // Measured. The doctor is explaining why they cannot use Amoxicillin — the
+    // allergy is the REASON, stated as plainly as it can be — and the report
+    // came back with no allergy at all. A patient whose penicillin allergy is
+    // missing from the record gets given penicillin.
+    const line = 'डॉक्टर: आपको Penicillin से एलर्जी है, तो Amoxicillin नहीं चलेगी।';
+    expect(isDeniedIn(line, 'Penicillin')).toBe(false);
+  });
+
+  it('stops a denial at a comma', () => {
+    // Same shape without the conjunction. Breaking more often can only move a
+    // finding towards being kept, and between the two mistakes that is the one
+    // a patient survives.
+    expect(isDeniedIn('Penicillin se allergy hai, Amoxicillin nahi de sakte', 'Penicillin')).toBe(false);
+  });
+
+  it('still catches the denial it was built for', () => {
+    // The commas and the new breaks must not have quietly disabled the guard.
+    expect(isDeniedIn('Patient ko Penicillin se allergy nahi hai, aur sugar bhi nahi hai', 'Penicillin')).toBe(true);
+  });
+
   it('handles empty input without claiming anything', () => {
     expect(isDeniedIn('', 'Penicillin')).toBeNull();
     expect(isDeniedIn('Patient has fever', '')).toBeNull();

@@ -27,6 +27,7 @@ import { isDeniedIn } from './negation.js';
 import { translateTranscript } from './translate.js';
 import { mapPool } from '../../../utils/pool.js';
 import { normaliseSpokenNumbers } from './spokenNumbers.js';
+import { correctMedicalTerms } from './medicalTerms.js';
 
 // Detect a non-Latin Indian/Urdu script — Devanagari (0900–097F) … Malayalam
 // (0D00–0D7F), plus Perso-Arabic (0600–06FF, 0750–077F). Used to decide whether
@@ -207,6 +208,53 @@ async function condense(text: string): Promise<string> {
 // whole report if it still cannot produce that group. A genuine API error (bad
 // key, network) is surfaced instead of being masked.
 /**
+ * Spell the drug names in the FINISHED report correctly.
+ *
+ * The glossary was only ever applied to the text going in, which silently
+ * assumed the model copies a name it can already read. It does not. Given a
+ * transcript that said "Levocetirizine 5 mg" — spelled correctly, nothing for
+ * any correction layer to do — the report came back with:
+ *
+ *   prescribedMedications: [{ medicine: "Levocetirizizine" }]
+ *
+ * The corruption was introduced by the extraction itself, downstream of every
+ * check, and went onto a prescription. So the same glossary now runs over what
+ * comes OUT, where it catches both the names the transcription mis-heard and
+ * the ones the report model invented a syllable for.
+ *
+ * Names only. Running it over free text would let a 5,000-word drug list edit
+ * a doctor's advice, and a glossary has no business rewriting sentences.
+ */
+function correctNamesInReport(report: Record<string, unknown>): void {
+  const fix = (v: unknown): string => {
+    const raw = String(v ?? '').trim();
+    if (!raw) return raw;
+    const corrected = correctMedicalTerms(raw);
+    if (corrected !== raw) console.log(`[generate-report] corrected drug name "${raw}" to "${corrected}"`);
+    return corrected;
+  };
+
+  for (const key of ['prescribedMedications', 'medicationHistory']) {
+    const rows = report[key];
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      if (row && typeof row === 'object' && 'medicine' in row) {
+        (row as any).medicine = fix((row as any).medicine);
+      }
+    }
+  }
+
+  const allergies = report.allergies;
+  if (Array.isArray(allergies)) {
+    for (const row of allergies) {
+      if (row && typeof row === 'object' && 'allergy' in row) {
+        (row as any).allergy = fix((row as any).allergy);
+      }
+    }
+  }
+}
+
+/**
  * Remove a test the doctor said was NOT needed.
  *
  * Measured on a real consultation. The doctor said:
@@ -335,6 +383,7 @@ export function dropDeniedFindings(report: Record<string, unknown>, texts: strin
     if (kept.length !== rows.length) report[key] = kept;
   };
 
+  correctNamesInReport(report);
   dedupeOrders(report);
   pruneOrders(report, verdict);
   prune('allergies', (r) => String(r?.allergy ?? r?.name ?? '').trim());
@@ -435,7 +484,6 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
   //    reasons over a smaller input — and, for a non-English one, this is the
   //    pass that produced the English. Then fix medical terms STT mis-heard
   //    (e.g. "azithromicin" → "Azithromycin") using the editable glossary.
-  const { correctMedicalTerms } = await import('./medicalTerms.js');
   //
   //    Numbers last. A measurement that reached here as words has to leave as a
   //    number, because nothing downstream can read "one hundred point four

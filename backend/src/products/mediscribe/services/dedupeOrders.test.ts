@@ -91,6 +91,32 @@ describe('repeated orders', () => {
     expect(report.prescribedMedications).toEqual([{ medicine: 'Paracetamol', strength: '650 mg' }]);
   });
 
+  it('fixes a drug name the report model corrupted', () => {
+    // The transcript spelled it correctly. The corruption was introduced by the
+    // extraction, downstream of every check on the way in, and went onto a
+    // prescription.
+    const report: Record<string, unknown> = {
+      prescribedMedications: [{ medicine: 'Levocetirizizine', strength: '5 mg' }],
+      medicationHistory: [{ medicine: 'Metformal', strength: '500 mg' }],
+      allergies: [{ allergy: 'Penicilin' }],
+    };
+    dropDeniedFindings(report, ['', '']);
+    expect((report.prescribedMedications as any)[0].medicine).toBe('Levocetirizine');
+    expect((report.medicationHistory as any)[0].medicine).toBe('Metformin');
+    expect((report.allergies as any)[0].allergy).toBe('Penicillin');
+  });
+
+  it('leaves a name it does not recognise exactly as the doctor said it', () => {
+    // A glossary that guesses at an unknown word is worse than one that stays
+    // out of the way — the doctor can read an unfamiliar spelling, but cannot
+    // know that a familiar one is not what they said.
+    const report: Record<string, unknown> = {
+      prescribedMedications: [{ medicine: 'Zyrtec-D', strength: '' }],
+    };
+    dropDeniedFindings(report, ['', '']);
+    expect((report.prescribedMedications as any)[0].medicine).toBe('Zyrtec-D');
+  });
+
   it('leaves a report with no orders alone', () => {
     const report: Record<string, unknown> = { allergies: [] };
     expect(() => dropDeniedFindings(report, ['', ''])).not.toThrow();

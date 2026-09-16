@@ -28,6 +28,9 @@
 
 import { devanagariToLatin, phoneticKey } from './devanagariTerms.js';
 
+/** Stands in for a comma or semicolon, which `words` would otherwise discard. */
+const CLAUSE_MARK = 'comma';
+
 /** Words that flip a clinical statement, across the languages a clinic speaks. */
 const NEGATORS = [
   'nahi', 'nahin', 'na', 'no', 'not', "n't", 'never', 'without', 'denies', 'denied',
@@ -44,9 +47,24 @@ const NEGATORS = [
  * is as dangerous as one that keeps findings they do not.
  */
 const CLAUSE_BREAKS = new Set([
-  'aur', 'lekin', 'par', 'magar', 'phir', 'isliye', 'kyunki', 'to',
-  'and', 'but', 'however', 'so', 'because', 'although', 'while',
-  'और', 'लेकिन', 'पर', 'मगर', 'इसलिए', 'क्योंकि', 'फिर'
+  'aur', 'lekin', 'par', 'magar', 'phir', 'isliye', 'kyunki', 'to', 'jabki',
+  'and', 'but', 'however', 'so', 'because', 'although', 'while', 'therefore',
+  // The Devanagari half must mirror the Latin half. It did not, and the missing
+  // 'तो' cost a patient their allergy:
+  //
+  //   "आपको Penicillin से एलर्जी है, तो Amoxicillin नहीं चलेगी।"
+  //
+  // The "नहीं" belongs to the Amoxicillin — the drug that cannot be used
+  // BECAUSE of the allergy. With no break at 'तो' it reached back across the
+  // whole sentence, the allergy read as denied, and it was removed from the
+  // record. A patient whose penicillin allergy is missing gets given penicillin.
+  'और', 'लेकिन', 'पर', 'मगर', 'इसलिए', 'क्योंकि', 'फिर', 'तो', 'जबकि', 'हालांकि', 'परंतु', 'किंतु',
+  // A comma ends a clause too, and this is the asymmetry the whole file turns
+  // on. Breaking more often can only move a finding from "denied" towards
+  // "kept": keeping an allergy the patient denied costs them the right
+  // antibiotic, and dropping one they really have can kill them. When the two
+  // errors are that unequal, the tie goes to keeping.
+  CLAUSE_MARK,
 ]);
 
 /**
@@ -68,6 +86,15 @@ const isQuestion = (sentence: string): boolean => /\?\s*$/.test(sentence.trim())
 
 /** Sentences WITH their terminator, so a question is still recognisable as one. */
 const sentencesOf = (text: string): string[] => (text || '').match(/[^.!?।\n]+[.!?।\n]*/g) || [];
+
+/** Words for clause-finding, with comma and semicolon kept as boundaries. */
+const clauseWords = (text: string): string[] =>
+  (text || '')
+    .toLowerCase()
+    .replace(/[,;]/g, ' ' + CLAUSE_MARK + ' ')
+    .replace(/[.:!?।|"'`()\[\]{}]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
 
 export const words = (text: string): string[] =>
   (text || '')
@@ -113,7 +140,7 @@ export const isDeniedIn = (transcript: string, term: string): boolean | null => 
   for (const sentence of sentences) {
     // A question mentions the term without asserting it, either way.
     if (isQuestion(sentence)) continue;
-    const hyp = words(sentence);
+    const hyp = clauseWords(sentence);
     for (let i = 0; i + needle.length <= hyp.length; i++) {
       if (!needle.every((w, k) => sameWord(hyp[i + k], w))) continue;
       found = true;

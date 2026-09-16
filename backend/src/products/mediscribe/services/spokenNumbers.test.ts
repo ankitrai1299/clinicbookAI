@@ -29,6 +29,14 @@ describe('doses', () => {
     expect(normaliseSpokenNumbers('Amlodipine five mg.')).toBe('Amlodipine 5 mg.');
   });
 
+  it('converts a weight, which a paediatric dose depends on', () => {
+    // Measured: a child's weight reached the report as "twelve kilograms", and
+    // a dose calculated from a weight nobody can read as a number is not a
+    // dose. Doctors say the unit in full far more often than they abbreviate it.
+    expect(normaliseSpokenNumbers('weight is twelve kilograms')).toBe('weight is 12 kilograms');
+    expect(normaliseSpokenNumbers('bachche ka wazan twelve kilo hai')).toBe('bachche ka wazan 12 kilo hai');
+  });
+
   it('handles every unit a clinic uses', () => {
     expect(normaliseSpokenNumbers('ten ml syrup')).toBe('10 ml syrup');
     expect(normaliseSpokenNumbers('forty units insulin')).toBe('40 units insulin');
