@@ -26,6 +26,7 @@ import { sarvamChat, sarvamKey } from '../../../core/ai/sarvam.js';
 import { isDeniedIn } from './negation.js';
 import { translateTranscript } from './translate.js';
 import { mapPool } from '../../../utils/pool.js';
+import { normaliseSpokenNumbers } from './spokenNumbers.js';
 
 // Detect a non-Latin Indian/Urdu script — Devanagari (0900–097F) … Malayalam
 // (0D00–0D7F), plus Perso-Arabic (0600–06FF, 0750–077F). Used to decide whether
@@ -353,7 +354,18 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
   //    pass that produced the English. Then fix medical terms STT mis-heard
   //    (e.g. "azithromicin" → "Azithromycin") using the editable glossary.
   const { correctMedicalTerms } = await import('./medicalTerms.js');
-  const source = correctMedicalTerms(long ? await condense(text) : text);
+  //
+  //    Numbers last. A measurement that reached here as words has to leave as a
+  //    number, because nothing downstream can read "one hundred point four
+  //    degrees" as a temperature. It was only being done on the live transcript,
+  //    so the two paths disagreed on the same consultation:
+  //
+  //      short (translated)  "150 over 96"   "Ninety-six per minute"
+  //      long  (condensed)   "150/96 mmHg"   "96 beats per minute"
+  //
+  //    Safe to run on text that is already correct — digits stay digits, and it
+  //    converts only measurements, never a duration or a count.
+  const source = normaliseSpokenNumbers(correctMedicalTerms(long ? await condense(text) : text));
 
   // 3) Generate the report in small section groups and merge them. Sectioning keeps
   //    every response within the token budget even for a dense consultation.
