@@ -100,7 +100,7 @@ const SECTION_GROUPS: { label: string; schema: string; guidance: string }[] = [
     schema:
       '{"ordersDiagnostics":[{"name":"","findings":[""]}],"advice":[""],"redFlags":[""],"followUp":{"date":"","duration":"","reports":"","instructions":""}}',
     guidance:
-      'ordersDiagnostics: EVERY test, scan or investigation the doctor asked for, grouped by category name ("Laboratory Orders", "Imaging Orders", "Cardiac Evaluation" or "Other Diagnostic Tests"). If a test is named anywhere in the text it belongs here, including one repeated in a closing summary; a category with nothing in it may be left out entirely, but a test that was ordered must never be. advice: care plan and lifestyle instructions. redFlags: warning signs to watch for. followUp: date, duration, required reports and next-visit instructions.',
+      'ordersDiagnostics: EVERY test, scan or investigation the doctor asked for, grouped by category name ("Laboratory Orders", "Imaging Orders", "Cardiac Evaluation" or "Other Diagnostic Tests"). If a test is named anywhere in the text it belongs here, including one repeated in a closing summary; a category with nothing in it may be left out entirely, but a test that was ordered must never be. List each test ONCE under its fullest name — a doctor who reads the list back at the end of the visit has not ordered it twice. advice: care plan and lifestyle instructions. redFlags: warning signs to watch for. followUp: date, duration, required reports and next-visit instructions.',
   },
 ];
 
@@ -199,6 +199,38 @@ async function condense(text: string): Promise<string> {
 // whole report if it still cannot produce that group. A genuine API error (bad
 // key, network) is surfaced instead of being masked.
 /**
+ * Remove a test listed twice under exactly the same name.
+ *
+ * A doctor who reads the order list back at the end of the visit says every
+ * test twice, and the report then carried both mentions — "Urine routine",
+ * "HbA1c" and the rest appearing once from the middle of the consultation and
+ * once from the closing summary.
+ *
+ * Only EXACT repeats go, compared without case, punctuation or spacing.
+ * Deliberately not clever: "Widal" and "Widal test" are left as two lines even
+ * though they are plainly the same investigation, because the rule that would
+ * collapse them also collapses "Blood sugar" into "Fasting blood sugar", and
+ * they are two different tests. A slightly untidy list costs a doctor a glance.
+ * A test quietly removed from it does not get done.
+ */
+function dedupeOrders(report: Record<string, unknown>): void {
+  const categories = report.ordersDiagnostics;
+  if (!Array.isArray(categories)) return;
+  const key = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const seen = new Set<string>();
+  for (const category of categories) {
+    const findings = (category as any)?.findings;
+    if (!Array.isArray(findings)) continue;
+    (category as any).findings = findings.filter((f: unknown) => {
+      const k = key(String(f ?? ''));
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+}
+
+/**
  * Strip findings the transcript denied.
  *
  * Deliberately narrow: only the lists where a false POSITIVE changes treatment.
@@ -255,6 +287,7 @@ export function dropDeniedFindings(report: Record<string, unknown>, texts: strin
     if (kept.length !== rows.length) report[key] = kept;
   };
 
+  dedupeOrders(report);
   prune('allergies', (r) => String(r?.allergy ?? r?.name ?? '').trim());
   prune('diagnoses', (r) => String(r?.diagnosis ?? r?.name ?? r ?? '').trim());
 }

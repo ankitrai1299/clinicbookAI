@@ -24,7 +24,8 @@ import { eventBus } from '../../core/events/eventBus.js';
 import { requireRecordingConsent } from '../../core/consent/recordingConsent.js';
 import { recordAiDraft, diffAgainstDraft, contentHash } from './services/aiAuditTrail.js';
 import type { Role } from './contracts/index.js';
-import { currentClinicId } from './context.js';
+import { currentClinicId, runWithClinic } from './context.js';
+import { startReportJob, readReportJob } from './services/reportJobs.js';
 import { storage, objectKey, clinicOfKey, signedPath, verifySignature } from '../../core/storage/index.js';
 import authRouter from './routes/auth.js';
 import adminRouter from './routes/admin.js';
@@ -383,23 +384,102 @@ mediscribeRouter.post('/label-speakers', async (req: Request, res: Response) => 
 });
 
 // ── Report generation (Sarvam) ───────────────────────────────
+
+/**
+ * Generate the report and file the audit draft.
+ *
+ * Takes the clinic id rather than reading it, because this also runs from a
+ * background job where the request — and the AsyncLocalStorage it put the
+ * clinic in — is long gone.
+ */
+async function buildReport(transcript: string, clinicId: string): Promise<unknown> {
+  const { generateMedicalReport } = await import('./services/report.js');
+  const report = await generateMedicalReport(transcript);
+
+  // Keep what the AI proposed, BEFORE any doctor touches it — this is the
+  // "before" half of the review trail. Awaited (not fire-and-forget) so the
+  // draft is on disk before the doctor can possibly finalise; it never throws.
+  await recordAiDraft({
+    clinicId,
+    transcript: String(transcript),
+    report,
+    model: process.env.SARVAM_MODEL || 'sarvam-105b'
+  });
+  return report;
+}
+
+/**
+ * Start a report and answer with an id instead of the report.
+ *
+ * The doctor's browser no longer holds a connection open for the whole
+ * generation, which is what a long consultation kept losing: a four-and-a-half
+ * minute one died at 186 seconds with nothing to show. Speeding the work up
+ * moved that wall; this removes it.
+ */
+mediscribeRouter.post('/generate-report/start', requirePermission('consultation.write'), async (req: AuthedRequest, res: Response) => {
+  const { transcript } = req.body;
+  if (!transcript) return res.status(400).json({ error: 'Transcript is required' });
+
+  // Read the clinic HERE. Inside the job there is no request to read it from.
+  const clinicId = currentClinicId();
+  const owner = { clinicId, userId: req.auth?.userId ?? null };
+
+  // EVERYTHING inside runWithClinic, including the logging. logUsage and
+  // pushNotification write through the clinic-scoped repositories, and outside
+  // the context they fail silently inside their own try/catch — the report would
+  // still arrive, and the clinic's usage record would quietly have a hole in it.
+  const jobId = startReportJob(owner, () =>
+    runWithClinic(clinicId, async () => {
+      try {
+        const report = await buildReport(String(transcript), clinicId);
+        await logUsage({ type: 'ai_report', success: true });
+        return report;
+      } catch (error: any) {
+        console.error('[mediscribe:generate-report:job]', error);
+        await logUsage({ type: 'ai_report', success: false });
+        await pushNotification('failed_report', 'AI report failed', error?.message || 'Report generation failed');
+        throw new Error(reportFailureMessage(error));
+      }
+    }),
+  );
+
+  return res.status(202).json({ jobId });
+});
+
+/** How a started report is going. Polled by the client until it is not running. */
+mediscribeRouter.get('/generate-report/status/:jobId', requirePermission('consultation.write'), async (req: AuthedRequest, res: Response) => {
+  const job = readReportJob(String(req.params.jobId), {
+    clinicId: currentClinicId(),
+    userId: req.auth?.userId ?? null,
+  });
+  // Unknown and another clinic's are the same answer, so no one can discover a
+  // report exists by asking for it.
+  if (!job) return res.status(404).json({ error: 'No such report job. Generate the report again.' });
+  if (job.status === 'running') return res.json({ status: 'running' });
+  if (job.status === 'failed') return res.json({ status: 'failed', error: job.error });
+  return res.json({ status: 'done', report: job.report });
+});
+
+/** The doctor-facing reason a report failed, from whatever the provider threw. */
+function reportFailureMessage(error: any): string {
+  const detail = error?.message || error?.error?.message || 'Unknown error while generating the report.';
+  const status = error?.status ?? error?.code;
+  if (status === 401 || status === 403) return 'Invalid Sarvam API key. Check SARVAM_API_KEY.';
+  if (status === 429 || /quota|rate.?limit|too many requests/i.test(detail)) {
+    return 'Sarvam quota exceeded or rate limited. The transcript is preserved — try again shortly.';
+  }
+  return `Sarvam report generation failed: ${detail}`;
+}
+
+/**
+ * The original, synchronous route. Kept so a client that has not reloaded — or
+ * an app build still in someone's pocket — goes on working.
+ */
 mediscribeRouter.post('/generate-report', requirePermission('consultation.write'), async (req: Request, res: Response) => {
   try {
     const { transcript } = req.body;
     if (!transcript) return res.status(400).json({ error: 'Transcript is required' });
-    const { generateMedicalReport } = await import('./services/report.js');
-    const report = await generateMedicalReport(transcript);
-
-    // Keep what the AI proposed, BEFORE any doctor touches it — this is the
-    // "before" half of the review trail. Awaited (not fire-and-forget) so the
-    // draft is on disk before the doctor can possibly finalise; it never throws.
-    await recordAiDraft({
-      clinicId: currentClinicId(),
-      transcript: String(transcript),
-      report,
-      model: process.env.SARVAM_MODEL || 'sarvam-105b'
-    });
-
+    const report = await buildReport(String(transcript), currentClinicId());
     logUsage({ type: 'ai_report', success: true });
     return res.json(report);
   } catch (error: any) {

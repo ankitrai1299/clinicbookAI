@@ -232,6 +232,11 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  // Seconds the report has been running. A long consultation takes over a
+  // minute, and a spinner with no number beside it looks the same as one that
+  // has hung — a doctor watching that has no way to tell whether to wait or
+  // press the button again.
+  const [generatingSeconds, setGeneratingSeconds] = useState(0);
   const [reportStatus, setReportStatus] = useState<'idle' | 'generated' | 'failed'>(
     consultation.report ? 'generated' : 'idle',
   );
@@ -514,12 +519,13 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     if (!transcript || reportGenRef.current) return;
     reportGenRef.current = true;
     setIsGenerating(true);
+    setGeneratingSeconds(0);
     setError(null);
     setReportStatus('idle');
     try {
       // Always generated from the COMPLETE current transcript (old + appended),
       // so the latest report replaces the previous one with all changes.
-      const report = await generateReport(transcript);
+      const report = await generateReport(transcript, setGeneratingSeconds);
       setReportData(report);
       setReportStatus('generated');
       const lines: TranscriptLine[] = [{
@@ -2858,7 +2864,9 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
             </h3>
             <div className="flex gap-2 items-center">
               {isGenerating && (
-                <span className="hidden md:inline-block text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md">Generating report...</span>
+                <span className="hidden md:inline-block text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md">
+                  Generating report{generatingSeconds > 0 ? ` — ${generatingSeconds}s` : '...'}
+                </span>
               )}
               {!isGenerating && reportStatus === 'generated' && (
                 <span className="hidden md:flex text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md items-center gap-1">
@@ -3060,6 +3068,11 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
                 <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
                 <h3 className="font-bold text-lg text-slate-900 mb-1">Generating report...</h3>
                 <p className="text-sm text-slate-600">Creating the clinical report from the edited transcript</p>
+                {generatingSeconds > 0 && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    {generatingSeconds}s — a long consultation takes a little longer. You can leave this open.
+                  </p>
+                )}
               </div>
             )}
           </div>

@@ -284,7 +284,85 @@ export async function translateTranscript(
   return data.translatedText as string;
 }
 
-export async function generateReport(transcript: string): Promise<ReportData> {
+/**
+ * Generate the report.
+ *
+ * The browser does not hold a connection open while it happens. It asks the
+ * server to start, gets an id back, and then asks how it is going — because the
+ * old way lost long consultations outright: a four-and-a-half minute one died
+ * at 186 seconds and the doctor got nothing after watching a spinner. A request
+ * that waits is at the mercy of three timeouts we do not control (the browser's,
+ * the proxy's, the mobile network's), and a phone on a train breaks the last one
+ * for reasons of its own. Polling survives all three.
+ *
+ * `onProgress` gets the seconds elapsed, so the screen can show the doctor that
+ * something is still happening rather than a spinner that could mean anything.
+ */
+export async function generateReport(
+  transcript: string,
+  onProgress?: (secondsElapsed: number) => void,
+): Promise<ReportData> {
+  const start = await fetchWithTimeout(
+    `${BASE}/generate-report/start`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ transcript }),
+    },
+    60000,
+  );
+
+  // A backend that predates the job routes. Fall back rather than fail: an app
+  // build in someone's pocket should not stop working because the server moved
+  // on, and vice versa.
+  if (start.status === 404) return generateReportAndWait(transcript);
+  if (!start.ok) throw new Error(await errorMessage(start, 'Report generation failed'));
+
+  const { jobId } = (await start.json()) as { jobId: string };
+  const began = Date.now();
+
+  // Up to twenty minutes. Nothing should take that long — a ten minute
+  // consultation finishes in about eighty-five seconds — but the cost of
+  // waiting a little longer is a doctor who gets their report, and the cost of
+  // giving up early is one who does not.
+  const DEADLINE_MS = 20 * 60 * 1000;
+  const POLL_MS = 2500;
+
+  for (;;) {
+    await new Promise((r) => setTimeout(r, POLL_MS));
+    onProgress?.(Math.round((Date.now() - began) / 1000));
+
+    if (Date.now() - began > DEADLINE_MS) {
+      throw new Error('The report is taking longer than expected. Your transcript is saved — please try again.');
+    }
+
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(
+        `${BASE}/generate-report/status/${encodeURIComponent(jobId)}`,
+        { headers: authHeader() },
+        30000,
+      );
+    } catch {
+      // A dropped poll is not a failed report. The work is running on the
+      // server; the next poll will find it. This is the whole point of not
+      // holding one connection open.
+      continue;
+    }
+
+    if (res.status === 404) {
+      throw new Error('The report was lost, probably because the server restarted. Please try again.');
+    }
+    if (!res.ok) continue;
+
+    const body = (await res.json()) as { status: string; report?: ReportData; error?: string };
+    if (body.status === 'done' && body.report) return body.report;
+    if (body.status === 'failed') throw new Error(body.error || 'Report generation failed');
+  }
+}
+
+/** The original one-request version, kept for a backend without the job routes. */
+async function generateReportAndWait(transcript: string): Promise<ReportData> {
   const res = await fetchWithTimeout(
     `${BASE}/generate-report`,
     {
