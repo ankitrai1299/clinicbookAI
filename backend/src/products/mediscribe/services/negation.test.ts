@@ -36,6 +36,27 @@ describe('a denial is caught', () => {
   });
 });
 
+describe('a question is not an answer', () => {
+  it('does not let the doctor asking about a drug affirm it', () => {
+    // From a real consultation. The doctor's question names Penicillin and has
+    // no "nahi" in it, so it counted as an affirmation and outvoted the
+    // patient's denial on the very next line — Penicillin reached the chart as
+    // an allergy.
+    const line = 'डॉक्टर: किसी दवा से एलर्जी? Penicillin वगैरह?\nमरीज़: Penicillin से एलर्जी नहीं है।';
+    expect(isDeniedIn(line, 'Penicillin')).toBe(true);
+  });
+
+  it('reads an English question the same way', () => {
+    expect(isDeniedIn('Any penicillin allergy? No, no allergies.', 'penicillin')).not.toBe(false);
+    expect(isDeniedIn('Do you have asthma? Patient denies asthma.', 'asthma')).toBe(true);
+  });
+
+  it('still hears an answer that follows the question', () => {
+    // The affirmation is in the ANSWER, not the question, and must still win.
+    expect(isDeniedIn('Koi allergy hai? Haan, Penicillin se allergy hai.', 'Penicillin')).toBe(false);
+  });
+});
+
 describe('what it must never remove', () => {
   it('leaves a finding that was affirmed', () => {
     expect(isDeniedIn('Patient ko Penicillin se allergy hai', 'Penicillin')).toBe(false);

@@ -80,12 +80,26 @@ const SECTION_GROUPS: { label: string; schema: string; guidance: string }[] = [
     guidance:
       'clinicalMeasurements: vitals EXACTLY as stated; any other measurement goes in "other"; leave unmeasured vitals "". physicalExamination: examination findings grouped by area (General, Cardiovascular, Respiratory, Abdomen, Neurological, Skin, ENT). Only areas actually examined.',
   },
+  // 'plan' was one group and carried six fields — the largest answer of the four,
+  // and the one that failed. On an eight minute consultation it returned the four
+  // order categories with every findings list empty, while naming the very same
+  // tests under followUp.reports: the tests had survived the summarising, the
+  // model just ran out of room to write them twice. Split so each call has less
+  // to hold at once. They run in parallel, so five groups cost no more time than
+  // four.
   {
-    label: 'plan',
+    label: 'treatment',
     schema:
-      '{"assessment":[""],"prescribedMedications":[{"medicine":"","strength":"","dose":"","route":"","frequency":"","timing":"","duration":"","instructions":""}],"ordersDiagnostics":[{"name":"","findings":[""]}],"advice":[""],"redFlags":[""],"followUp":{"date":"","duration":"","reports":"","instructions":""}}',
+      '{"assessment":[""],"prescribedMedications":[{"medicine":"","strength":"","dose":"","route":"","frequency":"","timing":"","duration":"","instructions":""}]}',
     guidance:
-      'assessment: diagnoses, suspected conditions and clinical concerns from the transcript only. prescribedMedications: ONLY medicines prescribed/changed in THIS visit. ordersDiagnostics: tests ordered, grouped by category name ("Laboratory Orders", "Imaging Orders", "Cardiac Evaluation" or "Other Diagnostic Tests"). advice: care plan and lifestyle instructions. redFlags: warning signs to watch for. followUp: date, duration, required reports and next-visit instructions.',
+      'assessment: diagnoses, suspected conditions and clinical concerns from the transcript only. prescribedMedications: ONLY medicines prescribed/changed in THIS visit.',
+  },
+  {
+    label: 'orders',
+    schema:
+      '{"ordersDiagnostics":[{"name":"","findings":[""]}],"advice":[""],"redFlags":[""],"followUp":{"date":"","duration":"","reports":"","instructions":""}}',
+    guidance:
+      'ordersDiagnostics: EVERY test, scan or investigation the doctor asked for, grouped by category name ("Laboratory Orders", "Imaging Orders", "Cardiac Evaluation" or "Other Diagnostic Tests"). If a test is named anywhere in the text it belongs here, including one repeated in a closing summary; a category with nothing in it may be left out entirely, but a test that was ordered must never be. advice: care plan and lifestyle instructions. redFlags: warning signs to watch for. followUp: date, duration, required reports and next-visit instructions.',
   },
 ];
 
@@ -195,14 +209,33 @@ async function condense(text: string): Promise<string> {
  * read a paraphrase this cannot match, and silently deleting clinical content
  * because a string comparison missed it would be its own kind of harm.
  */
-function dropDeniedFindings(report: Record<string, unknown>, transcript: string): void {
+function dropDeniedFindings(report: Record<string, unknown>, texts: string[]): void {
+  /**
+   * Denied in ANY version of the text, affirmed in none.
+   *
+   * Checked against the doctor's actual words as well as the English the report
+   * was extracted from, because the two do not always say the same thing. The
+   * consultation that exposed this had the denial in Hindi — "Penicillin से
+   * एलर्जी नहीं है" — and the English rendered it as a general "no known
+   * allergies" that never names the drug. The guard, looking only at the
+   * English, could not match the word it was asked about and kept Penicillin.
+   *
+   * An affirmation anywhere still wins, so widening where we look can only
+   * remove a finding that no version of the text supports.
+   */
+  const verdict = (name: string): boolean | null => {
+    const calls = texts.map((t) => isDeniedIn(t, name));
+    if (calls.includes(false)) return false; // affirmed somewhere — keep
+    return calls.includes(true) ? true : null;
+  };
+
   const prune = (key: string, nameOf: (row: any) => string): void => {
     const rows = report[key];
     if (!Array.isArray(rows) || !rows.length) return;
     const kept = rows.filter((row) => {
       const name = nameOf(row);
       if (!name) return true;
-      const denied = isDeniedIn(transcript, name);
+      const denied = verdict(name);
       if (denied === true) {
         console.warn(`[generate-report] dropped "${name}" from ${key} — the transcript denies it`);
         return false;
@@ -338,7 +371,7 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
   //    a report listing Penicillin as an allergy — and kept doing it after the
   //    prompt was given an explicit rule about negation in capitals with
   //    examples. So it is checked in code instead. See ./negation.ts.
-  dropDeniedFindings(merged, source);
+  dropDeniedFindings(merged, [source, transcript]);
 
   // 4) Merge onto a full empty report so every field/section always exists.
   return normalizeReport(merged);

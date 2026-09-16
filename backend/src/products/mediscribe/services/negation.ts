@@ -49,6 +49,26 @@ const CLAUSE_BREAKS = new Set([
   'और', 'लेकिन', 'पर', 'मगर', 'इसलिए', 'क्योंकि', 'फिर'
 ]);
 
+/**
+ * A question is not an answer.
+ *
+ * This guard reads any mention without a negator as an affirmation, which is
+ * right for a statement and wrong for a question — and a consultation is mostly
+ * questions. Measured on a real one:
+ *
+ *   डॉक्टर: किसी दवा से एलर्जी? Penicillin वगैरह?
+ *   मरीज़: Penicillin से एलर्जी नहीं है।
+ *
+ * The doctor's question names Penicillin and contains no "nahi", so it counted
+ * as an affirmation, outvoted the patient's denial one line later, and
+ * Penicillin went onto the chart as an allergy — the exact outcome this file
+ * exists to prevent. Asking about a drug is not a report of reacting to one.
+ */
+const isQuestion = (sentence: string): boolean => /\?\s*$/.test(sentence.trim());
+
+/** Sentences WITH their terminator, so a question is still recognisable as one. */
+const sentencesOf = (text: string): string[] => (text || '').match(/[^.!?।\n]+[.!?।\n]*/g) || [];
+
 export const words = (text: string): string[] =>
   (text || '')
     .toLowerCase()
@@ -87,10 +107,12 @@ export const isDeniedIn = (transcript: string, term: string): boolean | null => 
   // than any conjunction, and without it "Allergy nahi hai. Sorry, allergy hai"
   // reads as one long denial — the guard would then delete a real allergy the
   // doctor had just corrected themselves about.
-  const sentences = (transcript || '').split(/[.!?।\n]+/).filter((x) => x.trim());
+  const sentences = sentencesOf(transcript).filter((x) => x.trim());
   let found = false;
 
   for (const sentence of sentences) {
+    // A question mentions the term without asserting it, either way.
+    if (isQuestion(sentence)) continue;
     const hyp = words(sentence);
     for (let i = 0; i + needle.length <= hyp.length; i++) {
       if (!needle.every((w, k) => sameWord(hyp[i + k], w))) continue;
