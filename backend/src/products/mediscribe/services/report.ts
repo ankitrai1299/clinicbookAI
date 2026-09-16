@@ -40,6 +40,14 @@ const SHARED_RULES =
   'RULES:\n' +
   '- Output MUST be entirely in English. Translate any non-English content (Hindi/Urdu/Telugu/etc.) into English; never emit non-Latin script. Medicine names and proper nouns may keep their standard Latin spelling.\n' +
   '- Extract ONLY facts present in the transcript; never invent medicines, diagnoses, tests, dosages or vitals. Preserve medicine names, doses, frequencies, durations and values exactly as stated.\n' +
+  // The doctor reviews and edits this before it becomes a record, and that only
+  // works if what they are reading is their own consultation. A line they never
+  // said is the one they are least likely to catch, because there is nothing in
+  // their memory to contradict it.
+  '- This report is a RECORD OF WHAT THE DOCTOR SAID, not clinical advice of your own. Do not add a medicine, test, diet, restriction, follow-up or warning because it would be appropriate for the condition. If the doctor did not say it, it does not belong in the report.\n' +
+  // Measured: the doctor said "छाती का X-ray अभी ज़रूरत नहीं है" and the report
+  // listed Chest X-ray as an order. The patient goes and has it done.
+  '- A test the doctor said is NOT needed is not an order. A medicine the doctor told the patient NOT to take is not a prescription — it belongs in advice, worded as the warning it was ("avoid Ibuprofen").\n' +
   '- Capture every relevant fact for the requested fields. Leave anything not mentioned empty ([] or "").\n' +
   // The rule this section exists for. Measured: given "Patient ko Penicillin se
   // allergy NAHI hai", the report came back with Penicillin listed as an
@@ -199,6 +207,46 @@ async function condense(text: string): Promise<string> {
 // whole report if it still cannot produce that group. A genuine API error (bad
 // key, network) is surfaced instead of being masked.
 /**
+ * Remove a test the doctor said was NOT needed.
+ *
+ * Measured on a real consultation. The doctor said:
+ *
+ *   "छाती का X-ray अभी ज़रूरत नहीं है, छाती साफ़ है।"
+ *
+ * and the report listed "Chest X-ray" under Laboratory/Imaging Orders. The
+ * patient goes and has it done. Nothing in the consultation asked for it — the
+ * doctor had just explained why it was unnecessary — so it is not a report of
+ * the visit, it is an instruction the doctor never gave.
+ *
+ * Only for the ORDER list. Prescribed medicines are deliberately left alone:
+ * "Paracetamol 650 mg, दिन में तीन बार से ज़्यादा नहीं" carries a "नहीं" that
+ * limits the dose, not the drug, and a rule that reads it as a denial deletes a
+ * real prescription. A test that the doctor declined and a dose ceiling do not
+ * look the same to a doctor, but they look identical to this. So the code takes
+ * only the case it can be sure of, and the medicines are handled by telling the
+ * model plainly, where being wrong costs an untidy line rather than a missing
+ * drug.
+ */
+function pruneOrders(
+  report: Record<string, unknown>,
+  verdict: (name: string) => boolean | null,
+): void {
+  const categories = report.ordersDiagnostics;
+  if (!Array.isArray(categories)) return;
+  for (const category of categories) {
+    const findings = (category as any)?.findings;
+    if (!Array.isArray(findings)) continue;
+    (category as any).findings = findings.filter((f: unknown) => {
+      const name = String(f ?? '').trim();
+      if (!name) return false;
+      if (verdict(name) !== true) return true;
+      console.warn(`[generate-report] dropped "${name}" from orders — the doctor said it was not needed`);
+      return false;
+    });
+  }
+}
+
+/**
  * Remove a test listed twice under exactly the same name.
  *
  * A doctor who reads the order list back at the end of the visit says every
@@ -288,6 +336,7 @@ export function dropDeniedFindings(report: Record<string, unknown>, texts: strin
   };
 
   dedupeOrders(report);
+  pruneOrders(report, verdict);
   prune('allergies', (r) => String(r?.allergy ?? r?.name ?? '').trim());
   prune('diagnoses', (r) => String(r?.diagnosis ?? r?.name ?? r ?? '').trim());
 }

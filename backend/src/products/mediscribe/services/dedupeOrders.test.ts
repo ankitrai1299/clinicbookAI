@@ -50,6 +50,47 @@ describe('repeated orders', () => {
     ]);
   });
 
+  it('drops a test the doctor said was NOT needed', () => {
+    // Measured on a real consultation. The doctor explained why the chest X-ray
+    // was unnecessary, and the report ordered it anyway — so the patient goes
+    // and has it done. Nothing in the visit asked for it.
+    const said = 'छाती का X-ray अभी ज़रूरत नहीं है, छाती साफ़ है।';
+    const english = 'A chest X-ray is not needed right now; the chest is clear. CBC and HbA1c ordered.';
+    const report: Record<string, unknown> = {
+      ordersDiagnostics: [
+        { name: 'Imaging Orders', findings: ['Chest X-ray'] },
+        { name: 'Laboratory Orders', findings: ['CBC', 'HbA1c'] },
+      ],
+    };
+    dropDeniedFindings(report, [said, english]);
+    expect(orders(report)).toEqual(['CBC', 'HbA1c']);
+  });
+
+  it('keeps a test that was declined now but planned for later', () => {
+    // "अभी घुटने की जाँच नहीं करेंगे, बुखार उतरने के बाद X-ray करा लेंगे" is an
+    // order, just not for today. An affirmation anywhere keeps it — the doctor
+    // deletes what they do not want, and cannot restore what was never shown.
+    const said = 'अभी घुटने की जाँच नहीं करेंगे। बुखार उतरने के बाद X-ray करा लेंगे।';
+    const report: Record<string, unknown> = {
+      ordersDiagnostics: [{ name: 'Imaging Orders', findings: ['X-ray'] }],
+    };
+    dropDeniedFindings(report, [said, '']);
+    expect(orders(report)).toEqual(['X-ray']);
+  });
+
+  it('never drops an order over a dose limit', () => {
+    // "तीन बार से ज़्यादा नहीं" limits how often, not whether. A rule that reads
+    // that "नहीं" as a denial deletes a real instruction.
+    const said = 'CBC कराइए। Paracetamol दिन में तीन बार से ज़्यादा नहीं।';
+    const report: Record<string, unknown> = {
+      ordersDiagnostics: [{ name: 'Laboratory Orders', findings: ['CBC'] }],
+      prescribedMedications: [{ medicine: 'Paracetamol', strength: '650 mg' }],
+    };
+    dropDeniedFindings(report, [said, '']);
+    expect(orders(report)).toEqual(['CBC']);
+    expect(report.prescribedMedications).toEqual([{ medicine: 'Paracetamol', strength: '650 mg' }]);
+  });
+
   it('leaves a report with no orders alone', () => {
     const report: Record<string, unknown> = { allergies: [] };
     expect(() => dropDeniedFindings(report, ['', ''])).not.toThrow();
