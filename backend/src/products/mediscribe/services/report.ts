@@ -209,24 +209,33 @@ async function condense(text: string): Promise<string> {
  * read a paraphrase this cannot match, and silently deleting clinical content
  * because a string comparison missed it would be its own kind of harm.
  */
-function dropDeniedFindings(report: Record<string, unknown>, texts: string[]): void {
+export function dropDeniedFindings(report: Record<string, unknown>, texts: string[]): void {
   /**
-   * Denied in ANY version of the text, affirmed in none.
+   * The doctor's own words decide. The English only breaks a tie.
    *
-   * Checked against the doctor's actual words as well as the English the report
-   * was extracted from, because the two do not always say the same thing. The
-   * consultation that exposed this had the denial in Hindi — "Penicillin से
-   * एलर्जी नहीं है" — and the English rendered it as a general "no known
-   * allergies" that never names the drug. The guard, looking only at the
-   * English, could not match the word it was asked about and kept Penicillin.
+   * `texts` is in priority order, original transcript first, and the first one
+   * with an opinion wins outright — it does NOT take the safest answer across
+   * both. That was the first attempt and it put the false allergy straight back:
    *
-   * An affirmation anywhere still wins, so widening where we look can only
-   * remove a finding that no version of the text supports.
+   *   transcript (Hindi)  "Penicillin से एलर्जी नहीं है"   → denied
+   *   English translation  a reported question naming the drug → affirmed
+   *   verdict: affirmed-anywhere-wins                          → KEPT Penicillin
+   *
+   * Affirmation-wins is the right rule INSIDE one text, where a doctor
+   * correcting themselves mid-sentence means the allergy is real. Across two
+   * versions of the same consultation it is not a correction at all — one of
+   * them is a machine translation of the other, and letting it overrule the
+   * words actually spoken puts a drug on the chart the patient was never said
+   * to react to. The English is consulted only where the original is silent,
+   * which is exactly where it can help: it names findings the original
+   * phrased in a way this cannot match.
    */
   const verdict = (name: string): boolean | null => {
-    const calls = texts.map((t) => isDeniedIn(t, name));
-    if (calls.includes(false)) return false; // affirmed somewhere — keep
-    return calls.includes(true) ? true : null;
+    for (const text of texts) {
+      const call = isDeniedIn(text, name);
+      if (call !== null) return call;
+    }
+    return null;
   };
 
   const prune = (key: string, nameOf: (row: any) => string): void => {
@@ -371,7 +380,7 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
   //    a report listing Penicillin as an allergy — and kept doing it after the
   //    prompt was given an explicit rule about negation in capitals with
   //    examples. So it is checked in code instead. See ./negation.ts.
-  dropDeniedFindings(merged, [source, transcript]);
+  dropDeniedFindings(merged, [transcript, source]);
 
   // 4) Merge onto a full empty report so every field/section always exists.
   return normalizeReport(merged);
