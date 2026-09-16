@@ -136,8 +136,7 @@ function chunkText(text: string, maxLen: number): string[] {
 // Condense a long transcript into concise English clinical facts, chunk by chunk,
 // so the downstream section-group calls reason over a smaller input. Best-effort:
 // a chunk that fails to condense is kept verbatim.
-async function condenseIfLong(text: string): Promise<string> {
-  if (text.length <= CONDENSE_THRESHOLD) return text;
+async function condense(text: string): Promise<string> {
   const chunks = chunkText(text, CONDENSE_CHUNK);
   console.log('[generate-report] long transcript — condensing to facts in', chunks.length, 'chunks');
   const factParts = await mapPool(chunks, CONDENSE_CONCURRENCY, async (chunk) => {
@@ -286,8 +285,16 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
   //    model calls spent to reach text the next step was going to produce
   //    anyway. It is not only slower, it is one more lossy pass over a clinical
   //    record than the report needs.
+  //
+  //    Both decisions are made from the length of the ORIGINAL transcript, and
+  //    that matters: judging the second one by the length of the translation
+  //    would let both passes run on the same consultation, which is the double
+  //    work this is meant to avoid. Hindi expands when it becomes English, so a
+  //    transcript just under the line would cross it once translated.
+  const long = transcript.length > CONDENSE_THRESHOLD;
+
   let text = transcript;
-  if (NON_LATIN_RE.test(transcript) && transcript.length <= CONDENSE_THRESHOLD) {
+  if (NON_LATIN_RE.test(transcript) && !long) {
     try {
       const english = (await translateTranscript(transcript, 'en')).trim();
       if (english) {
@@ -299,11 +306,12 @@ export async function generateMedicalReport(transcript: string): Promise<ReportD
     }
   }
 
-  // 2) Condense a very long transcript into English facts so each section-group
-  //    call reasons over a smaller input, then fix medical terms STT mis-heard
+  // 2) Condense a long transcript into English facts so each section-group call
+  //    reasons over a smaller input — and, for a non-English one, this is the
+  //    pass that produced the English. Then fix medical terms STT mis-heard
   //    (e.g. "azithromicin" → "Azithromycin") using the editable glossary.
   const { correctMedicalTerms } = await import('./medicalTerms.js');
-  const source = correctMedicalTerms(await condenseIfLong(text));
+  const source = correctMedicalTerms(long ? await condense(text) : text);
 
   // 3) Generate the report in small section groups and merge them. Sectioning keeps
   //    every response within the token budget even for a dense consultation.
