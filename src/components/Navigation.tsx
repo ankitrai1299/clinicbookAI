@@ -5,6 +5,7 @@ import { AuthUser } from '../api/auth';
 import { PageType } from '../types';
 import { BRAND } from '../brand';
 import AnvayaLogo from './AnvayaLogo';
+import { SITE_BOOK_ONLY } from '../site';
 
 export type ActiveProduct = 'clinicbook' | 'novascribe' | null;
 
@@ -36,7 +37,9 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
 
           {/* Apps switcher + product brand */}
           <div className="flex items-center gap-2">
-            {user && (
+            {/* No app switcher on the booking-only site — there is nothing to
+                switch to, and an empty chooser reads as a broken page. */}
+            {user && !SITE_BOOK_ONLY && (
               <button
                 onClick={onOpenHub}
                 title="All apps"
@@ -50,7 +53,7 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
             )}
 
             <button
-              onClick={onOpenHub}
+              onClick={SITE_BOOK_ONLY ? () => handleNavClick(user ? 'dashboard' : 'landing') : onOpenHub}
               className="flex flex-col items-start gap-0.5 cursor-pointer focus:outline-hidden"
               id="brand-logo-btn"
             >
@@ -99,7 +102,7 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
               </button>
             )}
 
-            {user && currentPage !== 'hub' && (
+            {user && currentPage !== 'hub' && !SITE_BOOK_ONLY && (
               <button
                 id="nav-item-apps"
                 onClick={onOpenHub}
@@ -185,7 +188,7 @@ export default function Navigation({ currentPage, setCurrentPage, clinicName, us
       {/* Mobile Menu panel */}
       {isOpen && (
         <div className="md:hidden bg-white border-b border-slate-100 py-3 px-4 space-y-1 shadow-lg animate-fadeIn" id="mobile-menu-panel">
-          {user && (
+          {user && !SITE_BOOK_ONLY && (
             <button
               id="mobile-nav-item-apps"
               onClick={() => { onOpenHub(); setIsOpen(false); }}

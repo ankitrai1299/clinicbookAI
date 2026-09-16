@@ -59,6 +59,7 @@ import { getMe, type AuthUser } from '../api/auth';
 import { getBillingStatus, createCheckoutSession as createCheckoutSessionApi, createPortalSession as createPortalSessionApi } from '../api/billing';
 import { getNotifications as getNotificationsApi, markAllNotificationsRead as markAllNotificationsReadApi, ApiNotification } from '../api/notifications';
 import { API_BASE } from '../api/client';
+import { SITE_BOOK_ONLY } from '../site';
 
 const mapStatus = (status: string): Appointment['status'] => {
   const map: Record<string, Appointment['status']> = {
@@ -644,7 +645,11 @@ export default function ClinicDashboard({
               // registration, and it belongs where the clinic already works —
               // beside the patients whose ABHA and shared visits it governs.
               // Nobody found it in the other app, including us.
-              { id: 'abdm', label: 'ABDM', icon: Landmark },
+              // Absent on the booking-only site: these screens talk to the ABDM
+              // SANDBOX, so a clinic pressing the button would be told an ABHA was
+              // created when none was. Until certification comes through, the
+              // honest thing is for the feature not to be there.
+              ...(SITE_BOOK_ONLY ? [] : [{ id: 'abdm', label: 'ABDM', icon: Landmark }]),
               { id: 'billing', label: 'Subscription Billing', icon: CreditCard }
             ].filter((tab) => canSeeTab(tab.id)).map((tab) => {
               const TabIcon = tab.icon;
@@ -1298,7 +1303,7 @@ export default function ClinicDashboard({
           )}
 
           {/* SECURITY: the user's own second factor and sessions */}
-          {activeTab === 'abdm' && <AbdmRegistration />}
+          {activeTab === 'abdm' && !SITE_BOOK_ONLY && <AbdmRegistration />}
 
           {activeTab === 'security' && (
             <div className="animate-fadeIn text-left" id="security-tab-view">
@@ -1512,7 +1517,7 @@ export default function ClinicDashboard({
                       <th className="py-3 px-2">Age / Gender</th>
                       <th className="py-3 px-2">Reason for Visit</th>
                       <th className="py-3 px-2">Preferred Chat Accent</th>
-                      <th className="py-3 px-2">ABHA</th>
+                      {!SITE_BOOK_ONLY && <th className="py-3 px-2">ABHA</th>}
                       <th className="py-3 px-2">Activity State</th>
                       <th className="py-3 px-2 text-right">Action History</th>
                     </tr>
@@ -1529,6 +1534,7 @@ export default function ClinicDashboard({
                           {p.healthConcern || '—'}
                         </td>
                         <td className="py-3 px-2 font-semibold text-sky-700">🗣 {p.preferredLanguage}</td>
+                        {!SITE_BOOK_ONLY && (
                         <td className="py-3 px-2">
                           <button
                             type="button"
@@ -1581,6 +1587,7 @@ export default function ClinicDashboard({
                             )}
                           </button>
                         </td>
+                        )}
                         <td className="py-3 px-2">
                           <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full font-bold font-mono text-[9px] uppercase tracking-wider">
                             ● Active
@@ -1863,7 +1870,7 @@ export default function ClinicDashboard({
 
       <AiAssistant />
 
-      {abhaPatient && (
+      {abhaPatient && !SITE_BOOK_ONLY && (
         <PatientAbhaModal
           patient={abhaPatient}
           onClose={() => setAbhaPatient(null)}

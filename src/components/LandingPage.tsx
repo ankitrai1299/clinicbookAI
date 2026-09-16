@@ -10,6 +10,7 @@ import PlatformStory from './platform/PlatformStory';
 import TrustStrip from './platform/TrustStrip';
 import PatientAsksSection from './platform/PatientAsksSection';
 import ClinicBookShowcase from './platform/ClinicBookShowcase';
+import { SITE_BOOK_ONLY } from '../site';
 
 interface LandingPageProps {
   setCurrentPage: (page: PageType) => void;
@@ -344,8 +345,11 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
       {/* 4a2. SHOWCASE — the real WhatsApp flows, panel by panel */}
       <ClinicBookShowcase />
 
-      {/* 4b. ONE PLATFORM, TWO APPS — what AnvayaBook.ai + AnvayaScribe do together */}
-      <PlatformStory />
+      {/* 4b. ONE PLATFORM, TWO APPS — what AnvayaBook.ai + AnvayaScribe do together.
+          Not on the booking-only site: the whole section is about a second
+          product that is not for sale there, and the best case for showing it
+          is a visitor asking for something they cannot have. */}
+      {!SITE_BOOK_ONLY && <PlatformStory />}
 
       {/* 4c. PATIENTS ASK, REPORTS COME BACK — the WhatsApp document delivery */}
       <PatientAsksSection />

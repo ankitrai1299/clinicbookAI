@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 
 import { PageType, DashboardTab, Appointment, WaitlistPatient, ReminderLog, ClinicConfig, Doctor } from './types';
 import { isMobileApp } from './mediscribe/utils/platform';
@@ -9,7 +9,14 @@ import LandingPage from './components/LandingPage';
 import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
 import MobileDashboard from './components/MobileDashboard';
-import MediscribeApp from './mediscribe/MediscribeApp';
+// Loaded on demand, and on the booking-only site not loaded at all.
+//
+// A static import here pulled the WHOLE scribe — its workspace, its mobile
+// shell, its admin console — into the booking build, even with every screen
+// that renders it removed. The chunks sat on the CDN unreachable, which is not
+// the same as absent. SITE_BOOK_ONLY folds to a constant at build time, so the
+// dead branch takes the import() with it and the scribe is simply not shipped.
+const MediscribeApp = SITE_BOOK_ONLY ? null : lazy(() => import('./mediscribe/MediscribeApp'));
 import ProductHub from './components/ProductHub';
 import MediScribeLanding from './components/MediScribeLanding';
 import type { ActiveProduct } from './components/Navigation';
@@ -24,6 +31,7 @@ import LegalPage from './components/LegalPage';
 import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
+import { SITE_BOOK_ONLY } from './site';
 
 // Each product gets its own shareable URL, so a link can be sent to a clinic or a
 // doctor without landing them on the product chooser:
@@ -69,6 +77,13 @@ const ENTRY = readEntry();
 // simply not part of the app. Web and mobile browsers are untouched.
 const APP_ONLY = isMobileApp();
 
+
+/** Pages that exist on the booking-only site. Everything else bounces home. */
+const BOOK_SITE_PAGES: PageType[] = [
+  'landing', 'dashboard', 'demo', 'developers',
+  'login', 'signup', 'verify-email', 'welcome',
+];
+
 // Which product THIS phone build is: the ClinicBook shell loads ?app=clinicbook
 // (its dashboard is home), the NovaScribe shell loads ?app=novascribe. On the web
 // this is irrelevant. Used to keep the single-product app on its OWN product
@@ -95,7 +110,11 @@ function AppShell() {
   const { user, loading, logout, setAuth } = useAuth();
   // The platform launcher (product chooser) is the first screen — unless deep-linked
   // straight to a product (e.g. the mobile app loads `?app=novascribe`).
-  const [currentPage, setCurrentPage] = useState<PageType>(ENTRY?.page ?? (APP_ONLY ? 'novascribe' : 'home'));
+  const [currentPage, setCurrentPage] = useState<PageType>(
+    SITE_BOOK_ONLY
+      ? (ENTRY?.page === 'dashboard' ? 'dashboard' : 'landing')
+      : (ENTRY?.page ?? (APP_ONLY ? 'novascribe' : 'home')),
+  );
   // Which product's app to land on after a successful login.
   const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>(
     ENTRY?.app ?? (APP_ONLY ? 'novascribe' : 'dashboard'),
@@ -137,6 +156,15 @@ function AppShell() {
   useEffect(() => {
     if (!APP_ONLY) return;
     if (!APP_ALLOWED_PAGES.includes(currentPage)) setCurrentPage(user ? MOBILE_HOME : 'login');
+  }, [currentPage, user]);
+
+  // Same idea on the booking-only site. A /novascribe link, a stale bookmark or
+  // a stored page lands on the booking landing rather than on a product this
+  // site does not sell — and never on a blank screen, which is what an
+  // un-rendered page would have been.
+  useEffect(() => {
+    if (!SITE_BOOK_ONLY) return;
+    if (!BOOK_SITE_PAGES.includes(currentPage)) setCurrentPage(user ? 'dashboard' : 'landing');
   }, [currentPage, user]);
 
   // Gate the authenticated apps; after login land on the product the user chose.
@@ -257,8 +285,12 @@ function AppShell() {
 
   // MediScribe is a full-screen app (own sidebar). Render it as a takeover — the
   // "All Apps" item in its sidebar returns to the platform hub.
-  if (user && currentPage === 'novascribe') {
-    return <MediscribeApp onExitToHub={APP_ONLY ? undefined : openHub} doctorName={user.name} />;
+  if (user && currentPage === 'novascribe' && !SITE_BOOK_ONLY && MediscribeApp) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#fafcff]" />}>
+        <MediscribeApp onExitToHub={APP_ONLY ? undefined : openHub} doctorName={user.name} />
+      </Suspense>
+    );
   }
 
   return (
@@ -289,7 +321,7 @@ function AppShell() {
       <div className="flex-1">
         {/* The front door. A signed-in user gets the picker instead — they
             have already read the marketing, and what they want is a way in. */}
-        {!APP_ONLY && currentPage === 'home' && !user && (
+        {!APP_ONLY && !SITE_BOOK_ONLY && currentPage === 'home' && !user && (
           <AnvayaHome
             onOpenBook={openClinicBook}
             onOpenScribe={openMediScribe}
@@ -298,7 +330,7 @@ function AppShell() {
           />
         )}
 
-        {!APP_ONLY && (currentPage === 'hub' || (currentPage === 'home' && !!user)) && (
+        {!APP_ONLY && !SITE_BOOK_ONLY && (currentPage === 'hub' || (currentPage === 'home' && !!user)) && (
           <ProductHub
             userName={user?.name}
             onOpenClinicBook={openClinicBook}
@@ -306,7 +338,7 @@ function AppShell() {
           />
         )}
 
-        {!APP_ONLY && currentPage === 'novascribe-landing' && (
+        {!APP_ONLY && !SITE_BOOK_ONLY && currentPage === 'novascribe-landing' && (
           <MediScribeLanding
             isLoggedIn={!!user}
             onOpen={() => handleSetPage('novascribe')}

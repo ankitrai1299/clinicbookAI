@@ -185,3 +185,52 @@ Configured in `backend/railway.json`:
 - **Schema changes:** edit `prisma/schema.prisma`, commit, deploy — the pre-deploy
   `prisma db push` syncs the database. If it reports potential data loss, the deploy
   fails by design; review and apply the change manually before retrying.
+
+---
+
+## The अन्वयBook-only website
+
+Anvaya sells two products and the platform site says so. अन्वयBook is ready to
+sell and अन्वयScribe is not, so the booking product gets a site of its own.
+
+**Same repository, same backend, a different build.** A fork would have to be
+kept in step by hand forever, and the half nobody is looking at is the half that
+rots — this way every fix to booking reaches both sites by being written once.
+
+| | Platform site | अन्वयBook site |
+|---|---|---|
+| Build command | `npm run build` | `VITE_SITE=book npm run build` |
+| Front door | Anvaya home, both products | अन्वयBook landing |
+| अन्वयScribe | yes | **not shipped** |
+| ABDM / ABHA | yes | **not shipped** |
+| Bundle | ~2.2 MB, 32 chunks | ~840 KB, 1 chunk |
+
+### Setting it up on Vercel
+
+A second Vercel project pointed at the same repository and branch:
+
+1. New Project → import the same repo.
+2. Environment Variables:
+   - `VITE_SITE` = `book`
+   - `VITE_API_URL` = the same backend as the platform site.
+3. Deploy, then add the domain for अन्वयBook to this project.
+
+Nothing on the existing project changes. Both deploy from `main`; a push builds
+both, each with its own `VITE_SITE`.
+
+### Why Scribe and ABDM are absent rather than hidden
+
+`SITE_BOOK_ONLY` is written as a bare comparison against `import.meta.env`, which
+Vite replaces with a literal at build time. Rollup then folds it to a constant
+and **deletes** the branches behind it, which is why the scribe chunks are not
+emitted at all rather than sitting unreachable on the CDN. Writing it as
+`(import.meta.env.VITE_SITE || '').trim().toLowerCase() === 'book'` would look
+more careful and be strictly worse: the value stops being a constant, nothing is
+eliminated, and a product that is supposed to be absent is only hidden.
+
+ABDM matters more than tidiness here. Those screens talk to the ABDM **sandbox**,
+so a clinic pressing the button would be told an ABHA had been created when none
+had. Certification has not come through. Until it does, the honest thing is for
+the feature not to be there — and the patient registration form on this site
+opens straight into the ordinary details form rather than offering an Aadhaar
+route that leads to a health ID that does not exist.

@@ -9,6 +9,7 @@ import {
 } from '../api/publicRegistration';
 import { BRAND } from '../brand';
 import PublicAbhaStep from './PublicAbhaStep';
+import { SITE_BOOK_ONLY } from '../site';
 
 interface PatientRegistrationProps {
   clinicId: string;
@@ -47,7 +48,12 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
    * asking "and would you like the ABHA?" after the OTP would be asking about
    * something that already exists and cannot be undone.
    */
-  const [mode, setMode] = useState<'normal' | 'abha' | null>(null);
+  // On the booking-only site there is nothing to choose between. The Aadhaar
+  // route exists to create an ABHA, and the ABHA screens talk to the ABDM
+  // SANDBOX — a patient would be told they had a health ID that does not exist.
+  // So that site opens straight into the ordinary form rather than showing a
+  // question with one real answer.
+  const [mode, setMode] = useState<'normal' | 'abha' | null>(SITE_BOOK_ONLY ? 'normal' : null);
   /**
    * These three came from the Aadhaar record, so they are not the patient's to
    * retype here.
@@ -264,7 +270,7 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
               our team will reach out shortly to confirm your appointment.
             </p>
           </div>
-        ) : mode === null ? (
+        ) : mode === null && !SITE_BOOK_ONLY ? (
           /* Two ways in, asked once, before anything is typed. */
           <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 space-y-3 shadow-sm">
             <p className="text-sm text-slate-500 leading-relaxed mb-1">
@@ -307,7 +313,7 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
               </span>
             </button>
           </div>
-        ) : mode === 'abha' && !abhaTxnId ? (
+        ) : mode === 'abha' && !abhaTxnId && !SITE_BOOK_ONLY ? (
           <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-sm">
             <PublicAbhaStep
               clinicId={clinicId}

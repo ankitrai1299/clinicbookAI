@@ -43,3 +43,7 @@ novascribe-ai*/
 **/firebase-adminsdk-*.json
 
 .vercel
+
+# Verification builds of the two site flavours (VITE_SITE=book and the platform).
+dist-book/
+dist-platform/
