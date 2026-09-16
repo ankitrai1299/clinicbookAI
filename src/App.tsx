@@ -100,7 +100,14 @@ const APP_ALLOWED_PAGES: PageType[] = [MOBILE_HOME, 'login', 'signup', 'verify-e
 const PAGE_PATHS: Partial<Record<PageType, string>> = {
   home: '/',
   hub: '/',
-  landing: '/clinicbook',
+  // On the booking-only site the landing IS the front page, so it keeps '/'.
+  //
+  // Sharing the site was otherwise broken in a way that only shows up from the
+  // outside: a visitor arrived at '/', read the marketing, and the address bar
+  // quietly became '/clinicbook' — which for a signed-out visitor is the app,
+  // and the app sends them to a login form. So the URL people actually copy out
+  // of the bar was the one link that did NOT show them the product.
+  landing: SITE_BOOK_ONLY ? '/' : '/clinicbook',
   dashboard: '/clinicbook',
   'novascribe-landing': '/novascribe',
   novascribe: '/novascribe',
