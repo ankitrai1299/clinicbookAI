@@ -72,6 +72,7 @@ import {
   type PreviousMedicine,
 } from '../utils/compareVisits';
 import { createVAD, VADController } from '../utils/vad';
+import { needsSecondPass } from '../utils/secondPass';
 // The export libraries (jsPDF / docx) are heavy, so they are loaded on demand
 // via dynamic import() inside the download handlers — keeps the initial bundle small.
 
@@ -229,6 +230,12 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     () => LANGUAGES.find((l) => l.label === loadLanguage())?.code ?? 'auto',
   );
   const [timer, setTimer] = useState(0);
+  // Did OUR gateway produce the live transcript, or the browser's recogniser?
+  //
+  // It decides whether the recording has to be transcribed a second time. The
+  // browser's recogniser is poor at Indian languages, so its output is never
+  // trusted as the record; ours is the same engine the second pass would use.
+  const gatewayLiveRef = useRef(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -681,10 +688,26 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     // Urdu speech); converting to the selected output language happens afterwards
     // via translation. Falls back to the live transcript if nothing usable was
     // recorded or the backend errors, so direct-voice recording keeps working.
+    // Whether the same audio has to go through Sarvam a second time. The rule,
+    // and why it is set where it is, lives in utils/secondPass.ts — it is the
+    // largest single line in the product's bill and the easiest to get wrong in
+    // the expensive direction.
+    const liveWords = countWords(liveText);
+    const liveLooksComplete = !needsSecondPass({
+      gatewayLive: gatewayLiveRef.current,
+      liveWords,
+      seconds: timer,
+    });
+
     try {
       setIsTranscribing(true);
       const blob = await stopAudioCaptureGetBlob();
-      if (blob && blob.size >= 2000) {
+      if (liveLooksComplete) {
+        debug('[transcribe] live transcript is complete — skipping the second pass',
+          { liveWords, seconds: timer });
+        void clearRecording(consultation.id);
+        setRecovered(null);
+      } else if (blob && blob.size >= 2000) {
         debug('[transcribe] sending recorded blob to backend — size (bytes):', blob.size, '| type:', blob.type);
         const result = await transcribeAudio(blob);
         const whisperText = (result.rawText || '').trim();
@@ -699,7 +722,6 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
         // So the longer one wins on word count. Not on quality judgement, which
         // neither side can make: the recorded pass usually reads better per
         // word, but "better wording of half the visit" is not better.
-        const liveWords = countWords(liveText);
         const recordedWords = countWords(whisperText);
         const complete = liveWords === 0 || recordedWords >= liveWords * 0.85;
 
@@ -854,6 +876,7 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
     setLiveLines([]);
     setLivePartial('');
     setSttNote(null);
+    gatewayLiveRef.current = false;
 
     void startAudioCapture().finally(() => {
       if (!liveActiveRef.current || !shouldListenRef.current) return;
@@ -894,8 +917,10 @@ export default function ConsultationWorkspace({ consultation, patient, patientHi
       )
         .then((session) => {
           sttRef.current = session;
+          gatewayLiveRef.current = true;
         })
         .catch((err) => {
+          gatewayLiveRef.current = false;
           console.warn('[liveStt] falling back to the browser recogniser:', err);
           setSttNote('Using the browser transcriber — the live service could not be reached.');
           if (shouldListenRef.current) beginRecognition();
