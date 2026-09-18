@@ -46,6 +46,16 @@ describe('subscription events', () => {
     expect(planWritten()).toBe('GROWTH');
   });
 
+  it('starts the free trial the moment the mandate is approved', async () => {
+    // The trial is a subscription whose first charge is dated fourteen days out,
+    // so Razorpay sends 'authenticated' now and 'activated' only when money
+    // moves. Waiting for 'activated' would give the clinic a fortnight of
+    // nothing and switch it on the day they paid — the opposite of a trial, and
+    // they would have left before the fifteenth day to find out.
+    await send('subscription.authenticated', { id: 'sub_1', notes: { clinicId: 'clinic-1' } });
+    expect(planWritten()).toBe('GROWTH');
+  });
+
   it('keeps it on when a renewal is charged', async () => {
     await send('subscription.charged', { id: 'sub_1' });
     expect(planWritten()).toBe('GROWTH');

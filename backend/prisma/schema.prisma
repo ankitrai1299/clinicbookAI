@@ -86,12 +86,21 @@ model Clinic {
   // onboard new Indian businesses, so the columns above have never held a value
   // for a paying clinic and cannot.
   //
-  // The subscription id is UNIQUE because the webhook looks the clinic up by it,
-  // with no JWT and no tenant context. Unique means that lookup can only ever
-  // resolve to one clinic — a duplicate would let one clinic's payment event
-  // change another clinic's plan.
-  razorpayCustomerId     String?    @unique
-  razorpaySubscriptionId String?    @unique
+  // Plain columns here, with the UNIQUE indexes applied as raw SQL by
+  // scripts/applyRazorpayIndexes.ts.
+  //
+  // Not a style choice. `prisma db push` is this project's preDeployCommand, and
+  // on this database it REFUSES to add a unique index — it reads it as possible
+  // data loss and stops. The whole deploy stops with it, which is exactly what
+  // happened the first time these two lines carried @unique: the backend went on
+  // serving the previous build, and nothing anywhere said why.
+  //
+  // The indexes still matter and still get created. The webhook resolves a
+  // clinic by subscription id with no JWT and no tenant context, and unique is
+  // what guarantees that lookup can only ever match one clinic — a duplicate
+  // would let one clinic's payment event change another clinic's plan.
+  razorpayCustomerId     String?
+  razorpaySubscriptionId String?
   // Short human-friendly code a patient sends (or a QR pre-fills) to reach THIS
   // clinic on the shared platform WhatsApp number. Lets every clinic onboard with
   // zero Meta setup — they just share their code/QR. Unique across clinics.

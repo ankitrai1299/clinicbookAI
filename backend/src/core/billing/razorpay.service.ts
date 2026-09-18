@@ -54,6 +54,10 @@ export const stopSubscription = async (clinicId: string): Promise<void> => {
 /**
  * What each event means for a clinic's access.
  *
+ * `authenticated` is the start of the free trial: the mandate is approved and
+ * nothing has been charged. That is precisely when the clinic should have the
+ * product.
+ *
  * `pending` is the one worth arguing about. Razorpay sends it when a charge
  * fails and the retries begin — a UPI mandate that bounced because the account
  * was short for a day, most often. Access is KEPT through it: a clinic whose
@@ -66,7 +70,15 @@ const EVENT_TO_PLAN: Record<string, ClinicPlan | null> = {
   'subscription.activated': ClinicPlan.GROWTH,
   'subscription.charged': ClinicPlan.GROWTH,
   'subscription.resumed': ClinicPlan.GROWTH,
-  'subscription.authenticated': null, // mandate approved, nothing charged yet
+  // The trial starts HERE, not at 'activated'.
+  //
+  // With a dated first charge, Razorpay sends 'authenticated' the moment the
+  // clinic approves the mandate and 'activated' only fourteen days later when
+  // money first moves. Granting access on 'activated' would have given the
+  // clinic a fortnight of nothing and then switched it on the day they paid —
+  // the exact opposite of a free trial, and they would have left before the
+  // fifteenth day to find out.
+  'subscription.authenticated': ClinicPlan.GROWTH,
   'subscription.pending': null,       // a charge failed; retries running — keep access
   'subscription.updated': null,
   'subscription.halted': ClinicPlan.STARTER,

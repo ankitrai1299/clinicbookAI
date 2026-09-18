@@ -25,6 +25,20 @@ import { AppError } from '../../utils/AppError.js';
 
 const API = 'https://api.razorpay.com/v1';
 
+/**
+ * Free days before the first rupee is charged.
+ *
+ * Razorpay has no "trial" field — a trial IS a subscription whose first charge
+ * is dated in the future. The mandate is authorised on day one (the clinic
+ * approves the UPI AutoPay or card), and `start_at` decides when money first
+ * moves. So the clinic is set up, fully working, and not paying.
+ *
+ * Fourteen, because a clinic needs to see a real week of its own patients
+ * booking before it can judge this, and a week that happens to be quiet would
+ * decide it for them.
+ */
+export const TRIAL_DAYS = 14;
+
 export const isRazorpayConfigured = (): boolean =>
   Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET && env.RAZORPAY_PLAN_ID);
 
@@ -96,7 +110,11 @@ export const createSubscription = async (clinic: {
       // debit nobody remembers agreeing to.
       total_count: 12,
       customer_notify: 1,
-      notes: { clinicId: clinic.id, clinicName: clinic.name },
+      // The trial. Nothing is charged until this date; the mandate is approved
+      // now so that the fifteenth day needs no action from a clinic that has
+      // decided to stay.
+      start_at: Math.floor(Date.now() / 1000) + TRIAL_DAYS * 24 * 60 * 60,
+      notes: { clinicId: clinic.id, clinicName: clinic.name, trialDays: String(TRIAL_DAYS) },
     }),
   });
 };

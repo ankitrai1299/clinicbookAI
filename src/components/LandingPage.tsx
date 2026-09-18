@@ -91,7 +91,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                   onClick={() => setCurrentPage('signup')}
                   className="px-8 py-4 bg-sky-600 text-white rounded-xl font-bold hover:bg-sky-700 shadow-lg shadow-sky-100 hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 group cursor-pointer"
                 >
-                  Start Free Trial
+                  Start 14-day free trial
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
@@ -437,7 +437,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                   onClick={() => setCurrentPage('signup')}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition-all"
                 >
-                  Start free trial
+                  Start 14-day free trial
                 </button>
               </div>
             </div>
@@ -478,11 +478,15 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
               One clear price. Absolute return on investment.
             </h2>
             <p className="text-slate-600 text-md leading-relaxed">
-              No contracts. Protect slots and cut administrative labor today.
+              Free for 14 days, then ₹999 a month. No contracts, no setup fee.
             </p>
           </div>
 
-          <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 pt-12" id="pricing-grid">
+          {/* One plan, one column. The international plan is gone: it was
+              priced in dollars and could only ever have been taken through
+              Stripe, which does not onboard Indian businesses — so it was a
+              button that could not have completed a sale. */}
+          <div className="max-w-md mx-auto pt-12" id="pricing-grid">
             {/* India Plan */}
             <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-md relative overflow-hidden flex flex-col justify-between">
               <div>
@@ -490,13 +494,23 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                   Best Value for India
                 </div>
                 <div className="space-y-2">
-                  <h4 className="font-display text-lg font-bold text-slate-900">India Plan</h4>
-                  <p className="text-slate-500 text-xs">For clinics situated in India, with domestic WhatsApp volume.</p>
+                  <h4 className="font-display text-lg font-bold text-slate-900">One plan. Everything included.</h4>
+                  <p className="text-slate-500 text-xs">For clinics in India. No contracts, no setup fee, cancel any time.</p>
                 </div>
 
-                <div className="py-6 border-b border-slate-100">
-                  <span className="font-display text-4xl font-extrabold text-slate-900">₹999</span>
-                  <span className="text-slate-500 text-xs"> / month</span>
+                <div className="py-6 border-b border-slate-100 space-y-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-display text-4xl font-extrabold text-slate-900">14 days free</span>
+                  </div>
+                  <p className="text-slate-600 text-sm font-semibold">
+                    then ₹999 <span className="font-normal text-slate-500">/ month</span>
+                  </p>
+                  {/* Said plainly, because the question a clinic owner is
+                      actually asking is "when does it start costing me". A
+                      trial that hides its end date reads as a trap. */}
+                  <p className="text-slate-400 text-[11px] pt-1">
+                    Nothing is charged for 14 days. Cancel any time before then and you pay nothing.
+                  </p>
                 </div>
 
                 <ul className="py-6 space-y-3 text-left">
@@ -521,52 +535,10 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                 onClick={() => setCurrentPage('signup')}
                 className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all"
               >
-                Get Started with India Plan
+                Start 14-day free trial
               </button>
             </div>
 
-            {/* International Plan */}
-            <div className="bg-white rounded-3xl p-8 border border-sky-400 shadow-lg relative overflow-hidden flex flex-col justify-between ring-4 ring-sky-50">
-              <div className="absolute top-0 right-0 bg-teal-600 text-white text-[10px] font-mono px-3 py-1 uppercase font-bold rounded-bl-xl animate-pulse">
-                Global Active
-              </div>
-              <div>
-                <div className="space-y-2">
-                  <h4 className="font-display text-lg font-bold text-slate-900">International Plan</h4>
-                  <p className="text-slate-500 text-xs">For clinics in US, Europe, Middle East and globally.</p>
-                </div>
-
-                <div className="py-6 border-b border-slate-100">
-                  <span className="font-display text-4xl font-extrabold text-slate-900">$49</span>
-                  <span className="text-slate-500 text-xs"> / month</span>
-                </div>
-
-                <ul className="py-6 space-y-3 text-left">
-                  {[
-                    'WhatsApp appointment booking bot',
-                    '24hr & 2hr reminder automation',
-                    'Autonomous Waitlist Recovery',
-                    'Central desktop clinic dashboard',
-                    'Multilingual support (Spanish, Hindi, etc.)',
-                    'Optional Google Calendar & webhook API',
-                    'Custom bot tone matching'
-                  ].map((feat, idx) => (
-                    <li key={idx} className="flex items-center gap-2.5 text-xs text-slate-600">
-                      <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                      <span>{feat}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <button 
-                id="pricing-button-intl"
-                onClick={() => setCurrentPage('signup')}
-                className="w-full py-3.5 px-4 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-md shadow-sky-100 transition-all"
-              >
-                Get Started with International Plan
-              </button>
-            </div>
           </div>
         </div>
       </section>

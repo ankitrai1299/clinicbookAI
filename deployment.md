@@ -246,7 +246,11 @@ sells outside India; every rupee from an Indian clinic goes through Razorpay.
 
 ### What to set up in the Razorpay dashboard
 
-1. **A Plan** — Subscriptions → Plans → Create Plan. The amount, the interval
+1. **A Plan** — Subscriptions → Plans → Create Plan. **₹999, monthly.**
+   The 14-day free trial is NOT set here: Razorpay has no trial field, and a
+   trial is simply a subscription whose first charge is dated in the future.
+   `TRIAL_DAYS` in `core/billing/razorpay.ts` sets `start_at`, and the clinic
+   gets access the moment the mandate is approved — see below. The amount, the interval
    and the currency live here, not in the code: pricing changes without a
    deploy, and a price compiled into the backend is a price nobody can correct
    at 9pm on a Sunday. Copy the plan id (`plan_…`).
@@ -290,6 +294,17 @@ undo by accident:
 - The comparison is **timing-safe**. A plain `===` returns sooner the earlier it
   finds a difference, and a patient attacker reads a secret out of that
   difference one character at a time.
+
+### The free trial starts at `authenticated`, not `activated`
+
+Fourteen days free, then ₹999 a month. With a dated first charge, Razorpay
+sends `subscription.authenticated` the moment the clinic approves the mandate
+and `subscription.activated` only when money first moves, a fortnight later.
+
+So access is granted on `authenticated`. Waiting for `activated` would give a
+clinic fourteen days of nothing and switch the product on the day they paid —
+the exact opposite of a trial, and they would have left long before the
+fifteenth day to find out.
 
 ### A failed auto-debit does not cut a clinic off
 

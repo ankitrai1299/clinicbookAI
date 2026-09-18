@@ -1765,10 +1765,14 @@ export default function ClinicDashboard({
           {/* TAB 7: BILLING */}
           {activeTab === 'billing' && (() => {
             const isStarter = clinicConfig.plan === 'STARTER';
+            // One plan, priced in rupees. The dollar tiers were removed with the
+            // international plan: they could only ever have been charged through
+            // Stripe, which does not onboard Indian businesses, so they named
+            // prices that could not have been collected.
             const planLabel: Record<string, string> = {
-              STARTER: 'Starter (Free)',
-              GROWTH: clinicConfig.country === 'India' ? 'Growth — ₹999 / mo' : 'Growth — $29 / mo',
-              SCALE: clinicConfig.country === 'India' ? 'Scale — ₹2,499 / mo' : 'Scale — $79 / mo',
+              STARTER: 'Free trial — 14 days',
+              GROWTH: '₹999 / month',
+              SCALE: '₹999 / month',
               ENTERPRISE: 'Enterprise',
             };
             const currentLabel = planLabel[clinicConfig.plan] ?? clinicConfig.plan;
@@ -1784,12 +1788,15 @@ export default function ClinicDashboard({
                   {/* Active Plan info */}
                   <div className={`${isStarter ? 'bg-slate-50 border-slate-200' : 'bg-sky-50 border-sky-100'} border rounded-2xl p-6 text-left space-y-4`}>
                     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono ${isStarter ? 'bg-slate-200 text-slate-600' : 'bg-sky-100 text-sky-800'}`}>
-                      {isStarter ? 'Free Tier' : 'Active Plan'}
+                      {isStarter ? 'Free trial' : 'Active Plan'}
                     </span>
                     <div>
                       <h3 className="font-display text-2xl font-black text-slate-950">{currentLabel}</h3>
                       {isStarter && (
-                        <p className="text-[11px] text-slate-500 mt-1">Upgrade to unlock unlimited reminders and WhatsApp booking.</p>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          14 days free, then ₹999 a month. Nothing is charged during the trial, and
+                          cancelling before it ends costs you nothing.
+                        </p>
                       )}
                     </div>
                     {!isStarter && (
@@ -1808,7 +1815,7 @@ export default function ClinicDashboard({
                         {billingLoading ? (
                           <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /><span>Redirecting...</span></>
                         ) : (
-                          <><span>Upgrade to Growth Plan</span><ExternalLink className="w-3.5 h-3.5" /></>
+                          <><span>Start 14-day free trial</span><ExternalLink className="w-3.5 h-3.5" /></>
                         )}
                       </button>
                     )}
