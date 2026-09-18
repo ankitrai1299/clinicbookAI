@@ -841,17 +841,27 @@ const BOOK_PLAN = {
   ],
 };
 
-const SCRIBE_PLANS = [
-  { name: 'Free', price: '₹0', period: '', blurb: '5 consultations a month', popular: false },
-  { name: 'Starter', price: '₹1,499', period: '/month', blurb: '100 consultations, patient timeline', popular: false },
-  {
-    name: 'Professional',
-    price: '₹2,999',
-    period: '/month',
-    blurb: 'Unlimited consultations, WhatsApp prescription delivery',
-    popular: true,
-  },
-];
+// अन्वयScribe is not for sale yet, so it has no price here.
+//
+// It carried three — ₹0, ₹1,499, ₹2,999 — and they had to go. Scribe has not
+// been through a single real consultation with a real doctor yet, and a price on
+// a pricing page is a promise. Printing three of them for something nobody can
+// buy is worse than saying nothing, because a clinic that plans around a number
+// and then meets a different one has been misled by us, not disappointed by us.
+//
+// What it DOES say is what Scribe will do, because that is the part we are sure
+// of and the part a clinic is deciding on. The price follows once a doctor has
+// used it on real patients.
+const SCRIBE_SOON = {
+  blurb: 'In testing with doctors now. Pricing when it is ready.',
+  features: [
+    'Records the consultation as it happens, in the language it happens in',
+    'Writes the clinical note and the prescription for the doctor to check',
+    'Hindi, Bhojpuri, Bengali, English — and the mix a real clinic speaks',
+    'The doctor edits and signs. Nothing is filed that they did not approve',
+    'The patient booked on WhatsApp is already in that doctor’s queue',
+  ],
+};
 
 function Pricing({ onStartTrial }: Pick<AnvayaHomeProps, 'onStartTrial'>) {
   return (
@@ -861,8 +871,9 @@ function Pricing({ onStartTrial }: Pick<AnvayaHomeProps, 'onStartTrial'>) {
           <Eyebrow>Pricing</Eyebrow>
           <H2>Per clinic, per month. Cancel whenever.</H2>
           <p className="mt-4 text-anvaya-body leading-relaxed">
-            Take one product or both. Every plan includes a 14-day free trial, and no
-            card is asked for to start it.
+            अन्वयBook is ₹999 a month with the first 14 days free. अन्वयScribe is in
+            testing with doctors and is not on sale yet — when it opens, a clinic
+            already on Book gets it without moving anything.
           </p>
         </div>
 
@@ -900,47 +911,38 @@ function Pricing({ onStartTrial }: Pick<AnvayaHomeProps, 'onStartTrial'>) {
           <div className="rounded-2xl border border-anvaya-rule bg-white overflow-hidden">
             <div className="h-1 bg-gradient-to-r from-anvaya-teal to-anvaya-green" />
             <div className="p-7">
-              <AnvayaLogo height={28} cut="scribe" decorative />
-              <p className="mt-4 text-sm text-anvaya-muted">Priced by how much a doctor consults.</p>
-
-              <div className="mt-5 grid sm:grid-cols-3 gap-3">
-                {SCRIBE_PLANS.map((pl) => (
-                  <div
-                    key={pl.name}
-                    className={
-                      'rounded-xl p-4 border ' +
-                      (pl.popular
-                        ? 'border-anvaya-green bg-anvaya-green/5'
-                        : 'border-anvaya-rule bg-white')
-                    }
-                  >
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-anvaya-muted">
-                        {pl.name}
-                      </p>
-                      {pl.popular && (
-                        <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-anvaya-green bg-anvaya-green/15 px-1.5 py-0.5 rounded-full">
-                          Popular
-                        </span>
-                      )}
-                    </div>
-                    <p>
-                      <span
-                        className="text-[1.6rem] leading-none text-anvaya-ink"
-                        style={{ fontFamily: 'var(--font-brand)', fontWeight: 600 }}
-                      >
-                        {pl.price}
-                      </span>
-                      <span className="text-xs text-anvaya-muted">{pl.period}</span>
-                    </p>
-                    <p className="mt-2 text-[0.82rem] text-anvaya-body leading-snug">{pl.blurb}</p>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between gap-3">
+                <AnvayaLogo height={28} cut="scribe" decorative />
+                <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-anvaya-green bg-anvaya-green/12 px-2.5 py-1 rounded-full whitespace-nowrap">
+                  Coming soon
+                </span>
               </div>
-
-              <button type="button" onClick={onStartTrial} className={`${BTN_FILL} mt-7 w-full justify-center`}>
-                Start free trial <ArrowRight className="w-4 h-4" />
-              </button>
+              <p className="mt-4 text-sm text-anvaya-muted">{SCRIBE_SOON.blurb}</p>
+              <p className="mt-5">
+                <span
+                  className="text-[2.6rem] leading-none text-anvaya-ink"
+                  style={{ fontFamily: 'var(--font-brand)', fontWeight: 600 }}
+                >
+                  Soon
+                </span>
+              </p>
+              <ul className="mt-6 space-y-2.5">
+                {SCRIBE_SOON.features.map((f) => (
+                  <li key={f} className="flex gap-2.5 text-[0.92rem] text-anvaya-body leading-relaxed">
+                    <span className="mt-2 w-1.5 h-1.5 rounded-full shrink-0 bg-gradient-to-r from-anvaya-teal to-anvaya-green" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              {/* A clinic that takes Book today gets Scribe the day it opens,
+                  with no migration and nothing to re-enter — their doctors,
+                  their patients and their bookings are already here. Said
+                  plainly, because it is the reason to start now rather than
+                  wait. */}
+              <p className="mt-7 text-[0.85rem] text-anvaya-muted leading-relaxed border-t border-anvaya-rule pt-5">
+                Already on अन्वयBook? Scribe switches on for you the day it opens — your
+                doctors, patients and bookings are already here.
+              </p>
             </div>
           </div>
         </div>

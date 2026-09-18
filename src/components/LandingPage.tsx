@@ -539,6 +539,47 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
               </button>
             </div>
 
+            {/* अन्वयScribe — named, described, and NOT for sale.
+                No price, because it has not been through a real consultation
+                with a real doctor yet, and a price on a pricing page is a
+                promise. What it does is certain; what it costs is not. */}
+            <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm relative overflow-hidden flex flex-col justify-between">
+              <div className="absolute top-0 right-0 bg-emerald-600 text-white text-[10px] font-mono px-3 py-1 uppercase font-bold rounded-bl-xl">
+                Coming soon
+              </div>
+              <div>
+                <div className="space-y-2">
+                  <h4 className="font-display text-lg font-bold text-slate-900">The AI scribe</h4>
+                  <p className="text-slate-500 text-xs">In testing with doctors. Pricing when it is ready.</p>
+                </div>
+
+                <div className="py-6 border-b border-slate-100">
+                  <span className="font-display text-4xl font-extrabold text-slate-400">Soon</span>
+                </div>
+
+                <ul className="py-6 space-y-3 text-left">
+                  {[
+                    'Records the consultation as it happens',
+                    'Writes the clinical note and the prescription',
+                    'Hindi, Bhojpuri, Bengali, English — and the mix',
+                    'The doctor edits and signs before anything is filed',
+                    'Your booked patient is already in that doctor’s queue',
+                  ].map((feat, idx) => (
+                    <li key={idx} className="flex items-center gap-2.5 text-xs text-slate-600">
+                      <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
+                      <span>{feat}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* The reason to start now rather than wait for both. */}
+              <p className="text-[11px] text-slate-500 leading-relaxed border-t border-slate-100 pt-5">
+                Start today and the scribe switches on for you the day it opens — your
+                doctors, patients and bookings are already here.
+              </p>
+            </div>
+
           </div>
         </div>
       </section>
