@@ -13,7 +13,11 @@ import { RegisterClinicInput, UpdateClinicInput } from './clinic.schemas.js';
 export const getMyClinic = async (clinicId: string) => {
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { id: true, name: true, email: true, phone: true, plan: true, hfrId: true },
+    // `products` is here so the client can show a clinic only what it owns. The
+    // backend refuses a product they have not bought either way — this is what
+    // stops them being offered it and then refused, which reads as a fault in
+    // the product rather than the absence of a purchase.
+    select: { id: true, name: true, email: true, phone: true, plan: true, hfrId: true, products: true },
   });
   if (!clinic) throw new AppError('Clinic not found', 404);
   return clinic;

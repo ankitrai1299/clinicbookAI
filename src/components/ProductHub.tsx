@@ -3,11 +3,18 @@ import { CalendarCheck, Stethoscope, ArrowRight } from 'lucide-react';
 
 import { BRAND } from '../brand';
 import AnvayaLogo from './AnvayaLogo';
+import type { ProductKey } from '../api/clinic';
 
 interface ProductHubProps {
   userName?: string | null;
   onOpenClinicBook: () => void;
   onOpenMediScribe: () => void;
+  /**
+   * What this clinic bought. Undefined means "not known yet", which shows
+   * everything — the same answer the server gives when its own lookup fails, so
+   * the two cannot disagree and quietly hide a product a clinic pays for.
+   */
+  products?: ProductKey[];
 }
 
 // The picker. Two products, one login — and nothing else on the page, because
@@ -16,7 +23,14 @@ interface ProductHubProps {
 // The "PatientLoop — coming soon" card that used to be here is gone. That
 // product was retired, and a permanent coming-soon card is a promise the
 // product is not keeping; it reads as neglect long before anyone asks about it.
-export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScribe }: ProductHubProps) {
+export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScribe, products }: ProductHubProps) {
+  // Not known yet → show both. A picker that hides a product on a slow response
+  // is worse than one that offers a product the server then refuses: the first
+  // looks like the product is gone, the second like a page that needs a reload.
+  const hasBook = !products || products.includes('clinicbook');
+  const hasScribe = !products || products.includes('mediscribe');
+  const both = hasBook && hasScribe;
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-[#FBF8F3] to-[#F3F1FA] px-4 sm:px-6 lg:px-8 py-14">
       <div className="max-w-4xl mx-auto">
@@ -44,7 +58,8 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-5">
+        <div className={`grid gap-5 ${both ? 'sm:grid-cols-2' : 'max-w-md mx-auto'}`}>
+          {hasBook && (
           <ProductCard
             onClick={onOpenClinicBook}
             icon={<CalendarCheck className="w-7 h-7" />}
@@ -53,6 +68,8 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
             description="Patients book, reschedule and cancel over WhatsApp — day or night, in their own language. The desk confirms."
             accent="from-[#2E3E8F] to-[#1F2A6B]"
           />
+          )}
+          {hasScribe && (
           <ProductCard
             onClick={onOpenMediScribe}
             icon={<Stethoscope className="w-7 h-7" />}
@@ -61,7 +78,17 @@ export default function ProductHub({ userName, onOpenClinicBook, onOpenMediScrib
             description="Record the consultation and the note writes itself. The doctor edits and approves — nothing reaches a patient before that."
             accent="from-[#E0A03C] to-[#B87A1E]"
           />
+          )}
         </div>
+
+        {/* One product, so name the other one rather than leaving a clinic to
+            wonder whether they are missing something. It is on the pricing page
+            either way; a clinic that finds out here finds out from us. */}
+        {!hasScribe && (
+          <p className="text-center text-slate-400 text-xs mt-8">
+            अन्वयScribe — the AI scribe for the consultation room — is coming soon.
+          </p>
+        )}
       </div>
     </div>
   );

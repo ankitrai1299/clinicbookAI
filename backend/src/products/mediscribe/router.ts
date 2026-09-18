@@ -19,6 +19,7 @@ import { randomUUID } from 'crypto';
 import { bridgeAuth, type AuthedRequest } from './middleware/auth.js';
 import { uploadAudio } from './middleware/upload.js';
 import { requirePermission } from './middleware/authz.js';
+import { requireProduct } from '../../core/entitlements/requireProduct.js';
 import { recordFromRequest } from '../../core/audit/audit.service.js';
 import { eventBus } from '../../core/events/eventBus.js';
 import { requireRecordingConsent } from '../../core/consent/recordingConsent.js';
@@ -169,6 +170,20 @@ mediscribeRouter.use('/admin', adminRouter);
 mediscribeRouter.get('/health', (_req, res) =>
   res.json({ success: true, status: 'running', database: 'postgres', timestamp: new Date().toISOString() })
 );
+
+// ── The subscription lock ────────────────────────────────────────────────
+//
+// Everything below this line belongs to clinics that have अन्वयScribe. The
+// product picker already shows a clinic only what it owns, but a picker is a
+// courtesy — a typed URL, a bookmark from a trial, a tab a doctor left open
+// after their clinic dropped the scribe, none of them pass a screen on the way
+// to the API. This is the answer those requests get.
+//
+// Placed AFTER /auth and /health on purpose. Signing in has to work so the
+// client can be told "this is not part of your subscription" rather than "your
+// password is wrong", and a health check that depends on what someone bought is
+// not a health check.
+mediscribeRouter.use(requireProduct('mediscribe'));
 
 mediscribeRouter.get('/config-test', (_req, res) =>
   res.json({ sarvam: !!(process.env.SARVAM_API_KEY || '').trim(), database: 'postgres' })

@@ -32,6 +32,7 @@ import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
 import { SITE_BOOK_ONLY } from './site';
+import { getMyClinic, type ProductKey } from './api/clinic';
 
 // Each product gets its own shareable URL, so a link can be sent to a clinic or a
 // doctor without landing them on the product chooser:
@@ -115,6 +116,24 @@ const PAGE_PATHS: Partial<Record<PageType, string>> = {
 
 function AppShell() {
   const { user, loading, logout, setAuth } = useAuth();
+
+  // What this clinic bought, so the picker offers only that and a stale link to
+  // the other product does not open a screen the API will refuse.
+  //
+  // null while it is being fetched, and null is read as "everything" — a picker
+  // that hides a product for a second on a slow network looks like the product
+  // is gone, which is worse than offering one the server then declines.
+  const [clinicProducts, setClinicProducts] = useState<ProductKey[] | null>(null);
+  useEffect(() => {
+    if (!user) { setClinicProducts(null); return; }
+    let live = true;
+    getMyClinic()
+      .then((c) => { if (live) setClinicProducts(c.products ?? null); })
+      .catch(() => { /* leave it null: unknown means show everything */ });
+    return () => { live = false; };
+  }, [user]);
+
+  const ownsScribe = !clinicProducts || clinicProducts.includes('mediscribe');
   // The platform launcher (product chooser) is the first screen — unless deep-linked
   // straight to a product (e.g. the mobile app loads `?app=novascribe`).
   const [currentPage, setCurrentPage] = useState<PageType>(
@@ -173,6 +192,21 @@ function AppShell() {
     if (!SITE_BOOK_ONLY) return;
     if (!BOOK_SITE_PAGES.includes(currentPage)) setCurrentPage(user ? 'dashboard' : 'landing');
   }, [currentPage, user]);
+
+  // A clinic without the scribe never sits on a scribe page. Without this they
+  // land on a blank screen rather than a closed door — the section simply does
+  // not render, and an empty page reads as the product being broken instead of
+  // not being theirs.
+  //
+  // Waits for the answer: `clinicProducts` is null while it loads and null means
+  // "show everything", so nobody is bounced off a page they own because a
+  // request had not come back yet.
+  useEffect(() => {
+    if (!clinicProducts || ownsScribe) return;
+    if (currentPage === 'novascribe' || currentPage === 'novascribe-landing') {
+      setCurrentPage(user ? 'dashboard' : 'home');
+    }
+  }, [currentPage, clinicProducts, ownsScribe, user]);
 
   // Gate the authenticated apps; after login land on the product the user chose.
   useEffect(() => {
@@ -292,7 +326,7 @@ function AppShell() {
 
   // MediScribe is a full-screen app (own sidebar). Render it as a takeover — the
   // "All Apps" item in its sidebar returns to the platform hub.
-  if (user && currentPage === 'novascribe' && !SITE_BOOK_ONLY && MediscribeApp) {
+  if (user && currentPage === 'novascribe' && !SITE_BOOK_ONLY && ownsScribe && MediscribeApp) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#fafcff]" />}>
         <MediscribeApp onExitToHub={APP_ONLY ? undefined : openHub} doctorName={user.name} />
@@ -342,10 +376,11 @@ function AppShell() {
             userName={user?.name}
             onOpenClinicBook={openClinicBook}
             onOpenMediScribe={openMediScribe}
+            products={clinicProducts ?? undefined}
           />
         )}
 
-        {!APP_ONLY && !SITE_BOOK_ONLY && currentPage === 'novascribe-landing' && (
+        {!APP_ONLY && !SITE_BOOK_ONLY && ownsScribe && currentPage === 'novascribe-landing' && (
           <MediScribeLanding
             isLoggedIn={!!user}
             onOpen={() => handleSetPage('novascribe')}
