@@ -52,10 +52,10 @@ enum ReminderType {
 }
 
 model Clinic {
-  id               String     @id @default(cuid())
-  name             String
-  email            String     @unique
-  phone            String     @unique
+  id                     String     @id @default(cuid())
+  name                   String
+  email                  String     @unique
+  phone                  String     @unique
   // Health Facility Registry id — this clinic's identity in ABDM. Null until
   // the clinic is registered there; the FHIR document names the organisation by
   // this when present and omits the identifier entirely when it is not, rather
@@ -71,8 +71,8 @@ model Clinic {
   //
   // The index was created on production by hand before this line existed, so
   // `db push` finds it already in place rather than building it during a deploy.
-  hfrId            String?    @unique
-  plan             ClinicPlan @default(STARTER)
+  hfrId                  String?    @unique
+  plan                   ClinicPlan @default(STARTER)
   // WHICH products this clinic bought — a different axis from `plan`, which is
   // the tier (how much they pay). A clinic can be on GROWTH with only the scribe.
   // Values: "clinicbook", "mediscribe".
@@ -80,13 +80,23 @@ model Clinic {
   // The default grants BOTH, so every existing clinic keeps exactly what it has
   // today and the column can be added without changing anyone's behaviour.
   // Selling one product alone means writing a shorter list, never a migration.
-  products         String[]   @default(["clinicbook", "mediscribe"])
-  stripeCustomerId String?    @unique
+  products               String[]   @default(["clinicbook", "mediscribe"])
+  stripeCustomerId       String?    @unique
+  // Razorpay — what an Indian clinic actually pays through. Stripe does not
+  // onboard new Indian businesses, so the columns above have never held a value
+  // for a paying clinic and cannot.
+  //
+  // The subscription id is UNIQUE because the webhook looks the clinic up by it,
+  // with no JWT and no tenant context. Unique means that lookup can only ever
+  // resolve to one clinic — a duplicate would let one clinic's payment event
+  // change another clinic's plan.
+  razorpayCustomerId     String?    @unique
+  razorpaySubscriptionId String?    @unique
   // Short human-friendly code a patient sends (or a QR pre-fills) to reach THIS
   // clinic on the shared platform WhatsApp number. Lets every clinic onboard with
   // zero Meta setup — they just share their code/QR. Unique across clinics.
-  joinCode         String?    @unique
-  createdAt        DateTime   @default(now())
+  joinCode               String?    @unique
+  createdAt              DateTime   @default(now())
 
   // A SANDBOX clinic is a throwaway twin of a real one, created the first time
   // that clinic mints a TEST api key. Partners' developers book against it. It is

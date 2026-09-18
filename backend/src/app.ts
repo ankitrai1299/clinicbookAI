@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 
 import { env } from './config/env.js';
 import apiRouter from './routes/index.js';
-import { stripeWebhookHandler } from './core/billing/billing.controller.js';
+import { razorpayWebhookHandler, stripeWebhookHandler } from './core/billing/billing.controller.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestId } from './middleware/requestId.js';
 import { logger } from './middleware/logger.js';
@@ -62,6 +62,14 @@ export const createApp = () => {
   );
   // Stripe webhook needs raw body — must be mounted before express.json()
   app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+  // Razorpay's, mounted the same way and for the same reason: the signature is
+  // over the RAW bytes, so this must be registered before express.json() turns
+  // them into an object.
+  app.post(
+    '/api/billing/razorpay/webhook',
+    express.raw({ type: 'application/json' }),
+    razorpayWebhookHandler,
+  );
   // Stash the raw request bytes so the WhatsApp webhook can verify Meta's
   // X-Hub-Signature-256 HMAC against the exact payload.
   app.use(

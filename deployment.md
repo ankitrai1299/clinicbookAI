@@ -234,3 +234,73 @@ had. Certification has not come through. Until it does, the honest thing is for
 the feature not to be there — and the patient registration form on this site
 opens straight into the ordinary details form rather than offering an Aadhaar
 route that leads to a health ID that does not exist.
+
+---
+
+## Razorpay — how an Indian clinic pays
+
+Stripe does not onboard new Indian businesses. The Stripe code in
+`core/billing/billing.service.ts` is complete, tested, and has never taken a
+rupee, because the account cannot be opened. It stays for a company that later
+sells outside India; every rupee from an Indian clinic goes through Razorpay.
+
+### What to set up in the Razorpay dashboard
+
+1. **A Plan** — Subscriptions → Plans → Create Plan. The amount, the interval
+   and the currency live here, not in the code: pricing changes without a
+   deploy, and a price compiled into the backend is a price nobody can correct
+   at 9pm on a Sunday. Copy the plan id (`plan_…`).
+
+2. **API keys** — Settings → API Keys → Generate. Use **Test mode** first; the
+   whole flow can be exercised end to end without real money.
+
+3. **A webhook** — Settings → Webhooks → Add New Webhook.
+
+   | | |
+   |---|---|
+   | URL | `https://clinicbookai-production.up.railway.app/api/billing/razorpay/webhook` |
+   | Secret | any strong string — it goes in `RAZORPAY_WEBHOOK_SECRET` |
+   | Events | `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`, `subscription.resumed`, `subscription.authenticated`, `subscription.updated` |
+
+### Environment variables (Railway)
+
+```
+RAZORPAY_KEY_ID=rzp_test_…      (or rzp_live_… when going live)
+RAZORPAY_KEY_SECRET=…
+RAZORPAY_WEBHOOK_SECRET=…       must match the webhook above, exactly
+RAZORPAY_PLAN_ID=plan_…
+```
+
+All four are required together. With any one missing the clinic is shown no
+payment button at all, rather than a button that fails when it is pressed.
+
+### The webhook grants access, not the success page
+
+A clinic reaching a success page proves only that a browser followed a redirect.
+The signed webhook is the only thing that knows money actually moved, so that is
+what changes the plan.
+
+Two details in `razorpay.ts` carry the security of this, and both are easy to
+undo by accident:
+
+- The signature is computed over the **raw request bytes**. The route mounts
+  `express.raw()` ahead of the JSON parser for that reason. Parsing and
+  re-serialising changes key order and whitespace, and the hash of that is not
+  the hash Razorpay computed — every genuine webhook would be refused.
+- The comparison is **timing-safe**. A plain `===` returns sooner the earlier it
+  finds a difference, and a patient attacker reads a secret out of that
+  difference one character at a time.
+
+### A failed auto-debit does not cut a clinic off
+
+`subscription.pending` is Razorpay beginning its retries — usually a mandate
+that bounced because the account was short for a day. Access is kept through it.
+A clinic whose WhatsApp booking dies on the morning of a failed debit loses
+patients over a bank's timing, and the recovery costs more than the month being
+argued about. `subscription.halted` is Razorpay saying the retries are over, and
+that is where access stops.
+
+### Going live
+
+Swap the test keys for live ones and point the webhook at the same URL from the
+live dashboard. Nothing in the code changes.

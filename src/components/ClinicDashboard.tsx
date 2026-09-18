@@ -56,7 +56,7 @@ import { getDoctors as getDoctorsApi, ApiDoctor } from '../api/doctors';
 import { getWaitlist as getWaitlistApi, offerWaitlistSlot as offerWaitlistSlotApi, convertWaitlistEntry as convertWaitlistEntryApi, ApiWaitlistEntry } from '../api/waitlist';
 import { getMyClinic as getMyClinicApi, updateMyClinic as updateMyClinicApi } from '../api/clinic';
 import { getMe, type AuthUser } from '../api/auth';
-import { getBillingStatus, createCheckoutSession as createCheckoutSessionApi, createPortalSession as createPortalSessionApi } from '../api/billing';
+import { getBillingStatus, createCheckoutSession as createCheckoutSessionApi, createPortalSession as createPortalSessionApi, startSubscription as startSubscriptionApi } from '../api/billing';
 import { getNotifications as getNotificationsApi, markAllNotificationsRead as markAllNotificationsReadApi, ApiNotification } from '../api/notifications';
 import { API_BASE } from '../api/client';
 import { SITE_BOOK_ONLY } from '../site';
@@ -262,6 +262,7 @@ export default function ClinicDashboard({
   const [convertLoading, setConvertLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [razorpayReady, setRazorpayReady] = useState(false);
   const [stripeConfigured, setStripeConfigured] = useState(false);
 
   // Real dashboard notifications (bell + activity feed), polled for near-real-time updates.
@@ -309,7 +310,7 @@ export default function ClinicDashboard({
           getDoctorsApi(),
           getWaitlistApi(),
           getMyClinicApi(),
-          getBillingStatus().catch(() => ({ configured: false })),
+          getBillingStatus().catch(() => ({ configured: false, razorpay: false, stripe: false })),
           getNotificationsApi().catch(() => [] as ApiNotification[]),
         ]);
 
@@ -328,6 +329,7 @@ export default function ClinicDashboard({
         setClinicId(clinicData.id);
         setClinicConfig(prev => ({ ...prev, name: clinicData.name, email: clinicData.email, phone: clinicData.phone, plan: clinicData.plan }));
         setStripeConfigured(billingStatus.configured);
+        setRazorpayReady(Boolean(billingStatus.razorpay));
       } catch {
         triggerToast('Could not load data from server. Showing cached data.');
       } finally {
@@ -462,9 +464,17 @@ export default function ClinicDashboard({
     }
   };
 
+  // Razorpay when it is configured, which for an Indian clinic is always —
+  // Stripe does not onboard new Indian businesses, so its branch has never
+  // taken a rupee and is kept only for a company that later sells abroad.
   const handleUpgradePlan = async () => {
     setBillingLoading(true);
     try {
+      if (razorpayReady) {
+        const { url } = await startSubscriptionApi();
+        window.location.href = url;
+        return;
+      }
       const origin = window.location.origin;
       const { url } = await createCheckoutSessionApi(
         `${origin}/?billing=success`,

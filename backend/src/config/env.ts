@@ -85,6 +85,21 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_ID: z.string().optional(),
+
+  // Razorpay — how an Indian clinic actually pays.
+  //
+  // Stripe does not onboard new Indian businesses, so the Stripe code above has
+  // never taken a rupee and cannot. It stays because the seam costs nothing and
+  // a company that later sells outside India would want it back.
+  //
+  // RAZORPAY_PLAN_ID is a plan created in the Razorpay dashboard (amount,
+  // interval and currency live there, not here). Pricing is a business decision
+  // that changes without a deploy, and a number compiled into the backend is a
+  // number nobody can correct at 9pm.
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  RAZORPAY_PLAN_ID: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().optional(),
