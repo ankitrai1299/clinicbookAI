@@ -21,6 +21,7 @@ import { env } from '../../config/env.js';
 import { classifyIntent } from './whatsapp.intent.js';
 import { understandPatientMessage } from '../ai/ai.service.js';
 import { clinicNow } from '../../services/scheduling.service.js';
+import { isAiConfigured } from '../ai/provider.js';
 
 export type ReceptionistIntent =
   | 'book'
@@ -45,7 +46,14 @@ export interface Understanding {
 }
 
 // AI understanding is active only when the flag is on AND a key is present.
-export const aiReceptionistEnabled = (): boolean => env.WA_AI_RECEPTIONIST && Boolean(env.OPENAI_API_KEY);
+// Whichever provider is actually in charge, not OpenAI by name.
+//
+// These gates were written when OpenAI was the only engine. The move to Sarvam
+// changed the client underneath them and left them asking for a key that is no
+// longer used and whose credit has run out — so the AI receptionist and voice
+// notes switched themselves off, with no error and no decision, while the work
+// behind them had been running on Sarvam the whole time.
+export const aiReceptionistEnabled = (): boolean => env.WA_AI_RECEPTIONIST && isAiConfigured();
 
 export const confidenceMin = (): number => env.WA_AI_CONFIDENCE_MIN;
 
@@ -162,7 +170,7 @@ export const understand = async (params: {
 
   // Voice notes force AI understanding (key permitting); typed text follows the
   // global WA_AI_RECEPTIONIST flag.
-  const useAi = aiReceptionistEnabled() || (Boolean(params.forceAi) && Boolean(env.OPENAI_API_KEY));
+  const useAi = aiReceptionistEnabled() || (Boolean(params.forceAi) && isAiConfigured());
   if (!useAi) return deterministic();
 
   const ai = await understandPatientMessage(params.message, params.specialities, params.doctorNames);

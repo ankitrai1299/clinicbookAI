@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 
-import { aiClient, aiExtras, aiModel } from './provider.js';
+import { aiClient, aiExtras, aiModel, isAiConfigured } from './provider.js';
 import type { AppointmentStatus } from '@prisma/client';
 
 import { env } from '../../config/env.js';
@@ -542,7 +542,7 @@ export const patientAssistantReply = async (
     `Thanks ${patientName}! A team member at ${clinicName} will assist you shortly.\n\n` +
     `Reply:\n1 - Book Appointment\n2 - Talk to AI Assistant\n3 - View Available Slots`;
 
-  if (!env.OPENAI_API_KEY) {
+  if (!isAiConfigured()) {
     return fallback;
   }
 
@@ -625,7 +625,7 @@ export const classifyPatientMessage = async (
 
   // If the keyword pass already nailed both intent and (when relevant) speciality,
   // skip the API call entirely.
-  if (!env.OPENAI_API_KEY) return fallback;
+  if (!isAiConfigured()) return fallback;
   if (fallback.intent !== 'unknown' && (fallback.intent !== 'book' || fallback.speciality)) {
     return fallback;
   }
@@ -724,7 +724,7 @@ export const understandPatientMessage = async (
   specialities: string[],
   doctorNames: string[]
 ): Promise<PatientUnderstanding | null> => {
-  if (!env.OPENAI_API_KEY) return null;
+  if (!isAiConfigured()) return null;
 
   try {
     const client = getClient();
@@ -1202,7 +1202,7 @@ export const patientAgentReply = async (params: PatientAgentParams): Promise<Pat
     `Hi ${displayName}! I'm the assistant for ${params.clinicName}. ` +
     `I can help you book, reschedule, cancel, or check an appointment — just tell me what you need. 🙂`;
 
-  if (!env.OPENAI_API_KEY) {
+  if (!isAiConfigured()) {
     return { reply: fallback, openaiResponseIds, toolsUsed };
   }
 

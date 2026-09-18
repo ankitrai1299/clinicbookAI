@@ -16,6 +16,7 @@ import OpenAI, { toFile } from 'openai';
 import { env } from '../../config/env.js';
 import { buildWhatsAppClient, getWhatsAppApiClient } from '../../config/whatsapp.js';
 import { getChannelCreds, resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
+import { isAiConfigured } from '../ai/provider.js';
 
 // National key = last 10 digits, so "917903884686" and "7903884686" match.
 const nationalKey = (s: string): string => {
@@ -61,7 +62,10 @@ export const transcribeWhatsAppVoice = async (
   mediaId: string,
   phoneNumberId?: string | null
 ): Promise<string | null> => {
-  if (!env.OPENAI_API_KEY) return null;
+  // The transcription below has been Sarvam's for a while. This line was still
+  // demanding an OpenAI key, so every voice note a patient sent was dropped
+  // before it reached the engine that would have understood it.
+  if (!isAiConfigured()) return null;
 
   try {
     // Resolve THIS clinic's WhatsApp token from the number the note arrived on, so

@@ -10,6 +10,7 @@ import { prisma } from '../../config/prisma.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { describeBrainRollout } from '../mcp/index.js';
+import { aiProvider, isAiConfigured } from '../ai/provider.js';
 
 export const WEBHOOK_PATH = '/api/whatsapp/webhook';
 
@@ -106,12 +107,17 @@ export const buildDiagnostics = async (webhookUrlSeenFromRequest: string | null)
       aiUnderstanding: env.WA_AI_RECEPTIONIST ? 'ON' : 'OFF',
       interactiveMessages: env.WA_INTERACTIVE ? 'ON' : 'OFF',
       confidenceMin: env.WA_AI_CONFIDENCE_MIN,
-      openAiKey: env.OPENAI_API_KEY ? 'set' : 'MISSING',
+      // Names the provider actually in charge. It used to report only whether an
+      // OpenAI key was set, which after the move to Sarvam was both irrelevant
+      // and actively misleading — it said MISSING while the AI was working, and
+      // it would have sent whoever read it to fix the wrong thing.
+      aiProvider: aiProvider(),
+      aiKey: isAiConfigured() ? 'set' : 'MISSING',
       // The effective mode a patient will experience right now.
       effectiveMode: env.WA_AI_RECEPTIONIST
-        ? env.OPENAI_API_KEY
-          ? `AI receptionist${env.WA_INTERACTIVE ? ' + interactive buttons' : ' (plain text)'}`
-          : `deterministic${env.WA_INTERACTIVE ? ' + interactive buttons' : ''} (WA_AI_RECEPTIONIST on but OPENAI_API_KEY missing)`
+        ? isAiConfigured()
+          ? `AI receptionist via ${aiProvider()}${env.WA_INTERACTIVE ? ' + interactive buttons' : ' (plain text)'}`
+          : `deterministic${env.WA_INTERACTIVE ? ' + interactive buttons' : ''} (WA_AI_RECEPTIONIST on but ${aiProvider()} is not configured)`
         : `legacy deterministic menu${env.WA_INTERACTIVE ? ' + interactive buttons' : ' (plain numbered text)'}`
     }
   };
@@ -141,7 +147,7 @@ export const logWhatsAppStartupInfo = async (): Promise<void> => {
   console.info(`[WhatsApp] Signature verification: ${isSignatureVerificationEnabled() ? 'ENABLED' : 'DISABLED'}`);
   console.info(`[WhatsApp] WhatsApp API configured: ${isWhatsAppConfigured() ? 'YES' : 'NO'}`);
   console.info(
-    `[WhatsApp] Receptionist: AI=${env.WA_AI_RECEPTIONIST ? 'ON' : 'OFF'} | Interactive=${env.WA_INTERACTIVE ? 'ON' : 'OFF'} | OpenAI key=${env.OPENAI_API_KEY ? 'set' : 'MISSING'}`
+    `[WhatsApp] Receptionist: AI=${env.WA_AI_RECEPTIONIST ? 'ON' : 'OFF'} | Interactive=${env.WA_INTERACTIVE ? 'ON' : 'OFF'} | ${aiProvider()} key=${isAiConfigured() ? 'set' : 'MISSING'}`
   );
   // Healthcare MCP brain rollout — presence of this line proves the MCP build is
   // live; the value shows exactly which numbers route through the brain.
