@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Loader2, MessageCircle, RefreshCw, AlertCircle, ShieldCheck, ClipboardCheck, ChevronDown } from 'lucide-react';
+import { CheckCircle2, Loader2, MessageCircle, RefreshCw, AlertCircle, ShieldCheck, ClipboardCheck, ChevronDown, ExternalLink } from 'lucide-react';
 
 import {
   completeEmbeddedSignup,
@@ -408,7 +408,49 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
               )
             }
           />
+
+          {/* Billing, said out loud.
+              A WABA with no currency configured passes every other check —
+              connected, activated, templates approved, all green — and then
+              Meta refuses every message with 131042. The first clinic
+              connected this way read "Connected Successfully" while its
+              patient's confirmation silently never arrived.
+              Only shown when we actually know it is missing: `null` means the
+              probe could not run, and a false alarm about billing sends a
+              clinic to Meta looking for a problem it does not have. */}
+          {status?.billing?.ready === false && (
+            <Row
+              label="Billing"
+              value={<span className="text-rose-600 font-semibold">Not set up — messages will not send</span>}
+            />
+          )}
         </dl>
+
+        {status?.billing?.ready === false && (
+          <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-xl">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4.5 h-4.5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-bold text-sm text-rose-900">Add a payment method on Meta first</p>
+                <p className="text-xs text-rose-800 mt-1 leading-relaxed">
+                  Your WhatsApp account has no currency set, so Meta refuses every message
+                  even though everything above is connected. Set the country to India and add
+                  a card — messages start working straight after, with nothing to change here.
+                </p>
+                {status.billing.manageUrl && (
+                  <a
+                    href={status.billing.manageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs"
+                  >
+                    Open Meta billing <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {!ch.registered && (
           <div className="mt-3 flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">

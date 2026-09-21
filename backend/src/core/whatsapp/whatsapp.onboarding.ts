@@ -306,6 +306,25 @@ export interface ChannelStatus {
    * are reaching it.
    */
   usingPlatformNumber: boolean;
+  /**
+   * Whether Meta will actually let this number send.
+   *
+   * A WABA with no currency configured looks perfectly healthy from every
+   * other angle — connected, number activated, templates approved, all green —
+   * and then Meta refuses every message with 131042 ("Business eligibility
+   * payment issue"). Measured on the first clinic connected this way: the
+   * dashboard said "WhatsApp Connected Successfully", and the patient's
+   * registration confirmation never arrived.
+   *
+   * There is nothing in the product to fix; the clinic has to add a payment
+   * method on Meta. So the only useful thing we can do is say so, and say
+   * where — hence the link.
+   *
+   * null means we could not ask (no WABA id, or Meta did not answer). Unknown
+   * is not reported as broken: a failed probe must not raise a false alarm
+   * about a clinic whose billing is fine.
+   */
+  billing: { ready: boolean | null; manageUrl: string | null };
 }
 
 // Channel status for the dashboard, with a best-effort live token probe so the
@@ -323,15 +342,36 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
     const onPlatformNumber = Boolean(
       env.WHATSAPP_CLINIC_ID && env.WHATSAPP_CLINIC_ID === clinicId && env.PHONE_NUMBER_ID && env.WHATSAPP_TOKEN
     );
-    return { channel: null, healthy: null, templates: null, usingPlatformNumber: onPlatformNumber };
+    return {
+      channel: null,
+      healthy: null,
+      templates: null,
+      usingPlatformNumber: onPlatformNumber,
+      billing: { ready: null, manageUrl: null }
+    };
   }
 
   let healthy: boolean | null = null;
+  let billingReady: boolean | null = null;
   try {
     const key = env.WA_CHANNEL_ENC_KEY ? deriveKey(env.WA_CHANNEL_ENC_KEY) : null;
     const token = decryptSecret(row.accessToken, key);
-    await buildWhatsAppClient(token).get(`/${row.phoneNumberId}`, { params: { fields: 'id' } });
+    const client = buildWhatsAppClient(token);
+    await client.get(`/${row.phoneNumberId}`, { params: { fields: 'id' } });
     healthy = true;
+
+    // A configured currency is what tells us Meta will take the money — and
+    // without it every send comes back 131042 while everything else reads
+    // green. Asked separately and swallowed on failure: a billing probe that
+    // errors must not make a working channel look unhealthy.
+    if (row.wabaId) {
+      try {
+        const waba = await client.get(`/${row.wabaId}`, { params: { fields: 'currency' } });
+        billingReady = Boolean(waba.data?.currency);
+      } catch {
+        billingReady = null; // could not ask — not the same as "not set up"
+      }
+    }
   } catch {
     healthy = false; // token rejected by Meta → reconnect needed
   }
@@ -339,7 +379,16 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
     channel: toPublic(row),
     healthy,
     templates: await getTemplateReadiness(clinicId),
-    usingPlatformNumber: false
+    usingPlatformNumber: false,
+    billing: {
+      ready: billingReady,
+      // Meta's own billing page for the business that owns this WABA. Built
+      // only when we know the business — a link to the wrong portfolio shows
+      // an empty page and sends the clinic hunting.
+      manageUrl: row.businessId
+        ? `https://business.facebook.com/billing_hub/accounts?business_id=${row.businessId}`
+        : null
+    }
   };
 };
 

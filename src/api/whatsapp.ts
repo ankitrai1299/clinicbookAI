@@ -65,6 +65,12 @@ export interface ChannelStatus {
    * never invents a connection).
    */
   usingPlatformNumber?: boolean;
+  /**
+   * Whether Meta will actually take payment for this number. A WABA with no
+   * currency set passes every other check and then refuses every message.
+   * null = could not ask; only `false` is reported to the clinic.
+   */
+  billing?: { ready: boolean | null; manageUrl: string | null };
 }
 
 export interface RegistrationResult {
