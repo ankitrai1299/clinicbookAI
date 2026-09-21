@@ -25,7 +25,8 @@ import {
   ShieldCheck,
   Trash2,
   Users,
-  XCircle
+  XCircle,
+  AlertCircle
 } from 'lucide-react';
 import AiAssistant from './AiAssistant';
 import { BRAND } from '../brand';
@@ -815,7 +816,48 @@ export default function ClinicDashboard({
           {/* TAB 1: OVERVIEW COMPONENT */}
           {activeTab === 'overview' && (
             <div className="space-y-6 animate-fadeIn" id="overview-tab-view">
-              
+
+              {/* Nothing works until a number is connected, so this is stated
+                  where a clinic actually looks.
+
+                  The sidebar already carries a nine-pixel amber pill, which was
+                  enough while an unconnected clinic quietly borrowed the
+                  platform's number. It no longer does: each clinic sends from
+                  its OWN number now, so "not connected" means every reminder,
+                  every confirmation and every patient reply silently does
+                  nothing. A clinic discovering that from patient complaints is
+                  the worst way to find out.
+
+                  Only while genuinely disconnected — null is "still checking",
+                  and a banner that flashes on every page load teaches people to
+                  ignore banners. */}
+              {waConnected === false && (
+                <div
+                  className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 bg-amber-50 border border-amber-200 rounded-2xl"
+                  id="whatsapp-not-connected-banner"
+                >
+                  <div className="flex items-start gap-3 flex-1">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-display font-extrabold text-sm text-amber-900">
+                        Patients can&rsquo;t reach you yet
+                      </p>
+                      <p className="text-xs text-amber-800 mt-1 leading-relaxed max-w-xl">
+                        Your clinic has no WhatsApp number connected, so bookings, reminders and
+                        confirmations will not be delivered. It takes about 10 minutes, once &mdash;
+                        and your reception landline works.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('settings')}
+                    className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm cursor-pointer"
+                  >
+                    Connect WhatsApp
+                  </button>
+                </div>
+              )}
+
               {/* Today's Operational KPI Stats Array */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats-widget-row">
                 {[
