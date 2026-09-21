@@ -1,4 +1,12 @@
-import { CheckCircle2, AlertTriangle, Phone, CreditCard, Smartphone, ArrowLeft } from 'lucide-react';
+import {
+  CheckCircle2,
+  AlertTriangle,
+  Phone,
+  CreditCard,
+  Smartphone,
+  UserCircle,
+  ArrowLeft,
+} from 'lucide-react';
 
 import { BRAND } from '../brand';
 import type { PageType } from '../types';
@@ -16,6 +24,13 @@ import type { PageType } from '../types';
 // clinic's phone and card.
 
 const NEEDED = [
+  {
+    icon: UserCircle,
+    title: 'A Facebook account you own',
+    body:
+      'Meta only creates a WhatsApp Business account underneath a Facebook account, so you sign in with one during setup. Any personal Facebook works — a Facebook Page is not required.',
+    note: 'Use the clinic owner’s account, not a staff member’s — whoever should still have access in two years.',
+  },
   {
     icon: Smartphone,
     title: 'A phone number that is not on WhatsApp',
@@ -111,8 +126,17 @@ export default function WhatsAppSetupGuide({
           and it takes ten; skip it and it usually takes a day.
         </p>
 
+        {/* The whole answer in one line, for the person who will not read the
+            rest — which is most of them. The detail below is for when one of
+            these four turns out to be the thing they do not have. */}
+        <p className="mt-6 text-sm text-slate-700 bg-white border border-slate-200 rounded-xl px-4 py-3 leading-relaxed">
+          <strong className="text-slate-900">In short:</strong> a Facebook account, a phone number
+          that is not already on WhatsApp, someone near that phone to take a verification call, and
+          a card on Meta.
+        </p>
+
         <h2 className="font-display text-xl font-extrabold text-slate-900 mt-12 mb-1">
-          Three things to have ready
+          Four things to have ready
         </h2>
         <p className="text-sm text-slate-500 mb-6">
           Every one of these stops the setup if it is missing.
