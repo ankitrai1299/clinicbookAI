@@ -57,24 +57,29 @@ const NEEDED = [
 const STEPS = [
   {
     title: 'Open Connect WhatsApp',
+    minutes: '1 min',
     body: 'In your clinic dashboard, go to Settings and press Connect WhatsApp. A Meta window opens over the page.',
   },
   {
     title: 'Sign in with your own Facebook',
+    minutes: '1 min',
     body:
       'Your clinic’s WhatsApp account is created under your Facebook, not ours. Use the clinic owner’s account — whoever should still have access in two years.',
   },
   {
     title: 'Create your business, not someone else’s',
+    minutes: '2 min',
     body:
       'When Meta asks for a business portfolio, create a new one in your clinic’s name. Pick an existing one belonging to someone else and patients see that name on WhatsApp instead of yours.',
   },
   {
     title: 'Add your number and take the call',
+    minutes: '3 min',
     body: 'Enter the number, choose “Verify by phone call”, answer it, and type in the code you hear.',
   },
   {
     title: 'Add the payment method',
+    minutes: '3 min',
     body:
       'On Meta, set the country to India and add a card. Until this is done, messages will not send even though the connection is complete.',
   },
@@ -165,9 +170,15 @@ export default function WhatsAppSetupGuide({
           })}
         </div>
 
-        <h2 className="font-display text-xl font-extrabold text-slate-900 mt-12 mb-6">
-          What happens, in order
+        <h2 className="font-display text-xl font-extrabold text-slate-900 mt-12 mb-1">
+          The ten minutes, step by step
         </h2>
+        {/* The minutes are on each step because "ten minutes" is a claim, and a
+            claim broken into five is one a clinic can check against its own
+            afternoon. They are what the real setup took, rounded up. */}
+        <p className="text-sm text-slate-500 mb-6">
+          Five steps. The times are what it actually took us.
+        </p>
         <ol className="space-y-4">
           {STEPS.map((s, i) => (
             <li key={s.title} className="flex items-start gap-4">
@@ -175,7 +186,12 @@ export default function WhatsAppSetupGuide({
                 {i + 1}
               </span>
               <div className="min-w-0 pt-1">
-                <h3 className="font-bold text-slate-900 text-[0.95rem]">{s.title}</h3>
+                <div className="flex items-baseline gap-2.5 flex-wrap">
+                  <h3 className="font-bold text-slate-900 text-[0.95rem]">{s.title}</h3>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">
+                    {s.minutes}
+                  </span>
+                </div>
                 <p className="text-sm text-slate-600 mt-1 leading-relaxed">{s.body}</p>
               </div>
             </li>

@@ -855,6 +855,16 @@ export default function ClinicDashboard({
                         confirmations will not be delivered. It takes about 10 minutes, once &mdash;
                         and your reception landline works.
                       </p>
+                      {/* Whoever sees this banner is rarely holding the phone
+                          and the card. The link is the thing they forward. */}
+                      <a
+                        href="/whatsapp-setup"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block text-xs font-bold text-amber-900 underline underline-offset-2 mt-2 hover:text-amber-950"
+                      >
+                        See the 10 minutes, step by step
+                      </a>
                     </div>
                   </div>
                   <button

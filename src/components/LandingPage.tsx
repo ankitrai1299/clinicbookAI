@@ -102,10 +102,19 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   <span>No credit card required</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                {/* The one claim on this page a clinic is entitled to doubt.
+                    So it opens the guide that shows the ten minutes step by
+                    step, rather than asking them to take it on faith. */}
+                <a
+                  href="/whatsapp-setup"
+                  className="flex items-center gap-1.5 hover:text-slate-700 transition-colors group/setup"
+                >
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span>Setup in under 10 minutes</span>
-                </div>
+                  <span className="underline decoration-slate-300 underline-offset-4 group-hover/setup:decoration-slate-500">
+                    Setup in under 10 minutes
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover/setup:opacity-100 group-hover/setup:translate-x-0 transition-all" />
+                </a>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   <span>Encrypted, clinic-isolated · DPDP-aligned</span>
