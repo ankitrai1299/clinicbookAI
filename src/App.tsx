@@ -33,6 +33,7 @@ import type { AuthUser } from './api/auth';
 
 import { DEFAULT_CLINIC_CONFIG } from './data/mockData';
 import { SITE_BOOK_ONLY } from './site';
+import { initialPage, BOOK_SITE_PAGES, type Entry } from './route';
 import { getMyClinic, type ProductKey } from './api/clinic';
 
 // Each product gets its own shareable URL, so a link can be sent to a clinic or a
@@ -45,7 +46,6 @@ import { getMyClinic, type ProductKey } from './api/clinic';
 //                     WebView loads this, so it must keep working)
 //
 // vercel.json already rewrites unknown paths to index.html, so these resolve.
-type Entry = { page: PageType; app: 'dashboard' | 'novascribe' } | null;
 
 function readEntry(): Entry {
   if (typeof window === 'undefined') return null;
@@ -86,11 +86,6 @@ const ENTRY = readEntry();
 const APP_ONLY = isMobileApp();
 
 
-/** Pages that exist on the booking-only site. Everything else bounces home. */
-const BOOK_SITE_PAGES: PageType[] = [
-  'landing', 'dashboard', 'demo', 'developers', 'whatsapp-setup',
-  'login', 'signup', 'verify-email', 'welcome',
-];
 
 // Which product THIS phone build is: the ClinicBook shell loads ?app=clinicbook
 // (its dashboard is home), the NovaScribe shell loads ?app=novascribe. On the web
@@ -145,9 +140,7 @@ function AppShell() {
   // The platform launcher (product chooser) is the first screen — unless deep-linked
   // straight to a product (e.g. the mobile app loads `?app=novascribe`).
   const [currentPage, setCurrentPage] = useState<PageType>(
-    SITE_BOOK_ONLY
-      ? (ENTRY?.page === 'dashboard' ? 'dashboard' : 'landing')
-      : (ENTRY?.page ?? (APP_ONLY ? 'novascribe' : 'home')),
+    initialPage({ entry: ENTRY, bookOnly: SITE_BOOK_ONLY, appOnly: APP_ONLY }),
   );
   // Which product's app to land on after a successful login.
   const [intendedApp, setIntendedApp] = useState<'dashboard' | 'novascribe'>(
