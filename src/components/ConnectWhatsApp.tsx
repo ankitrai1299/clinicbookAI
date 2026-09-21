@@ -585,6 +585,18 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
           ? 'Opens in your browser for secure Meta sign-in.'
           : 'Secure official Meta sign-in. We never see your password.'}
       </p>
+      {/* The full guide, as a link rather than more text in this card.
+          The person who owns the clinic's phone and card is usually not the
+          person signed in here, so this has to be something the desk can send
+          on — it opens without a login. */}
+      <a
+        href="/whatsapp-setup"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-block text-[11px] text-emerald-700 hover:text-emerald-800 underline underline-offset-2 mt-2"
+      >
+        What you need before you start &mdash; full guide
+      </a>
     </Card>
   );
 }

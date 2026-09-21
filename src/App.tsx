@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
 import AnvayaHome from './components/AnvayaHome';
 import LandingPage from './components/LandingPage';
+import WhatsAppSetupGuide from './components/WhatsAppSetupGuide';
 import DeveloperDocs from './components/DeveloperDocs';
 import ClinicDashboard from './components/ClinicDashboard';
 import MobileDashboard from './components/MobileDashboard';
@@ -56,6 +57,12 @@ function readEntry(): Entry {
   if (path === '/clinicbook' || path === '/booking') {
     return { page: 'dashboard', app: 'dashboard' };
   }
+  // A link the desk can send to whoever owns the clinic's phone and card,
+  // before anyone sits down to do the ten minutes. Public — it is read most
+  // often by someone who has not signed in yet.
+  if (path === '/whatsapp-setup') {
+    return { page: 'whatsapp-setup', app: 'dashboard' };
+  }
 
   // Query form — used by the phone app, which wants the APP, not the landing.
   const app = new URLSearchParams(window.location.search).get('app');
@@ -81,7 +88,7 @@ const APP_ONLY = isMobileApp();
 
 /** Pages that exist on the booking-only site. Everything else bounces home. */
 const BOOK_SITE_PAGES: PageType[] = [
-  'landing', 'dashboard', 'demo', 'developers',
+  'landing', 'dashboard', 'demo', 'developers', 'whatsapp-setup',
   'login', 'signup', 'verify-email', 'welcome',
 ];
 
@@ -110,6 +117,7 @@ const PAGE_PATHS: Partial<Record<PageType, string>> = {
   // of the bar was the one link that did NOT show them the product.
   landing: SITE_BOOK_ONLY ? '/' : '/clinicbook',
   dashboard: '/clinicbook',
+  'whatsapp-setup': '/whatsapp-setup',
   'novascribe-landing': '/novascribe',
   novascribe: '/novascribe',
 };
@@ -396,6 +404,13 @@ function AppShell() {
             can evaluate the integration before signing up. */}
         {!APP_ONLY && currentPage === 'developers' && (
           <DeveloperDocs setCurrentPage={handleSetPage} onGetApiKey={openDeveloperKeys} isLoggedIn={!!user} />
+        )}
+
+        {/* What a clinic needs before connecting WhatsApp. Public, because the
+            person who owns the clinic's phone and card is usually not the
+            person signed in — the desk sends them this link. */}
+        {!APP_ONLY && currentPage === 'whatsapp-setup' && (
+          <WhatsAppSetupGuide setCurrentPage={handleSetPage} />
         )}
 
         {currentPage === 'login' && (
