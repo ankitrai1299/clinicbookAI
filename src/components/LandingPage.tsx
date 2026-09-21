@@ -628,6 +628,12 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
             <p>© 2026 NextDot All rights reserved. Built for clinics, dentists, therapists and pediatricians globally.</p>
           </div>
           <div className="flex gap-4">
+            {/* Sits in the footer because it is read by someone who has not
+                signed up yet — "what will this actually take?" — as often as
+                by a clinic in the middle of setup. */}
+            <a href="/whatsapp-setup" className="hover:text-white transition-colors">
+              WhatsApp Setup
+            </a>
             <a href="/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
             <a href="/terms" className="hover:text-white transition-colors">Terms of Service</a>
           </div>
