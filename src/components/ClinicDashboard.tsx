@@ -274,7 +274,15 @@ export default function ClinicDashboard({
   const [waConnected, setWaConnected] = useState<boolean | null>(null);
   useEffect(() => {
     getChannelStatusApi()
-      .then((s) => setWaConnected(Boolean(s.channel && s.channel.status === 'ACTIVE' && s.healthy !== false)))
+      // The platform number counts as reachable. It belongs to exactly one
+      // clinic, and for that clinic messaging works with no channel row of its
+      // own — warning it that patients cannot reach it, while patients are
+      // reaching it, is worse than saying nothing.
+      .then((s) =>
+        setWaConnected(
+          Boolean((s.channel && s.channel.status === 'ACTIVE' && s.healthy !== false) || s.usingPlatformNumber)
+        )
+      )
       .catch(() => setWaConnected(false));
   }, []);
 

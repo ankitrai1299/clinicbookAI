@@ -56,6 +56,15 @@ export interface ChannelStatus {
   channel: WhatsAppChannel | null;
   healthy: boolean | null; // false → token expired → reconnect
   templates: TemplateReadiness | null;
+  /**
+   * No channel of its own, but this clinic IS the one the platform number
+   * belongs to — so its patients can be reached today.
+   *
+   * Optional because an older backend does not send it; absent is read as
+   * false, which is the safe direction (it only ever suppresses a warning,
+   * never invents a connection).
+   */
+  usingPlatformNumber?: boolean;
 }
 
 export interface RegistrationResult {

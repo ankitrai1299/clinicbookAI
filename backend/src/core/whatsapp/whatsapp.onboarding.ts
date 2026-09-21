@@ -296,6 +296,16 @@ export interface ChannelStatus {
   healthy: boolean | null;
   // Per-clinic template approval state (null when no channel is connected).
   templates: TemplateReadiness | null;
+  /**
+   * This clinic has no channel of its own but IS the clinic the env number
+   * belongs to, so its patients can be reached today.
+   *
+   * Without this, the one clinic that is actually live reads as "not
+   * connected" — the same answer as a clinic that genuinely cannot send —
+   * and the dashboard warns it that patients cannot reach it while patients
+   * are reaching it.
+   */
+  usingPlatformNumber: boolean;
 }
 
 // Channel status for the dashboard, with a best-effort live token probe so the
@@ -305,7 +315,16 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
     where: { clinicId },
     orderBy: { updatedAt: 'desc' }
   });
-  if (!row) return { channel: null, healthy: null, templates: null };
+  if (!row) {
+    // The env number is not nobody's: WHATSAPP_CLINIC_ID names the clinic that
+    // owns it, and for that one clinic messaging works with no channel row at
+    // all. Every other clinic without a row genuinely cannot send — more so
+    // now that WA_STRICT_CHANNEL stops them borrowing this number.
+    const onPlatformNumber = Boolean(
+      env.WHATSAPP_CLINIC_ID && env.WHATSAPP_CLINIC_ID === clinicId && env.PHONE_NUMBER_ID && env.WHATSAPP_TOKEN
+    );
+    return { channel: null, healthy: null, templates: null, usingPlatformNumber: onPlatformNumber };
+  }
 
   let healthy: boolean | null = null;
   try {
@@ -316,7 +335,12 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
   } catch {
     healthy = false; // token rejected by Meta → reconnect needed
   }
-  return { channel: toPublic(row), healthy, templates: await getTemplateReadiness(clinicId) };
+  return {
+    channel: toPublic(row),
+    healthy,
+    templates: await getTemplateReadiness(clinicId),
+    usingPlatformNumber: false
+  };
 };
 
 // Disconnect the clinic's channel (e.g. before reconnecting, or to stop using
