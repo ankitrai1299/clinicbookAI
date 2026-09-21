@@ -1175,6 +1175,10 @@ function Footer({
               <li><a href="#how" className={FOOT_LINK}>How it works</a></li>
               <li><a href="#pricing" className={FOOT_LINK}>Pricing</a></li>
               <li><a href="#ai" className={FOOT_LINK}>Where the AI stops</a></li>
+              {/* The same guide the booking site links to. A clinic weighing
+                  this up asks what connecting WhatsApp will cost them in time
+                  long before it signs up. */}
+              <li><a href="/whatsapp-setup" className={FOOT_LINK}>WhatsApp setup</a></li>
               {/* Real pages, served from /public — not placeholders. A privacy
                   link that goes nowhere is worse than none on a health site. */}
               <li><a href="/privacy" className={FOOT_LINK}>Privacy policy</a></li>
