@@ -320,9 +320,13 @@ export interface ChannelStatus {
    * method on Meta. So the only useful thing we can do is say so, and say
    * where — hence the link.
    *
-   * null means we could not ask (no WABA id, or Meta did not answer). Unknown
-   * is not reported as broken: a failed probe must not raise a false alarm
-   * about a clinic whose billing is fine.
+   * Only ever `false` or `null`. Meta does not let us read whether a card is
+   * attached (see the probe), so "billing is set up" is not a thing this can
+   * honestly say — and a green light nobody checked is worse than no light.
+   *
+   * null means unknown: we could not ask, or we asked and the answer does not
+   * settle it. Unknown is not reported as broken — a failed probe must not
+   * raise a false alarm about a clinic whose billing is fine.
    */
   billing: { ready: boolean | null; manageUrl: string | null };
 }
@@ -360,14 +364,28 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
     await client.get(`/${row.phoneNumberId}`, { params: { fields: 'id' } });
     healthy = true;
 
-    // A configured currency is what tells us Meta will take the money — and
-    // without it every send comes back 131042 while everything else reads
-    // green. Asked separately and swallowed on failure: a billing probe that
-    // errors must not make a working channel look unhealthy.
+    // What we can see, and what we cannot.
+    //
+    // `primary_funding_id` is the field that actually says a payment method is
+    // attached, and Meta refuses it to anyone who is not a Business Solution
+    // Provider: "This action requires that the Business that owns this App is a
+    // Business Solution Provider for WhatsApp." So we cannot confirm billing.
+    //
+    // `currency` is readable, but it is only the account's currency — Meta
+    // fills it in from the business country while provisioning a new WABA, with
+    // no card anywhere near it. A fresh account showed none for a day and then
+    // showed INR on its own, which is exactly how a "billing is fine" reading
+    // taken from this field would have been wrong.
+    //
+    // So it is used in one direction only: no currency means the account is not
+    // ready and every send will come back 131042. A currency present means we
+    // do not know, which is `null` — never true. The UI warns on false and
+    // stays quiet on null, so the one thing this must not do is claim billing
+    // is done.
     if (row.wabaId) {
       try {
         const waba = await client.get(`/${row.wabaId}`, { params: { fields: 'currency' } });
-        billingReady = Boolean(waba.data?.currency);
+        billingReady = waba.data?.currency ? null : false;
       } catch {
         billingReady = null; // could not ask — not the same as "not set up"
       }

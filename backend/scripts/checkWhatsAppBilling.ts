@@ -1,7 +1,7 @@
 /**
- * READ-ONLY. Asks Meta, for every connected clinic, whether its WABA has a
- * currency — which is what tells us Meta will actually take the money and let
- * messages out.
+ * READ-ONLY. Asks Meta what it will tell us about each connected clinic's
+ * WhatsApp account — including the currency, which is the closest thing to a
+ * billing signal we are allowed to read.
  *
  * Why this exists: the dashboard shows the warning only when the answer is a
  * definite NO. A probe that fails answers "don't know", and "don't know" hides
@@ -72,10 +72,14 @@ for (const row of rows) {
     });
     const d = waba.data ?? {};
     console.log(`  waba name: ${d.name ?? '-'}   review: ${d.account_review_status ?? '-'}`);
+    // `currency` is NOT proof of a payment method. Meta fills it in from the
+    // business country while provisioning the account; the field that would
+    // settle it, primary_funding_id, is refused to anyone who is not a
+    // Business Solution Provider. So this says what it knows and no more.
     console.log(
       d.currency
-        ? `  billing: SET UP  (currency ${d.currency})`
-        : '  billing: NOT SET UP  (no currency — Meta will refuse every send)'
+        ? `  billing: UNKNOWN  (currency ${d.currency} is set, but Meta will not tell us whether a card is attached — only a real send proves it)`
+        : '  billing: NOT SET UP  (no currency — Meta will refuse every send with 131042)'
     );
   } catch (e: any) {
     // The case that matters: this is NOT the same as "billing is fine".

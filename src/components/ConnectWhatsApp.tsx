@@ -424,6 +424,28 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
               value={<span className="text-rose-600 font-semibold">Not set up — messages will not send</span>}
             />
           )}
+
+          {/* When we cannot tell, say that rather than nothing.
+              Meta only lets a Business Solution Provider read whether a card is
+              attached, so silence here used to mean "we have no idea" while
+              reading as "all fine" — and a clinic whose messages were being
+              refused had no line to look at. A quiet row with the link costs a
+              clinic that has already paid one glance. */}
+          {status?.billing?.ready !== false && status?.billing?.manageUrl && (
+            <Row
+              label="Billing"
+              value={
+                <a
+                  href={status.billing.manageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 underline underline-offset-2"
+                >
+                  Set up on Meta <ExternalLink className="w-3 h-3" />
+                </a>
+              }
+            />
+          )}
         </dl>
 
         {status?.billing?.ready === false && (
