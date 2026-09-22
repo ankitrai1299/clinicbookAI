@@ -331,6 +331,55 @@ export interface ChannelStatus {
   billing: { ready: boolean | null; manageUrl: string | null };
 }
 
+/** Meta's code for "no payment method on this WhatsApp Business account". */
+const BILLING_ERROR_CODE = '131042';
+
+/**
+ * What actually happened the last time this clinic tried to send.
+ *
+ * Meta will not tell us whether a card is attached, but it tells us every time
+ * it refuses a message because one is not — the failure arrives on the status
+ * webhook and is already written to the message log. That is the honest signal:
+ * not a field we interpreted, but a message this clinic sent and Meta rejected.
+ *
+ * A later delivery outranks the failure: once a message gets through, whatever
+ * was wrong has been fixed, and a stale error must not keep warning a clinic
+ * that has already paid.
+ */
+const billingFromSendHistory = async (
+  clinicId: string
+): Promise<{ ready: false; manageUrl: string | null } | null> => {
+  const failure = await prisma.whatsAppLog.findFirst({
+    where: { clinicId, status: 'failed', error: { contains: BILLING_ERROR_CODE } },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true, error: true }
+  });
+  if (!failure) return null;
+
+  const delivered = await prisma.whatsAppLog.findFirst({
+    where: { clinicId, status: { in: ['delivered', 'read'] } },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true }
+  });
+
+  return readBillingRefusal(failure, delivered);
+};
+
+/** PURE: the judgement itself, so it can be checked without a database. */
+export const readBillingRefusal = (
+  failure: { createdAt: Date; error: string | null } | null,
+  delivered: { createdAt: Date } | null
+): { ready: false; manageUrl: string | null } | null => {
+  if (!failure) return null;
+  if (delivered && delivered.createdAt > failure.createdAt) return null;
+
+  // Meta puts its own link in the error, and it is a better link than ours: it
+  // opens the "add a payment method" wizard for this exact account, where ours
+  // only reaches the billing list and leaves the clinic hunting.
+  const href = failure.error?.match(/https:\/\/business\.facebook\.com\/billing_hub\/\S+/)?.[0];
+  return { ready: false, manageUrl: href ? href.replace(/[.,;)]+$/, '') : null };
+};
+
 // Channel status for the dashboard, with a best-effort live token probe so the
 // UI can surface "needs reconnect" when a token has expired.
 export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelStatus> => {
@@ -393,6 +442,13 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
   } catch {
     healthy = false; // token rejected by Meta → reconnect needed
   }
+
+  // A refusal we have actually seen beats anything inferred from a field. This
+  // is what a currency reading got wrong: the account said INR while every
+  // message came back 131042.
+  const refused = await billingFromSendHistory(clinicId);
+  if (refused) billingReady = false;
+
   return {
     channel: toPublic(row),
     healthy,
@@ -400,12 +456,16 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
     usingPlatformNumber: false,
     billing: {
       ready: billingReady,
-      // Meta's own billing page for the business that owns this WABA. Built
-      // only when we know the business — a link to the wrong portfolio shows
-      // an empty page and sends the clinic hunting.
-      manageUrl: row.businessId
-        ? `https://business.facebook.com/billing_hub/accounts?business_id=${row.businessId}`
-        : null
+      // Meta's own link out of the refusal when we have one — it opens the
+      // add-a-card wizard for this account. Otherwise the billing page for the
+      // business that owns this WABA, built only when we know the business: a
+      // link to the wrong portfolio shows an empty page and sends the clinic
+      // hunting.
+      manageUrl:
+        refused?.manageUrl ??
+        (row.businessId
+          ? `https://business.facebook.com/billing_hub/accounts?business_id=${row.businessId}`
+          : null)
     }
   };
 };

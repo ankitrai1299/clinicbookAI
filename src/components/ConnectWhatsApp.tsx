@@ -455,9 +455,9 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
               <div className="min-w-0">
                 <p className="font-bold text-sm text-rose-900">Add a payment method on Meta first</p>
                 <p className="text-xs text-rose-800 mt-1 leading-relaxed">
-                  Your WhatsApp account has no currency set, so Meta refuses every message
-                  even though everything above is connected. Set the country to India and add
-                  a card — messages start working straight after, with nothing to change here.
+                  Meta is refusing your messages because your WhatsApp Business account has no
+                  payment method, even though everything above is connected. Add a card on Meta
+                  &mdash; messages start working straight after, with nothing to change here.
                 </p>
                 {status.billing.manageUrl && (
                   <a
