@@ -347,7 +347,8 @@ const BILLING_ERROR_CODE = '131042';
  * that has already paid.
  */
 const billingFromSendHistory = async (
-  clinicId: string
+  clinicId: string,
+  ackAt: Date | null
 ): Promise<{ ready: false; manageUrl: string | null } | null> => {
   const failure = await prisma.whatsAppLog.findFirst({
     where: { clinicId, status: 'failed', error: { contains: BILLING_ERROR_CODE } },
@@ -362,16 +363,37 @@ const billingFromSendHistory = async (
     select: { createdAt: true }
   });
 
-  return readBillingRefusal(failure, delivered);
+  return readBillingRefusal(failure, delivered, ackAt);
+};
+
+/**
+ * The clinic says it has added the card.
+ *
+ * We cannot check, so we take its word and stop warning. This is safe because
+ * the claim expires the instant it is wrong: the next refused message is newer
+ * than this timestamp, and the warning is back before the clinic has noticed it
+ * left.
+ */
+export const acknowledgeBilling = async (clinicId: string): Promise<void> => {
+  await prisma.whatsAppChannel.updateMany({
+    where: { clinicId },
+    data: { billingAckAt: new Date() }
+  });
 };
 
 /** PURE: the judgement itself, so it can be checked without a database. */
 export const readBillingRefusal = (
   failure: { createdAt: Date; error: string | null } | null,
-  delivered: { createdAt: Date } | null
+  delivered: { createdAt: Date } | null,
+  /** When the clinic last said it had fixed this. */
+  ackAt?: Date | null
 ): { ready: false; manageUrl: string | null } | null => {
   if (!failure) return null;
+  // Anything that happened after the refusal settles it: a message that got
+  // through proves it, and the clinic saying it added the card is taken on
+  // trust until the next refusal, which will be newer again.
   if (delivered && delivered.createdAt > failure.createdAt) return null;
+  if (ackAt && ackAt > failure.createdAt) return null;
 
   // Meta puts its own link in the error, and it is a better link than ours: it
   // opens the "add a payment method" wizard for this exact account, where ours
@@ -446,7 +468,7 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
   // A refusal we have actually seen beats anything inferred from a field. This
   // is what a currency reading got wrong: the account said INR while every
   // message came back 131042.
-  const refused = await billingFromSendHistory(clinicId);
+  const refused = await billingFromSendHistory(clinicId, row.billingAckAt ?? null);
   if (refused) billingReady = false;
 
   return {

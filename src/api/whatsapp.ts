@@ -101,6 +101,16 @@ export const completeEmbeddedSignup = (body: { code: string; phoneNumberId: stri
 export const disconnectWhatsApp = () =>
   apiFetch<{ removed: number }>('/api/whatsapp/channel', { method: 'DELETE' });
 
+/**
+ * "I have added the card on Meta."
+ *
+ * Meta will not tell us whether a payment method exists — only a refused
+ * message tells us one does not. So the clinic gets to say so, and the warning
+ * clears. It returns on its own the next time Meta refuses anything.
+ */
+export const acknowledgeBilling = () =>
+  apiFetch<ChannelStatus>('/api/whatsapp/channel/billing-ack', { method: 'POST' });
+
 // --- Per-clinic provisioning ------------------------------------------------
 
 export const getTemplateReadiness = () =>

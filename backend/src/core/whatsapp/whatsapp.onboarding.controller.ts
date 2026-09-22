@@ -4,6 +4,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { EmbeddedSignupBody, OnboardWhatsAppChannelInput } from './whatsapp.validation.js';
 import {
   disconnectClinicChannel,
+  acknowledgeBilling,
   getClinicChannelStatus,
   onboardWhatsAppChannel
 } from './whatsapp.onboarding.js';
@@ -29,6 +30,20 @@ export const onboardChannelHandler = asyncHandler(async (req: Request, res: Resp
 export const getChannelHandler = asyncHandler(async (req: Request, res: Response) => {
   const status = await getClinicChannelStatus(getClinicId(req));
   res.status(200).json({ success: true, data: status });
+});
+
+// POST /api/whatsapp/channel/billing-ack — the clinic says it has added a
+// payment method on Meta.
+//
+// We cannot verify it: Meta only tells a Business Solution Provider whether a
+// card is attached. So the warning has to be dismissable, or a clinic that has
+// paid is stuck being told its messages are refused until one happens to get
+// through. Nothing is trusted for long — the next refusal is newer than this
+// timestamp and the warning returns on its own.
+export const acknowledgeBillingHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  await acknowledgeBilling(clinicId);
+  res.status(200).json({ success: true, data: await getClinicChannelStatus(clinicId) });
 });
 
 // DELETE /api/whatsapp/channel — disconnect (e.g. before reconnecting).

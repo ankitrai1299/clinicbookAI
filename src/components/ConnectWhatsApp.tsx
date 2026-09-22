@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2, MessageCircle, RefreshCw, AlertCircle, ShieldCheck, ClipboardCheck, ChevronDown, ExternalLink } from 'lucide-react';
 
 import {
+  acknowledgeBilling,
   completeEmbeddedSignup,
   getChannelStatus,
   getEmbeddedConfig,
@@ -114,7 +115,7 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
   const [status, setStatus] = useState<ChannelStatus | null>(null);
   const [ui, setUi] = useState<UiState>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'activate' | 'templates' | null>(null);
+  const [busy, setBusy] = useState<'activate' | 'templates' | 'billing' | null>(null);
   // Session info from the Embedded Signup popup (phone_number_id + waba_id).
   const sessionInfo = useRef<{ phoneNumberId?: string; wabaId?: string }>({});
 
@@ -182,6 +183,25 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
       setStatus((s) => (s ? { ...s, templates } : s));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not resubmit the message templates.');
+    } finally {
+      setBusy(null);
+    }
+  }, []);
+
+  // The clinic says it has added the card on Meta.
+  //
+  // There is nothing to verify against — Meta only tells a Business Solution
+  // Provider whether a payment method exists. Without this a clinic that had
+  // just paid kept reading "messages will not send", with no way to clear it
+  // short of a message happening to get through. The claim costs nothing: the
+  // next refusal is newer than it and the warning comes straight back.
+  const handleBillingDone = useCallback(async () => {
+    setBusy('billing');
+    setError(null);
+    try {
+      setStatus(await acknowledgeBilling());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update the billing status.');
     } finally {
       setBusy(null);
     }
@@ -459,16 +479,31 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
                   payment method, even though everything above is connected. Add a card on Meta
                   &mdash; messages start working straight after, with nothing to change here.
                 </p>
-                {status.billing.manageUrl && (
-                  <a
-                    href={status.billing.manageUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs"
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  {status.billing.manageUrl && (
+                    <a
+                      href={status.billing.manageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs"
+                    >
+                      Open Meta billing <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleBillingDone}
+                    disabled={busy === 'billing'}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 border border-rose-300 text-rose-800 hover:bg-rose-100 font-bold rounded-lg text-xs disabled:opacity-60 cursor-pointer"
                   >
-                    Open Meta billing <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
+                    {busy === 'billing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    I&rsquo;ve added the card
+                  </button>
+                </div>
+                <p className="text-[11px] text-rose-700/80 mt-2 leading-relaxed">
+                  We cannot check this with Meta &mdash; only a refused message tells us. If it is
+                  still not set up, this warning comes back on the next message.
+                </p>
               </div>
             </div>
           </div>

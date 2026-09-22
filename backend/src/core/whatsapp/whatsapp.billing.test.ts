@@ -65,4 +65,28 @@ describe('readBillingRefusal — did Meta refuse this clinic for want of a card'
     );
     expect(out?.ready).toBe(false);
   });
+
+  // The clinic added the card, and until it sends something there is no
+  // evidence either way. Being told your messages are refused, with no way to
+  // clear it, is the state this exists to end.
+  describe('once the clinic says it has added the card', () => {
+    const failure = { createdAt: at('2026-09-22T05:40:52Z'), error: REAL_ERROR };
+
+    it('goes quiet', () => {
+      expect(readBillingRefusal(failure, null, at('2026-09-22T09:48:00Z'))).toBeNull();
+    });
+
+    it('comes back when Meta refuses again afterwards', () => {
+      const later = { createdAt: at('2026-09-22T11:00:00Z'), error: REAL_ERROR };
+      expect(readBillingRefusal(later, null, at('2026-09-22T09:48:00Z'))?.ready).toBe(false);
+    });
+
+    it('ignores a claim made BEFORE the refusal', () => {
+      expect(readBillingRefusal(failure, null, at('2026-09-21T10:00:00Z'))?.ready).toBe(false);
+    });
+
+    it('is unaffected when there was never a refusal', () => {
+      expect(readBillingRefusal(null, null, at('2026-09-22T09:48:00Z'))).toBeNull();
+    });
+  });
 });

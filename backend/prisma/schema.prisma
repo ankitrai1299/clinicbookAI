@@ -172,6 +172,15 @@ model WhatsAppChannel {
   registrationPin    String?
   // Last successful template sync against THIS clinic's WABA.
   templatesSyncedAt  DateTime?
+  // When the clinic said it had added a payment method on Meta.
+  //
+  // Meta only lets a Business Solution Provider read whether a card is
+  // attached, so we cannot confirm it — we only ever learn the opposite, when
+  // a send comes back 131042. Without this the warning had no way out: a
+  // clinic that paid kept being told its messages were refused until one
+  // happened to be delivered. Acknowledging hides it; the very next refusal is
+  // newer than this timestamp and brings it straight back.
+  billingAckAt       DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

@@ -12,6 +12,7 @@ import {
   webhookDebugHandler
 } from './whatsapp.controller.js';
 import {
+  acknowledgeBillingHandler,
   disconnectChannelHandler,
   embeddedConfigHandler,
   embeddedSignupHandler,
@@ -52,6 +53,9 @@ whatsappRouter.post('/embedded-signup', requireAuth, manageChannel, validate(emb
 // Channel status (+ live token health) and disconnect (for reconnect flows).
 whatsappRouter.get('/channel', requireAuth, manageChannel, getChannelHandler);
 whatsappRouter.delete('/channel', requireAuth, manageChannel, disconnectChannelHandler);
+// "I have added the card on Meta" — clears a billing warning we cannot check
+// ourselves. Safe to dismiss: the next refused message brings it back.
+whatsappRouter.post('/channel/billing-ack', requireAuth, manageChannel, acknowledgeBillingHandler);
 
 // FALLBACK / admin: manual onboarding by pasting Cloud API creds.
 whatsappRouter.post('/channel', requireAuth, manageChannel, validate(onboardWhatsAppChannelSchema), onboardChannelHandler);
