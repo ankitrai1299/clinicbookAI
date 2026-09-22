@@ -253,6 +253,16 @@ const processOne = async (
   phoneNumberId?: string | null
 ): Promise<void> => {
   const to = from.replace(/\D/g, '');
+  // Where the seconds go.
+  //
+  // A patient asked for a speciality and waited 112 seconds for the list. No
+  // error anywhere — the reply simply took that long, which from the patient's
+  // side is indistinguishable from the number being dead. These marks turn
+  // "it's slow" into a number per stage, so the next slow reply says which one.
+  const t0 = Date.now();
+  const marks: Record<string, number> = {};
+  const mark = (name: string) => { marks[name] = Date.now() - t0; };
+
   let clinicId: string | null = null;
   // null === the FSM deliberately chose to stay silent (no outbound at all).
   // A BotReply is either a plain string or an interactive (buttons/list) reply.
@@ -264,6 +274,7 @@ const processOne = async (
 
   try {
     const resolved = await resolveInboundClinicId(phoneNumberId, to, text);
+    mark('clinic');
     clinicId = resolved.clinicId;
     await logInboundMessage({ from: to, body: text, waMessageId: inboundWamid, clinicId }).catch(() => undefined);
     // Refresh the 24h WhatsApp session window (per clinic) on every processed
@@ -406,6 +417,7 @@ const processOne = async (
       }
       // null = stay silent. A plain string is trimmed (empty → safe fallback);
       // an interactive reply is passed through untouched.
+      mark('reply');
       reply =
         botReply === null
           ? null
@@ -441,6 +453,7 @@ const processOne = async (
   // still route correctly; on any failure the original English text is kept.
   if (replyLang !== 'en' && reply !== null) {
     reply = await translateReply(reply, replyLang);
+    mark('translate');
   }
 
   // Record the reply for diagnostics before sending (so /debug reflects it even
@@ -454,7 +467,10 @@ const processOne = async (
       typeof reply === 'string'
         ? await sendWhatsAppTextMessage({ to, body: reply, messageType: 'auto_reply', clinicId })
         : await sendWhatsAppInteractive({ to, reply, messageType: 'auto_reply', clinicId });
+    mark('sent');
     console.info('[WhatsApp] Inbound reply sent', {
+      tookMs: Date.now() - t0,
+      stages: marks,
       phone: maskPhone(to),
       clinicId,
       patientId: patientCode,
