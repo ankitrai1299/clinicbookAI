@@ -8,6 +8,7 @@ import {
   getEmbeddedConfig,
   provisionTemplates,
   registerNumber,
+  resubscribeWebhook,
   syncTemplates,
   type ChannelStatus,
   type EmbeddedConfig,
@@ -115,7 +116,7 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
   const [status, setStatus] = useState<ChannelStatus | null>(null);
   const [ui, setUi] = useState<UiState>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'activate' | 'templates' | 'billing' | null>(null);
+  const [busy, setBusy] = useState<'activate' | 'templates' | 'billing' | 'receiving' | null>(null);
   // Session info from the Embedded Signup popup (phone_number_id + waba_id).
   const sessionInfo = useRef<{ phoneNumberId?: string; wabaId?: string }>({});
 
@@ -183,6 +184,26 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
       setStatus((s) => (s ? { ...s, templates } : s));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not resubmit the message templates.');
+    } finally {
+      setBusy(null);
+    }
+  }, []);
+
+  // Meta stopped delivering this number's inbound messages — ask it to resume.
+  //
+  // This is the failure with no symptom: the number stays CONNECTED, quality
+  // stays green, outbound still works, and patients' messages simply vanish.
+  // One button, because the fix really is one API call — the same one Embedded
+  // Signup makes during onboarding.
+  const handleResubscribe = useCallback(async () => {
+    setBusy('receiving');
+    setError(null);
+    try {
+      const result = await resubscribeWebhook();
+      setStatus(result.status);
+      if (!result.subscribed) setError(result.detail);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not restore message delivery.');
     } finally {
       setBusy(null);
     }
@@ -438,6 +459,16 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
               Only shown when we actually know it is missing: `null` means the
               probe could not run, and a false alarm about billing sends a
               clinic to Meta looking for a problem it does not have. */}
+          {/* Inbound delivery. Shown only when we know it is broken: `null`
+              means we could not ask, and a clinic sent looking for a problem it
+              does not have is worse than saying nothing. */}
+          {status?.receiving?.subscribed === false && (
+            <Row
+              label="Receiving"
+              value={<span className="text-rose-600 font-semibold">Off — patients' messages never arrive</span>}
+            />
+          )}
+
           {status?.billing?.ready === false && (
             <Row
               label="Billing"
@@ -467,6 +498,31 @@ export default function ConnectWhatsApp({ onConnected, compact }: Props) {
             />
           )}
         </dl>
+
+        {status?.receiving?.subscribed === false && (
+          <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-xl">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4.5 h-4.5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-bold text-sm text-rose-900">Your number is not receiving messages</p>
+                <p className="text-xs text-rose-800 mt-1 leading-relaxed">
+                  Meta has stopped passing this number's incoming messages to us, so a patient who
+                  writes to you gets no reply. Everything else about the number is fine. One click
+                  restores it.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResubscribe}
+                  disabled={busy === 'receiving'}
+                  className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs disabled:opacity-60 cursor-pointer"
+                >
+                  {busy === 'receiving' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Restore message delivery
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {status?.billing?.ready === false && (
           <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-xl">

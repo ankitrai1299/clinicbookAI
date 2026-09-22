@@ -71,6 +71,14 @@ export interface ChannelStatus {
    * null = could not ask; only `false` is reported to the clinic.
    */
   billing?: { ready: boolean | null; manageUrl: string | null };
+  /**
+   * Is Meta still delivering this number's inbound messages to us?
+   *
+   * false means patients can write and nobody hears them — the number looks
+   * connected and simply never replies. Optional because an older backend does
+   * not send it; absent is read as unknown, never as broken.
+   */
+  receiving?: { subscribed: boolean | null; detail: string | null };
 }
 
 export interface RegistrationResult {
@@ -110,6 +118,13 @@ export const disconnectWhatsApp = () =>
  */
 export const acknowledgeBilling = () =>
   apiFetch<ChannelStatus>('/api/whatsapp/channel/billing-ack', { method: 'POST' });
+
+/** Ask Meta to resume delivering this number's inbound messages to us. */
+export const resubscribeWebhook = () =>
+  apiFetch<{ subscribed: boolean; detail: string; status: ChannelStatus }>(
+    '/api/whatsapp/channel/resubscribe',
+    { method: 'POST' }
+  );
 
 // --- Per-clinic provisioning ------------------------------------------------
 

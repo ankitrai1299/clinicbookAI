@@ -5,6 +5,7 @@ import { EmbeddedSignupBody, OnboardWhatsAppChannelInput } from './whatsapp.vali
 import {
   disconnectClinicChannel,
   acknowledgeBilling,
+  resubscribeClinicWebhook,
   getClinicChannelStatus,
   onboardWhatsAppChannel
 } from './whatsapp.onboarding.js';
@@ -44,6 +45,14 @@ export const acknowledgeBillingHandler = asyncHandler(async (req: Request, res: 
   const clinicId = getClinicId(req);
   await acknowledgeBilling(clinicId);
   res.status(200).json({ success: true, data: await getClinicChannelStatus(clinicId) });
+});
+
+// POST /api/whatsapp/channel/resubscribe — ask Meta to start delivering this
+// number's inbound messages to us again.
+export const resubscribeWebhookHandler = asyncHandler(async (req: Request, res: Response) => {
+  const clinicId = getClinicId(req);
+  const result = await resubscribeClinicWebhook(clinicId);
+  res.status(200).json({ success: true, data: { ...result, status: await getClinicChannelStatus(clinicId) } });
 });
 
 // DELETE /api/whatsapp/channel — disconnect (e.g. before reconnecting).

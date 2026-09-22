@@ -329,6 +329,22 @@ export interface ChannelStatus {
    * raise a false alarm about a clinic whose billing is fine.
    */
   billing: { ready: boolean | null; manageUrl: string | null };
+  /**
+   * Is Meta still delivering this number's inbound messages to us?
+   *
+   * A WABA our app is not subscribed to passes every other check — connected,
+   * activated, templates approved, token valid, outbound sends fine — while
+   * Meta accepts each patient's message and tells us nothing. The number looks
+   * alive and simply never answers, and the only way anyone found out was by
+   * testing it by hand.
+   *
+   * Embedded Signup subscribes us during onboarding, so this should be true for
+   * every clinic connected that way. It is checked anyway, because a
+   * subscription can be removed later in Meta's UI and nothing would say so.
+   *
+   * null means we could not ask (no WABA id, or Meta did not answer).
+   */
+  receiving: { subscribed: boolean | null; detail: string | null };
 }
 
 /** Meta's code for "no payment method on this WhatsApp Business account". */
@@ -422,18 +438,27 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
       healthy: null,
       templates: null,
       usingPlatformNumber: onPlatformNumber,
+      receiving: { subscribed: null, detail: null },
       billing: { ready: null, manageUrl: null }
     };
   }
 
   let healthy: boolean | null = null;
   let billingReady: boolean | null = null;
+  let receiving: { subscribed: boolean | null; detail: string | null } = { subscribed: null, detail: null };
   try {
     const key = env.WA_CHANNEL_ENC_KEY ? deriveKey(env.WA_CHANNEL_ENC_KEY) : null;
     const token = decryptSecret(row.accessToken, key);
     const client = buildWhatsAppClient(token);
     await client.get(`/${row.phoneNumberId}`, { params: { fields: 'id' } });
     healthy = true;
+
+    // Inbound delivery. Asked here because the token is already known good —
+    // a failure to read this is about the subscription, not the credentials.
+    if (row.wabaId) {
+      const check = await validateWebhookSubscription(client, row.wabaId, false);
+      receiving = { subscribed: check.subscribed, detail: check.detail };
+    }
 
     // What we can see, and what we cannot.
     //
@@ -476,6 +501,7 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
     healthy,
     templates: await getTemplateReadiness(clinicId),
     usingPlatformNumber: false,
+    receiving,
     billing: {
       ready: billingReady,
       // Meta's own link out of the refusal when we have one — it opens the
@@ -490,6 +516,29 @@ export const getClinicChannelStatus = async (clinicId: string): Promise<ChannelS
           : null)
     }
   };
+};
+
+/**
+ * Re-subscribe our app to this clinic's WABA, so Meta starts delivering its
+ * inbound messages again.
+ *
+ * The same call Embedded Signup makes during onboarding. It is here as a button
+ * because the alternative, when a subscription goes missing, is a clinic whose
+ * WhatsApp answers nobody and a support call that starts "the bot is broken".
+ */
+export const resubscribeClinicWebhook = async (
+  clinicId: string
+): Promise<{ subscribed: boolean; detail: string }> => {
+  const row = await prisma.whatsAppChannel.findFirst({
+    where: { clinicId },
+    orderBy: { updatedAt: 'desc' }
+  });
+  if (!row) throw new AppError('This clinic has no connected WhatsApp number.', 404);
+  if (!row.wabaId) throw new AppError('No WhatsApp Business Account id stored for this number.', 409);
+
+  const key = env.WA_CHANNEL_ENC_KEY ? deriveKey(env.WA_CHANNEL_ENC_KEY) : null;
+  const client = buildWhatsAppClient(decryptSecret(row.accessToken, key));
+  return validateWebhookSubscription(client, row.wabaId, true);
 };
 
 // Disconnect the clinic's channel (e.g. before reconnecting, or to stop using
