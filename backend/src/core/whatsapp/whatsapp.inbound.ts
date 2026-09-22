@@ -28,8 +28,8 @@ import { dataSourceFor } from '../datasource/index.js';
 import { env } from '../../config/env.js';
 import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { patientConversation } from './whatsapp.conversation.js';
-import { resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
-import { resolveSharedClinic } from './whatsapp.binding.js';
+import { isSharedInboundNumber, resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
+import { platformClinicId, resolveSharedClinic } from './whatsapp.binding.js';
 import { isBrainEnabledFor, runConversation } from '../mcp/index.js';
 import type { McpContext } from '../mcp/index.js';
 import {
@@ -133,12 +133,20 @@ const resolveInboundClinicId = async (
 ): Promise<InboundClinic> => {
   const byChannel = await resolveClinicIdByPhoneNumberId(phoneNumberId);
 
-  // SHARED PLATFORM NUMBER multi-tenancy: the shared number resolves (by channel)
-  // to the platform/default clinic. On that number, a patient who sent a join code
-  // or is already bound is routed to THEIR clinic instead; everyone else stays on
-  // the platform clinic. A clinic's OWN connected number is unaffected. All data
-  // stays clinic-scoped, so clinics never mix.
-  const isPlatformChannel = !!(env.WHATSAPP_CLINIC_ID && byChannel === env.WHATSAPP_CLINIC_ID);
+  // SHARED PLATFORM NUMBER multi-tenancy: on a number that belongs to no clinic
+  // of its own, a patient who sent a join code or is already bound is routed to
+  // THEIR clinic. A clinic's OWN number is never treated this way — the number a
+  // patient messaged decides who answers them.
+  //
+  // This used to test byChannel === WHATSAPP_CLINIC_ID, which is the clinic that
+  // OWNS the original number, not a platform pool. The result, with two clinics
+  // live: a patient registered at anvaya messaged nextclinicAi's number, and
+  // anvaya answered — from its own, different WhatsApp number. The patient
+  // watched a reply arrive in the wrong chat, and nextclinicAi never saw it.
+  const isPlatformChannel = isSharedInboundNumber({
+    clinicId: byChannel,
+    platformClinicId: await platformClinicId()
+  }) && !!byChannel;
   const onSharedNumber = !byChannel || isPlatformChannel;
   if (onSharedNumber && phone) {
     const shared = await resolveSharedClinic(phone, text || '');

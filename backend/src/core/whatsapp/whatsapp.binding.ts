@@ -15,7 +15,7 @@ const digitsOf = (s: string | null | undefined): string => (s || '').replace(/\D
 // belonged to.
 const PLATFORM_CLINIC_EMAIL = 'platform@clinicbook.ai';
 let platformClinicIdCache: string | null | undefined;
-const platformClinicId = async (): Promise<string | null> => {
+export const platformClinicId = async (): Promise<string | null> => {
   if (platformClinicIdCache !== undefined) return platformClinicIdCache;
   const row = await prisma.clinic.findUnique({
     where: { email: PLATFORM_CLINIC_EMAIL },

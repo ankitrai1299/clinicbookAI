@@ -54,6 +54,29 @@ export const decideInboundClinic = (params: {
   return null;
 };
 
+/**
+ * Is this inbound number a SHARED doorway, or does it belong to one clinic?
+ *
+ * It decides whether the patient's own binding is allowed to override the number
+ * they messaged — and it was wrong in a way that only shows up with two clinics.
+ * The old test was "does this number resolve to WHATSAPP_CLINIC_ID", which is
+ * the clinic that OWNS the original number. So that clinic's own number was
+ * treated as a shared pool: a patient who had once registered with another
+ * clinic messaged nextclinicAi and was answered, from a different WhatsApp
+ * number, as that other clinic.
+ *
+ * A number is shared only when no clinic owns it, or when the clinic that owns
+ * it is the platform clinic — the one that exists to be a doorway. Any real
+ * clinic's number, env-pinned or connected through Embedded Signup, is its own.
+ */
+export const isSharedInboundNumber = (params: {
+  /** The clinic this number resolves to, or null when none does. */
+  clinicId: string | null;
+  /** The platform clinic, when one exists at all. */
+  platformClinicId: string | null;
+}): boolean =>
+  !params.clinicId || (!!params.platformClinicId && params.clinicId === params.platformClinicId);
+
 // Which credentials a clinic sends with, given its channel row (or null) and the
 // env default channel. Returns null when neither applies.
 // `strict` closes the multi-tenant hole in the back-compat branch below: with no
