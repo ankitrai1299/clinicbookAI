@@ -272,8 +272,16 @@ export default function ClinicDashboard({
 
   // Live WhatsApp connection status (drives the sidebar badge + Settings card).
   const [waConnected, setWaConnected] = useState<boolean | null>(null);
+  // Meta refusing to send for want of a payment method. Kept here, and not only
+  // inside Settings, because the clinic that hit it never opened Settings again
+  // after connecting — everything read green and the messages simply stopped.
+  const [waBilling, setWaBilling] = useState<{ ready: boolean | null; manageUrl: string | null } | null>(null);
   useEffect(() => {
     getChannelStatusApi()
+      .then((s) => {
+        setWaBilling(s.billing ?? null);
+        return s;
+      })
       // The platform number counts as reachable. It belongs to exactly one
       // clinic, and for that clinic messaging works with no channel row of its
       // own — warning it that patients cannot reach it, while patients are
@@ -873,6 +881,46 @@ export default function ClinicDashboard({
                   >
                     Connect WhatsApp
                   </button>
+                </div>
+              )}
+
+              {/* Connected, and Meta is still refusing every message.
+                  This is the failure that looks like success: the number is
+                  live, the templates are approved, the dashboard says connected
+                  — and each message comes back 131042 because no card is on the
+                  Meta account. It is only shown once Meta has actually refused
+                  one, so it is a report of something that happened, not a
+                  guess; and it goes quiet by itself the moment a message gets
+                  through. The button is Meta's own link, which opens the
+                  add-a-card step for this exact account. */}
+              {waBilling?.ready === false && (
+                <div
+                  className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 bg-rose-50 border border-rose-200 rounded-2xl"
+                  id="whatsapp-billing-banner"
+                >
+                  <div className="flex items-start gap-3 flex-1">
+                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-display font-extrabold text-sm text-rose-900">
+                        Your WhatsApp messages are not being sent
+                      </p>
+                      <p className="text-xs text-rose-800 mt-1 leading-relaxed max-w-xl">
+                        Meta is refusing them because your WhatsApp Business account has no payment
+                        method. Everything else is connected &mdash; adding a card is the only step
+                        left, and messages start going out straight after.
+                      </p>
+                    </div>
+                  </div>
+                  {waBilling.manageUrl && (
+                    <a
+                      href={waBilling.manageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm"
+                    >
+                      Add payment method <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
                 </div>
               )}
 
