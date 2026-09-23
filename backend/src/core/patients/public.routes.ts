@@ -9,7 +9,8 @@ import {
   getPublicDoctorsHandler,
   publicAbhaOtpHandler,
   publicAbhaVerifyHandler,
-  registerPublicPatientHandler
+  registerPublicPatientHandler,
+  suggestSpecialityHandler
 } from './public.controller.js';
 import {
   clinicIdParamsSchema,
@@ -17,7 +18,8 @@ import {
   publicAbhaVerifySchema,
   publicAvailabilityQuerySchema,
   publicBookingSchema,
-  publicRegisterPatientSchema
+  publicRegisterPatientSchema,
+  suggestSpecialitySchema
 } from './patient.schemas.js';
 
 // Public, unauthenticated routes backing the shareable /register page and the
@@ -103,6 +105,15 @@ publicPatientRouter.post(
   validate(clinicIdParamsSchema, 'params'),
   validate(publicBookingSchema),
   bookPublicAppointmentHandler
+);
+
+// Suggest a speciality from the free-text reason for visit. Not behind the
+// write limiter — it persists nothing and is called while the patient types.
+publicPatientRouter.post(
+  '/clinic/:clinicId/suggest-speciality',
+  validate(clinicIdParamsSchema, 'params'),
+  validate(suggestSpecialitySchema),
+  suggestSpecialityHandler
 );
 
 export default publicPatientRouter;

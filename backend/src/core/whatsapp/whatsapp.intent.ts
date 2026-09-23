@@ -13,6 +13,8 @@
 // classifier replaces it so inbound booking touches OpenAI zero times.)
 // ===========================================================================
 
+import { suggestSpeciality } from '../triage/symptoms.js';
+
 export type PatientIntent =
   | 'book'
   | 'cancel'
@@ -31,13 +33,16 @@ export interface PatientMessageClassification {
 export const classifyIntent = (message: string, specialities: string[]): PatientMessageClassification => {
   const t = message.toLowerCase();
 
+  // Patients describe the problem, not the department. "bukhar", "daant me
+  // dard", "bacche ko khaansi" all named a speciality to a human and none to
+  // this function, so every one of them was answered by asking the patient to
+  // pick the speciality they had just described.
+  //
+  // suggestSpeciality only ever returns something the clinic actually staffs,
+  // so this cannot offer a dermatologist to a dental clinic.
   const speciality =
     specialities.find((s) => t.includes(s.toLowerCase())) ??
-    // common shorthands → speciality substring
-    (/(heart|cardio)/.test(t) ? specialities.find((s) => /cardio/i.test(s)) : undefined) ??
-    (/(skin|derma)/.test(t) ? specialities.find((s) => /derma/i.test(s)) : undefined) ??
-    (/(child|kid|paedia|pedia)/.test(t) ? specialities.find((s) => /p(a)?edia/i.test(s)) : undefined) ??
-    (/(bone|ortho)/.test(t) ? specialities.find((s) => /ortho/i.test(s)) : undefined) ??
+    suggestSpeciality(message, specialities)?.speciality ??
     null;
 
   let intent: PatientIntent = 'unknown';

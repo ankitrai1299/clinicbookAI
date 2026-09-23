@@ -90,6 +90,14 @@ export const publicBookingSchema = z.object({
 export type CreatePatientInput = z.infer<typeof createPatientSchema>;
 export type UpdatePatientInput = z.infer<typeof updatePatientSchema>;
 export type PatientIdParams = z.infer<typeof patientIdParamsSchema>;
+// What the patient typed into "reason for visit", so we can suggest which
+// doctor it points at. Sent in a BODY, not a query string: a health concern in
+// a URL is written into every access log we keep.
+export const suggestSpecialitySchema = z.object({
+  concern: z.string().trim().min(2).max(1000)
+});
+export type SuggestSpecialityInput = z.infer<typeof suggestSpecialitySchema>;
+
 export type PublicRegisterPatientInput = z.infer<typeof publicRegisterPatientSchema>;
 export type PublicAbhaOtpInput = z.infer<typeof publicAbhaOtpSchema>;
 export type PublicAbhaVerifyInput = z.infer<typeof publicAbhaVerifySchema>;

@@ -46,6 +46,27 @@ export const registerPublicPatient = (clinicId: string, body: PublicRegistration
     body: JSON.stringify(body)
   });
 
+export interface SpecialitySuggestion {
+  /** True = this needs help now, not a booking. Nothing else is filled in. */
+  emergency: boolean;
+  /** One of THIS clinic's specialities, or null when we could not tell. */
+  speciality: string | null;
+  /** What made us choose it, e.g. "a child" — shown so a wrong guess is visible. */
+  matched: string | null;
+}
+
+/**
+ * Which doctor the patient's own words point at.
+ *
+ * A POST because the concern is health information and a query string ends up
+ * in every access log. Nothing is stored by this call.
+ */
+export const suggestSpeciality = (clinicId: string, concern: string) =>
+  apiFetch<SpecialitySuggestion>(
+    `/api/public/clinic/${encodeURIComponent(clinicId)}/suggest-speciality`,
+    { method: 'POST', body: JSON.stringify({ concern }) }
+  );
+
 // ── ABHA, done by the patient ──────────────────────────────────────────────
 
 export interface PublicAbhaOtpResult {

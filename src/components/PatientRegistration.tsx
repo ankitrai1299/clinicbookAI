@@ -5,7 +5,9 @@ import { ApiError } from '../api/client';
 import {
   getPublicClinic,
   registerPublicPatient,
-  PublicClinic
+  suggestSpeciality,
+  PublicClinic,
+  type SpecialitySuggestion
 } from '../api/publicRegistration';
 import { BRAND } from '../brand';
 import PublicAbhaStep from './PublicAbhaStep';
@@ -31,6 +33,12 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [healthConcern, setHealthConcern] = useState('');
+  // Which doctor the patient's own words point at, worked out while they type.
+  //
+  // Not a required step and not a gate: the form submits exactly as before if
+  // this never answers. It exists so someone who has already written "bacche ko
+  // bukhar" is not then asked which of nine departments they want.
+  const [suggestion, setSuggestion] = useState<SpecialitySuggestion | null>(null);
   // Asked only of a patient under eighteen. India's DPDP Act makes a child's
   // consent the parent's to give, so the questions appear when the age says
   // they are needed and never otherwise — an adult should not be asked who
@@ -146,6 +154,26 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
       active = false;
     };
   }, [clinicId]);
+
+  // Ask after the typing stops, not on every keystroke — a suggestion that
+  // flickers through four wrong departments while someone writes a sentence is
+  // worse than one that appears a moment late.
+  useEffect(() => {
+    const concern = healthConcern.trim();
+    if (!clinicId || concern.length < 3) {
+      setSuggestion(null);
+      return;
+    }
+    let live = true;
+    const id = window.setTimeout(() => {
+      suggestSpeciality(clinicId, concern)
+        .then((s) => { if (live) setSuggestion(s); })
+        // Silent on failure. This is a convenience; a network hiccup must not
+        // put an error on a form the patient has not submitted yet.
+        .catch(() => { if (live) setSuggestion(null); });
+    }, 600);
+    return () => { live = false; window.clearTimeout(id); };
+  }, [clinicId, healthConcern]);
 
   // Mirrors the server's rule (isChild in core/consent/childConsent.ts). The
   // server is the one that enforces it; this exists so the questions appear
@@ -524,6 +552,37 @@ export default function PatientRegistration({ clinicId }: PatientRegistrationPro
                   </button>
                 )}
               </div>
+
+              {/* What we read in those words.
+                  Shown, never applied silently: the patient can see which
+                  department we picked and why, and the form works the same if
+                  they ignore it. An emergency is not a suggestion at all — it
+                  replaces the booking with the only useful thing we can say. */}
+              {suggestion?.emergency && (
+                <div className="mt-3 flex items-start gap-2.5 p-3.5 bg-rose-50 border border-rose-300 rounded-xl">
+                  <AlertTriangle className="w-4.5 h-4.5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-rose-900">
+                      This sounds urgent &mdash; please don&rsquo;t wait for an appointment
+                    </p>
+                    <p className="text-xs text-rose-800 mt-1 leading-relaxed">
+                      Call <strong>108</strong> for an ambulance, or go to the nearest emergency
+                      room now. You can still register below, but please get help first.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!suggestion?.emergency && suggestion?.speciality && (
+                <p className="mt-3 flex items-start gap-2 text-xs text-sky-900 bg-sky-50 border border-sky-200 rounded-xl px-3.5 py-2.5 leading-relaxed">
+                  <HeartPulse className="w-3.5 h-3.5 shrink-0 mt-0.5 text-sky-600" />
+                  <span>
+                    Sounds like <strong>{suggestion.speciality}</strong>
+                    {suggestion.matched ? ` — you mentioned ${suggestion.matched}.` : '.'}{' '}
+                    The clinic will confirm the right doctor.
+                  </span>
+                </p>
+              )}
               {listening && (
                 <p className="text-[11px] text-rose-500 font-medium mt-1.5 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />

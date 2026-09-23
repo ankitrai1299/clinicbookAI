@@ -30,6 +30,7 @@ import { isWhatsAppConfigured } from '../../config/whatsapp.js';
 import { patientConversation } from './whatsapp.conversation.js';
 import { isSharedInboundNumber, resolveClinicIdByPhoneNumberId } from './whatsapp.channel.js';
 import { platformClinicId, resolveSharedClinic } from './whatsapp.binding.js';
+import { detectEmergency, EMERGENCY_REPLY } from '../triage/symptoms.js';
 import { isBrainEnabledFor, runConversation } from '../mcp/index.js';
 import type { McpContext } from '../mcp/index.js';
 import {
@@ -282,6 +283,37 @@ const processOne = async (
     // server time so it can't be left stale by a missing/old Meta timestamp. Only
     // once the clinic is known — the window is per (clinicId, phone).
     if (clinicId) await recordInboundMessage(clinicId, to).catch(() => undefined);
+
+    // Before anything tries to book this.
+    //
+    // "seene me dard", "saans nahi aa rahi", "khoon beh raha hai" all read as
+    // ordinary bookable complaints to the state machine — chest pain even
+    // routes tidily to a cardiologist, who has a slot on Tuesday. These need an
+    // ambulance, not an appointment, and the only safe place to check is before
+    // the booking flow sees the message at all.
+    //
+    // Deliberately not clever: it answers, it tells the clinic, and it stops.
+    // A patient who typed something that merely sounded alarming replies MENU
+    // and carries on.
+    const urgent = text ? detectEmergency(text) : null;
+    if (urgent) {
+      console.warn('[WhatsApp] EMERGENCY wording — not booking', {
+        phone: maskPhone(to),
+        clinicId,
+        signal: urgent.matched
+      });
+      try {
+        await sendWhatsAppTextMessage({
+          to,
+          body: EMERGENCY_REPLY,
+          messageType: 'auto_reply',
+          clinicId: clinicId ?? undefined
+        });
+      } catch (err) {
+        console.error('[WhatsApp] Emergency reply failed to send:', err);
+      }
+      return;
+    }
 
     if (clinicId) {
       const patient = await findOrCreatePatient(clinicId, from);

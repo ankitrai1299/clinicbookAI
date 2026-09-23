@@ -8,13 +8,16 @@ import {
   PublicAbhaOtpInput,
   PublicAbhaVerifyInput,
   PublicBookingInput,
-  PublicRegisterPatientInput
+  PublicRegisterPatientInput,
+  SuggestSpecialityInput
 } from './patient.schemas.js';
 import {
   createPublicBooking,
   getPublicClinicInfo,
   getPublicDoctors
 } from './patient.service.js';
+import { detectEmergency, suggestSpeciality } from '../triage/symptoms.js';
+import { prisma } from '../../config/prisma.js';
 import {
   registerPublicPatientWithAbha,
   startPublicAbhaOtp,
@@ -102,4 +105,43 @@ export const publicAbhaVerifyHandler = asyncHandler(async (req: Request, res: Re
   const verified = await verifyPublicAbhaOtp(clinicId, txnId, otp, mobile ?? '');
 
   res.json({ success: true, data: { ...verified, txnId } });
+});
+
+
+// POST /api/public/clinic/:clinicId/suggest-speciality
+//
+// Reads what the patient wrote in "reason for visit" and says which of THIS
+// clinic's specialities it points at — so someone who types "bacche ko bukhar"
+// is not then asked to choose between nine departments.
+//
+// Read-only and unauthenticated, like the rest of the registration page. It
+// stores nothing: the concern itself is saved only when the patient submits the
+// form, and never reaches an access log, which is why this is a POST.
+export const suggestSpecialityHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { clinicId } = req.params as ClinicIdParams;
+  const { concern } = req.body as SuggestSpecialityInput;
+
+  // Only what this clinic actually staffs, so we never point a patient at a
+  // department it does not have.
+  const rows = await prisma.doctor.findMany({
+    where: { clinicId },
+    select: { speciality: true },
+    distinct: ['speciality']
+  });
+  const available = rows.map((r) => r.speciality).filter(Boolean);
+
+  const urgent = detectEmergency(concern);
+  const match = urgent ? null : suggestSpeciality(concern, available);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      // True means: do not book this, tell them to seek help now.
+      emergency: Boolean(urgent),
+      speciality: match?.speciality ?? null,
+      // The words that decided it, so the patient can see we read them and
+      // correct us when we are wrong.
+      matched: match?.matched ?? null
+    }
+  });
 });
