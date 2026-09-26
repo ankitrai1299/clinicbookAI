@@ -6,6 +6,10 @@ import {
   Terminal, Webhook, FlaskConical, KeyRound
 } from 'lucide-react';
 import { PageType } from '../types';
+// The host every other call in the app already uses. The sample on this page
+// used to carry a hard-coded one — api.clinicbook.ai, which does not resolve —
+// so the first thing a developer copied from us failed on DNS.
+import { API_BASE } from '../api/client';
 import PlatformStory from './platform/PlatformStory';
 import TrustStrip from './platform/TrustStrip';
 import PatientAsksSection from './platform/PatientAsksSection';
@@ -460,8 +464,9 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
                 <span className="ml-2 text-[11px] font-mono text-slate-500">book an appointment</span>
               </div>
               <pre className="text-[12px] sm:text-[13px] leading-relaxed text-slate-100 overflow-x-auto font-mono">
-{`curl -X POST https://api.clinicbook.ai/api/v1/appointments \\
+{`curl -X POST ${API_BASE}/api/v1/appointments \\
   -H "Authorization: Bearer ck_test_..." \\
+  -H "Content-Type: application/json" \\
   -H "Idempotency-Key: unique-123" \\
   -d '{
     "doctorId": "doc_a1b2",
@@ -471,7 +476,7 @@ export default function LandingPage({ setCurrentPage }: LandingPageProps) {
     "time": "10:00 AM"
   }'
 
-`}<span className="text-emerald-400">{`→ 201  { "status": "PENDING", "id": "appt_x9" }`}</span>
+`}<span className="text-emerald-400">{`→ 201  { "success": true, "data": { "status": "PENDING", "id": "…" } }`}</span>
               </pre>
             </div>
           </div>
