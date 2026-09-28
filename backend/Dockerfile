@@ -25,7 +25,7 @@ RUN npm run build
 
 # ---------- Runner ----------
 # Slim runtime image. Ships the full node_modules so the Prisma CLI is present
-# for the `prisma db push` pre-deploy step (see railway.json).
+# for the schema push the entrypoint runs at start-up.
 FROM node:22-bookworm-slim AS runner
 ENV NODE_ENV=production
 WORKDIR /app
@@ -46,10 +46,20 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 
+# The schema push that used to be the platform's job. Railway ran it through
+# preDeployCommand; hosts without that hook would otherwise start code expecting
+# columns the database does not have. Copied with the executable bit set here,
+# because a repo cloned on Windows loses it.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Run as the unprivileged user that ships with the base image.
 USER node
 
-# Informational only — Railway injects PORT at runtime and the server binds to it.
+# Informational only — the platform injects PORT at runtime and the server binds
+# to it. Lightsail reads this to decide which port to route to, so keep it in
+# step with the server's default.
 EXPOSE 5000
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "dist/server.js"]

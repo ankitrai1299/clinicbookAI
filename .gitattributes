@@ -1,0 +1,12 @@
+# Shell scripts must keep LF endings, whatever the machine that commits them.
+#
+# This repo is developed on Windows, where git's autocrlf happily rewrites a
+# checked-out file to CRLF. A shell script that reaches a Linux container with
+# CRLF endings fails on its first line: the kernel reads the shebang as
+# "/bin/sh\r", finds no such interpreter, and the container dies with
+# "no such file or directory" — naming a file that is plainly right there.
+#
+# The Dockerfile's entrypoint is exactly that script, so this is not theoretical.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
