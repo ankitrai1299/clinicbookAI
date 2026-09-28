@@ -44,6 +44,21 @@ const UNGATED_BY_DESIGN: Readonly<Record<string, string>> = {
     'spends that code — the caller has no session yet, which is the whole reason they are here',
   'core/clinics/clinic.routes.ts:/register': 'creates the clinic and its first user; nothing to authorize against',
 
+  // NHA's ABDM wrapper calls these, not a person. There is no role to check
+  // against: the caller is our own machine, proving itself with a shared secret
+  // compared in constant time, and the router refuses every request when that
+  // secret is unset rather than running open. What protects the DATA is not a
+  // permission but a pairing rule — a care context is only answered when it
+  // belongs to the patient named alongside it (wrapperHip.test.ts).
+  'integrations/abdm/wrapperHip.routes.ts:/v3/patient-discover':
+    "NHA's wrapper asking whether a person is a patient here; authenticated by a shared secret, not a session",
+  'integrations/abdm/wrapperHip.routes.ts:/v3/patient-care-contexts':
+    'the same caller asking which visits a verified ABHA address has here',
+  'integrations/abdm/wrapperHip.routes.ts:/v3/health-information':
+    'the same caller collecting records a consent already covers; each care context is checked against its patient',
+  'integrations/abdm/wrapperHip.routes.ts:/':
+    'liveness for the wrapper — returns no clinic data at all',
+
   // Meta calls this one, not a person. It is verified by the X-Hub-Signature-256
   // HMAC over the raw body, which is a stronger check than any role could be.
   'core/whatsapp/whatsapp.routes.ts:/webhook': "Meta's inbound webhook, authenticated by HMAC signature, not by a session",

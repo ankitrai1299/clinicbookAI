@@ -161,6 +161,15 @@ const envSchema = z.object({
   // header and 401 without it.
   ABDM_CM_ID: z.string().trim().default('sbx'),
   /**
+   * The shared secret between NHA's ABDM wrapper and this server.
+   *
+   * The wrapper asks us, synchronously, whether a named person is a patient
+   * here and what they were treated for. NHA assumes the two sit behind one
+   * firewall; ours talk over the internet, so the adapter refuses every request
+   * until this is set rather than answering that question to strangers.
+   */
+  ABDM_WRAPPER_SECRET: z.string().trim().optional(),
+  /**
    * The ABHA enrolment APIs live on a DIFFERENT host from the gateway, and are
    * a separate product behind the same token.
    *

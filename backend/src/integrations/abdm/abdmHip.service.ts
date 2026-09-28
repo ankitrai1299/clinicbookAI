@@ -35,7 +35,7 @@ interface DiscoveryRequest {
  * is the correct outcome: it is not registered with ABDM, so no ABDM request
  * can legitimately be about it.
  */
-const clinicForHipId = async (hipId: string): Promise<{ id: string; name: string } | null> =>
+export const clinicForHipId = async (hipId: string): Promise<{ id: string; name: string } | null> =>
   prisma.clinic
     .findMany({ where: { hfrId: hipId }, select: { id: true, name: true }, take: 2 })
     // Same rule as the linking path: one id names one facility, and two rows
@@ -61,7 +61,7 @@ const clinicForHipId = async (hipId: string): Promise<{ id: string; name: string
  * than the rules would hide an ambiguity from the matcher and turn a case it
  * would have refused into a confident wrong answer.
  */
-const candidatesFor = async (
+export const candidatesFor = async (
   clinicId: string,
   incoming: DiscoveryPatient
 ): Promise<CandidatePatient[]> => {
@@ -103,7 +103,7 @@ const candidatesFor = async (
  * context, and neither is a no-show — offering either would put an encounter in
  * someone's national health record that never took place.
  */
-const careContextsFor = async (clinicId: string, patientId: string) => {
+export const careContextsFor = async (clinicId: string, patientId: string) => {
   const since = new Date();
   since.setMonth(since.getMonth() - CARE_CONTEXT_MONTHS);
 

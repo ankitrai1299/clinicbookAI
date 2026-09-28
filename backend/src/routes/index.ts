@@ -21,6 +21,7 @@ import { mediscribeRouter } from '../products/mediscribe/router.js';
 import waitlistRouter from '../products/clinicbook/waitlist/waitlist.routes.js';
 import whatsappRouter from '../core/whatsapp/whatsapp.routes.js';
 import { abdmHipRouter } from '../integrations/abdm/abdmHip.routes.js';
+import { abdmWrapperRouter } from '../integrations/abdm/wrapperHip.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import patient360Router from './patient360.routes.js';
 import healthRouter from './health.routes.js';
@@ -53,6 +54,11 @@ apiRouter.use('/api/appointments', appointmentRouter);
 // that no answer is ever returned down this connection; see the note in
 // abdmHip.routes.ts.
 apiRouter.use('/api/abdm', abdmHipRouter);
+
+// NHA's ABDM wrapper talking to us — the v3 shape, where the protocol lives in
+// the wrapper and we answer plain synchronous questions. Authenticated, unlike
+// the gateway routes above: these answer in the response body.
+apiRouter.use('/api/abdm-hip', abdmWrapperRouter);
 apiRouter.use('/api/waitlist', waitlistRouter);
 // MediScribe (the new AI scribe) — ClinicBook requireAuth first so the bridge has
 // req.user; then the ported router scopes everything to that clinic.
