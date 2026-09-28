@@ -13,7 +13,11 @@
 // same public API the web app uses — NOT a secret. Database credentials live
 // only on the backend; the app never holds them. Override per-build with the
 // EXPO_PUBLIC_API_URL env var if needed.
-const API_BASE_URL_FALLBACK = 'https://novascribe-ai.onrender.com';
+// Was novascribe-ai.onrender.com, which has been a 404 since NovaScribe was
+// replaced. A fallback only matters when EXPO_PUBLIC_API_URL is missing at
+// build time — and that is exactly when nobody is watching, so it pointed a
+// shipped APK at a host that no longer exists.
+const API_BASE_URL_FALLBACK = 'https://clinicbookai-production.up.railway.app';
 
 // Resolved backend origin (env wins; trailing slashes stripped). Mirrors the
 // web app's `API_ROOT`.
